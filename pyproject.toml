@@ -1,0 +1,42 @@
+[project]
+name = "research-lab"
+version = "0.1.0"
+description = "Minimal research workbench for component benchmarks, experiments, final model evaluation, and reproducibility."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.8",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+hf = [
+    "transformers>=4.44",
+    "datasets>=2.20",
+    "torch>=2.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ANN", "SIM", "PL"]
+ignore = ["ANN401"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
