@@ -10,3 +10,5 @@ class Resources(BaseModel):
     gpu_count: int = 0
     memory_bytes: int | None = None
     rank: int = 0
+    timeout_seconds: int | None = None
+    estimated_storage_bytes: int | None = None

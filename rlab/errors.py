@@ -18,7 +18,7 @@ class ReferenceError(RlabError):
     pass
 
 
-class PluginError(RlabError):
+class ModuleLoadError(RlabError):
     pass
 
 
@@ -31,4 +31,32 @@ class ManifestError(RlabError):
 
 
 class ExternalRunError(RlabError):
+    pass
+
+
+class WorkflowError(RlabError):
+    pass
+
+
+class ContractError(RlabError):
+    pass
+
+
+class ValidationError(RlabError):
+    pass
+
+
+class InvalidationError(RlabError):
+    pass
+
+
+class GovernanceError(RlabError):
+    pass
+
+
+class ArtifactError(RlabError):
+    pass
+
+
+class SearchError(RlabError):
     pass

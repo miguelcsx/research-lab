@@ -34,14 +34,21 @@ def execute_benchmark(
         params=params or {},
     )
     result = record.value(target_value, context)
+
     if isinstance(result, BenchmarkResult):
         return result
-    if not isinstance(result, Mapping):
-        raise TypeError(f"Benchmark {benchmark!r} must return metrics or BenchmarkResult")
-    return BenchmarkResult(
-        metrics={
-            str(name): float(value)
-            for name, value in result.items()
-            if isinstance(value, (int, float)) and not isinstance(value, bool)
-        }
-    )
+
+    # Accept ResultBundle — convert to BenchmarkResult
+    if hasattr(result, "as_metrics_dict"):
+        return BenchmarkResult(metrics=result.as_metrics_dict())
+
+    if isinstance(result, Mapping):
+        return BenchmarkResult(
+            metrics={
+                str(name): float(value)
+                for name, value in result.items()
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+            }
+        )
+
+    raise TypeError(f"Benchmark {benchmark!r} must return ResultBundle, dict, or BenchmarkResult")

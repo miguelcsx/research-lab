@@ -64,6 +64,14 @@ def baseline(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.BASELINE, name)
 
 
+def workflow(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
+    return _decorator(EntryKind.WORKFLOW, name, version=version)
+
+
+def result_schema(name: str) -> Callable[[T], T]:
+    return _decorator(EntryKind.RESULT_SCHEMA, name)
+
+
 def data_source(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.DATA_SOURCE, name)
 

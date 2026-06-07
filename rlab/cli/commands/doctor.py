@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 
 import typer
 
@@ -7,16 +8,80 @@ from rlab.cli.state import CliState
 
 
 def command(ctx: typer.Context) -> None:
+    """Run all project health checks."""
     state: CliState = ctx.obj
-    runtime = state.runtime()
-    checks = [
-        {"check": "lab.toml", "ok": (state.root / "lab.toml").exists()},
-        {"check": "runs writable", "ok": runtime.paths.runs.exists()},
-        {"check": "artifacts writable", "ok": runtime.paths.artifacts.exists()},
-        {"check": "git", "ok": shutil.which("git") is not None},
-        {"check": "uv", "ok": shutil.which("uv") is not None},
-        {"check": "plugins", "ok": True},
-    ]
+
+    checks: list[dict[str, object]] = []
+
+    def check(name: str, passed: bool, note: str = "") -> None:
+        checks.append({"check": name, "ok": passed, "note": note})
+
+    def warn(name: str, note: str = "") -> None:
+        checks.append({"check": name, "ok": True, "note": f"⚠ {note}" if note else "⚠ warning"})
+
+    # Basic files
+    check("lab.toml", (state.root / "lab.toml").exists())
+    check("pyproject.toml", (state.root / "pyproject.toml").exists())
+
+    # Runtime paths
+    runtime = None
+    try:
+        runtime = state.runtime()
+        check("config loads", True)
+        check("runs writable", runtime.paths.runs.exists())
+        check("artifacts writable", runtime.paths.artifacts.exists())
+    except Exception as exc:
+        check("config loads", False, str(exc)[:60])
+
+    # Tools
+    check("git", shutil.which("git") is not None)
+    check("uv", shutil.which("uv") is not None)
+
+    # Git repo (warning only — not a hard failure)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=state.root, capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            warn("git repo", "not a git repository")
+        else:
+            check("git repo", True)
+    except Exception:
+        warn("git repo", "git not available")
+
+    # Module loading
+    if runtime is not None:
+        from rlab.project.loader import load_modules
+        from rlab.registry.context import using_registry
+        from rlab.registry.store import Registry
+        registry = Registry()
+        with using_registry(registry):
+            results = load_modules(state.root, runtime.config.modules.load)
+        failed = [r for r in results if not r.loaded]
+        check(
+            "modules",
+            len(failed) == 0,
+            f"{len(results)} declared, {len(failed)} failed" if failed else f"{len(results)} loaded",
+        )
+
+    # Project validation (warnings only for non-errors)
+    from rlab.project.validation import validate_project
+    issues = validate_project(state.root)
+    errors = [i for i in issues if i.severity.value == "error"]
+    warnings = [i for i in issues if i.severity.value != "error"]
+    if errors:
+        check("project validation", False, f"{len(errors)} error(s)")
+    elif warnings:
+        warn("project validation", f"{len(warnings)} warning(s)")
+    else:
+        check("project validation", True)
+
     state.console.print(table("rlab doctor", checks))
-    if not all(check["ok"] for check in checks):
+
+    failed_checks = [c for c in checks if not c["ok"]]
+    if failed_checks:
+        state.console.print(f"\n[red]{len(failed_checks)} check(s) failed.[/red]")
         raise typer.Exit(1)
+    else:
+        state.console.print("\n[green]All checks passed.[/green]")

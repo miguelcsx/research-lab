@@ -2,6 +2,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from rlab.project.modules import ModulesConfig
+
 
 class ConfigModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -10,12 +12,7 @@ class ConfigModel(BaseModel):
 class ProjectConfig(ConfigModel):
     name: str = "research-project"
     team: str | None = None
-
-
-class PluginConfig(ConfigModel):
-    autoload: bool = True
-    modules: tuple[str, ...] = ("components", "benchmarks", "suites", "data")
-    allow_project_overrides: bool = False
+    owner: str | None = None
 
 
 class PathConfig(ConfigModel):
@@ -42,17 +39,20 @@ class ReproducibilityConfig(ConfigModel):
     capture_lockfile: bool = True
     capture_command: bool = True
     capture_data_manifests: bool = True
+    allow_dirty: bool = False
+    env_allowlist: tuple[str, ...] = ()
 
 
 class LauncherConfig(ConfigModel):
     default: str = "local"
+    jobs: int = 1
     timeout_seconds: int | None = None
     docker_image: str | None = None
 
 
 class LabConfig(ConfigModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
-    plugins: PluginConfig = Field(default_factory=PluginConfig)
+    modules: ModulesConfig = Field(default_factory=ModulesConfig)
     paths: PathConfig = Field(default_factory=PathConfig)
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)
     artifacts: ArtifactConfig = Field(default_factory=ArtifactConfig)
