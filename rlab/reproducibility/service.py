@@ -16,12 +16,12 @@ from rlab.runs.reader import RunReader
 
 
 def reproduction_plan(run_dir: Path) -> tuple[str, ...]:
-    command = run_dir / "command.txt"
+    command = run_dir / "reproducibility" / "command.txt"
     return tuple(shlex.split(command.read_text())) if command.exists() else ()
 
 
 def _recorded_git(run_dir: Path) -> dict[str, object]:
-    path = run_dir / "git.json"
+    path = run_dir / "reproducibility" / "git.json"
     return cast(dict[str, object], json.loads(path.read_text())) if path.exists() else {}
 
 

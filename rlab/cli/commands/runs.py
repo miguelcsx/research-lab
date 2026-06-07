@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -123,7 +124,6 @@ def query(ctx: typer.Context, expr: str) -> None:
 @app.command("tail")
 def tail(ctx: typer.Context, run_id: str) -> None:
     """Follow metrics.jsonl for a running experiment."""
-    import time
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
     run_dir = next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None) if runs_dir.exists() else None

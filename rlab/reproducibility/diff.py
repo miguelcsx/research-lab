@@ -5,7 +5,7 @@ from rlab.context.environment import environment_snapshot
 
 
 def environment_diff(run_dir: Path) -> dict[str, tuple[object, object]]:
-    recorded_path = run_dir / "env.json"
+    recorded_path = run_dir / "reproducibility" / "env.json"
     if not recorded_path.exists():
         return {}
     recorded = json.loads(recorded_path.read_text())

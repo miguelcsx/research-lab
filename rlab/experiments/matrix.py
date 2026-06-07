@@ -31,7 +31,7 @@ class Factor:
         description: str = "",
     ) -> None:
         self.name = name
-        self.values = list(values)
+        self.values = tuple(values)
         self.description = description
 
     def __repr__(self) -> str:

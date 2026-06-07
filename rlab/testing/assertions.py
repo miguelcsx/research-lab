@@ -6,9 +6,9 @@ REQUIRED_RUN_FILES = (
     "metrics.jsonl",
     "results.json",
     "report.md",
-    "command.txt",
-    "git.json",
-    "env.json",
+    "reproducibility/command.txt",
+    "reproducibility/git.json",
+    "reproducibility/env.json",
 )
 
 

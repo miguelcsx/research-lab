@@ -15,16 +15,29 @@ def capture_reproducibility(
     config: ReproducibilityConfig,
     command: Sequence[str],
 ) -> None:
+    any_capture = any((
+        config.capture_command,
+        config.capture_git,
+        config.capture_diff,
+        config.capture_env,
+        config.capture_lockfile,
+    ))
+    if not any_capture:
+        return
+    repro_dir = run_dir / "reproducibility"
+    repro_dir.mkdir(parents=True, exist_ok=True)
     if config.capture_command:
-        write_command(run_dir / "command.txt", command)
+        write_command(repro_dir / "command.txt", command)
     if config.capture_git:
-        (run_dir / "git.json").write_text(json.dumps(git_snapshot(root), indent=2) + "\n")
+        (repro_dir / "git.json").write_text(json.dumps(git_snapshot(root), indent=2) + "\n")
     if config.capture_diff:
-        (run_dir / "git.diff").write_text(git_diff(root))
+        (repro_dir / "git.diff").write_text(git_diff(root))
     if config.capture_env:
         environment = full_environment()
         if not config.capture_packages:
             environment.pop("packages", None)
-        (run_dir / "env.json").write_text(json.dumps(environment, indent=2) + "\n")
+        (repro_dir / "env.json").write_text(json.dumps(environment, indent=2) + "\n")
     if config.capture_lockfile:
-        capture_project_files(root, run_dir)
+        copied = capture_project_files(root, repro_dir)
+        if copied:
+            (repro_dir / "lockfile").touch()

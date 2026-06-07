@@ -63,10 +63,12 @@ def command(ctx: typer.Context, run_a: Path, run_b: Path) -> None:
         data_b = json.loads(git_b.read_text())
         commit_a = data_a.get("commit", "")
         commit_b = data_b.get("commit", "")
+        short_a = (commit_a or "")[:8] or "unknown"
+        short_b = (commit_b or "")[:8] or "unknown"
         if commit_a != commit_b:
-            state.console.print(f"\n[bold]Code:[/bold] commit changed {commit_a[:8]} → {commit_b[:8]}")
+            state.console.print(f"\n[bold]Code:[/bold] commit changed {short_a} → {short_b}")
         else:
-            state.console.print(f"\n[bold]Code:[/bold] same commit ({commit_a[:8]})")
+            state.console.print(f"\n[bold]Code:[/bold] same commit ({short_a})")
 
     if not changed_params and not all_metric_keys:
         state.console.print("\n[dim]No differences found.[/dim]")
