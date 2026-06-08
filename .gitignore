@@ -6,14 +6,12 @@ __pycache__/
 .coverage
 .ruff_cache/
 .DS_Store
-artifacts/
 *.egg-info/
 build/
 dist/
 
-artifacts/*
-!artifacts/.gitkeep
-
+/artifacts/
+/runs/
 datasets/raw/
 datasets/processed/
 datasets/cache/
