@@ -1,8 +1,16 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+_DEFAULT_PLOT_WIDTH = 640
+_DEFAULT_PLOT_HEIGHT = 320
 
-def line_plot(values: Sequence[float], output: Path, width: int = 640, height: int = 320) -> None:
+
+def line_plot(
+    values: Sequence[float],
+    output: Path,
+    width: int = _DEFAULT_PLOT_WIDTH,
+    height: int = _DEFAULT_PLOT_HEIGHT,
+) -> None:
     if not values:
         raise ValueError("Plot requires at least one value")
     minimum, maximum = min(values), max(values)

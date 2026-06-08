@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+_DEFAULT_ANCESTOR_DEPTH = 10
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS dataset_ancestry (
     child TEXT NOT NULL,
@@ -60,7 +61,7 @@ class DataGenealogyGraph:
             ).fetchall()
         return tuple(r["child"] for r in rows)
 
-    def ancestors(self, name: str, depth: int = 10) -> tuple[str, ...]:
+    def ancestors(self, name: str, depth: int = _DEFAULT_ANCESTOR_DEPTH) -> tuple[str, ...]:
         visited: set[str] = set()
         frontier = {name}
         for _ in range(depth):

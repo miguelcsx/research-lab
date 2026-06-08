@@ -76,10 +76,10 @@ docker_image = "python:3.11"
 | `components/` | Reusable classes/functions registered with `@rlab.component` |
 | `benchmarks/` | Atomic measurements registered with `@rlab.benchmark` |
 | `evaluations/` or `suites/` | Evaluation suites registered with `@rlab.suite` or `@rlab.external_suite` |
-| `data_pipelines/` | Data sources, transforms, checks, metrics, and dataset variants |
+| `ingest/` | Data sources, transforms, checks, metrics, and dataset variants |
 | `workflows/` | Multi-step workflows and workflow steps |
 | `experiments/` | Experiment definitions registered with `@rlab.experiment` |
-| `external_adapters/` | Adapters that invoke external repositories or tools |
+| `adapters/` | Adapters that invoke external repositories or tools |
 | `manifests/` | Dataset manifests and other explicit input manifests |
 | `tests/` | Project-specific tests |
 

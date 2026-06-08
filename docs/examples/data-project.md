@@ -9,7 +9,7 @@ Build a clean JSONL dataset from raw records, validate that it is non-empty, cou
 ## Data module
 
 ```python
-# data_pipelines/corpus.py
+# ingest/corpus.py
 import rlab
 
 @rlab.data_source("corpus.raw")
@@ -55,7 +55,7 @@ def clean_v1() -> rlab.DataPipeline:
 
 ```toml
 [modules]
-load = ["data_pipelines.corpus"]
+load = ["ingest.corpus"]
 ```
 
 ## Build

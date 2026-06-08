@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+_DEFAULT_SEARCH_LIMIT = 50
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS search_items (
     id TEXT PRIMARY KEY,
@@ -68,7 +69,7 @@ class SearchIndex:
         text: str,
         *,
         kinds: tuple[str, ...] = (),
-        limit: int = 50,
+        limit: int = _DEFAULT_SEARCH_LIMIT,
     ) -> tuple[dict[str, object], ...]:
         with self._connect() as conn:
             if kinds:

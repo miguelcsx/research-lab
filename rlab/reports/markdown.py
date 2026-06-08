@@ -4,6 +4,9 @@ import functools
 from pathlib import Path
 from typing import Any
 
+import yaml
+from pydantic import ValidationError
+
 from rlab.runs.reader import RunReader
 
 
@@ -53,7 +56,7 @@ def _header_section(lines: list[str], reader: Any) -> None:
             if manifest.tags:
                 lines.append(f"**Tags:** {', '.join(manifest.tags)}")
             lines.append("")
-        except Exception:
+        except (OSError, yaml.YAMLError, ValidationError, ValueError, TypeError):
             lines.append("*Manifest incomplete or unreadable.*")
             lines.append("")
 
@@ -195,5 +198,5 @@ def _cached_experiment_dump(exp_path: Path) -> dict[str, Any] | None:
         registry = current_registry()
         _name, experiment = load_experiment(registry, exp_path)
         return experiment.model_dump(mode="json")
-    except Exception:
+    except (ImportError, SyntaxError, ValueError, TypeError, OSError, RuntimeError):
         return None

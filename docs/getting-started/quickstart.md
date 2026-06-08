@@ -51,7 +51,7 @@ my-research/
 ├── components/
 ├── benchmarks/
 ├── evaluations/
-├── data_pipelines/
+├── ingest/
 ├── manifests/
 ├── runs/
 ├── artifacts/

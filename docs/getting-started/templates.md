@@ -34,8 +34,8 @@ Inside an existing project, generate a new file:
 rlab init new experiment learning_rate_sweep
 rlab init new benchmark throughput
 rlab init new workflow preprocessing
-rlab init new data-pipeline clean_corpus
-rlab init new external-adapter official_eval
+rlab init new ingest clean_corpus
+rlab init new adapter official_eval
 rlab init new causal-experiment treatment_effect
 ```
 
@@ -45,7 +45,7 @@ Shortcuts:
 rlab init experiment ablation_v1
 rlab init benchmark latency
 rlab init workflow train_pipeline
-rlab init external-adapter external_eval
+rlab init adapter external_eval
 ```
 
 ## What templates do not do

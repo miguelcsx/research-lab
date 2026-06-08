@@ -14,7 +14,7 @@ load = [
   "components.models",
   "benchmarks.tokenizers",
   "evaluations.quick",
-  "data_pipelines.tiny",
+  "ingest.tiny",
   "experiments.smoke",
 ]
 ```
@@ -76,7 +76,7 @@ def quick() -> rlab.EvaluationSuite:
 ## Data pipeline
 
 ```python
-# data_pipelines/tiny.py
+# ingest/tiny.py
 import rlab
 
 @rlab.data_source("project.tiny_source")

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 import warnings
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -85,7 +86,7 @@ class RunSession:
         self._write_manifest()
 
     def _upsert_index(self) -> None:
-        with suppress(Exception):
+        try:
             self._index.upsert(
                 run_id=self.manifest.name,
                 name=self.manifest.name,
@@ -97,6 +98,8 @@ class RunSession:
                 tags=self.tags,
                 params=dict(self.manifest.parameters),
             )
+        except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+            warnings.warn(f"Run index upsert failed: {exc}", stacklevel=2)
 
     def start(self) -> RuntimeContext:
         start_run(self.layout.root)
@@ -121,13 +124,15 @@ class RunSession:
             raise
 
     def _capture_reproducibility(self) -> None:
-        with suppress(Exception):
+        try:
             capture_reproducibility(
                 self.runtime.paths.root,
                 self.layout.root,
                 self.runtime.config.reproducibility,
                 ("rlab", self.operation, self.manifest.name),
             )
+        except (OSError, ImportError, ValueError, TypeError) as exc:
+            warnings.warn(f"Reproducibility capture failed: {exc}", stacklevel=2)
 
     def metric(self, name: str, value: float, **attrs: Any) -> None:
         self._writer.metric(name, float(value), **{k: v for k, v in attrs.items() if _jsonable(v)})

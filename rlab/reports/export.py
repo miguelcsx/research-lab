@@ -5,6 +5,9 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+from pydantic import ValidationError
+
 from rlab.reports.markdown import render_run_report
 
 
@@ -64,7 +67,7 @@ def generate_methods_section(run_dir: Path) -> str:
             manifest = reader.manifest()
             operation = manifest.operation
             tags = ", ".join(manifest.tags) if manifest.tags else "none"
-        except Exception:
+        except (OSError, yaml.YAMLError, ValidationError, ValueError, TypeError):
             pass
 
     params = reader.params()

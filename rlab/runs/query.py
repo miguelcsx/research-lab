@@ -29,7 +29,7 @@ def _row_for(run_dir: Path) -> dict[str, Any]:
         row["operation"] = manifest.operation
         row["status"] = manifest.status.value
         row["tags"] = list(manifest.tags)
-    except Exception:
+    except (OSError, ValueError, TypeError):
         row["operation"] = ""
         row["status"] = ""
         row["tags"] = []
@@ -55,7 +55,7 @@ def filter_rows(rows: Iterable[Mapping[str, Any]], where: str | None) -> tuple[d
         try:
             if _eval_node(tree.body, dict(row)):
                 matched.append(dict(row))
-        except Exception:
+        except (TypeError, ValueError, KeyError):
             continue
     return tuple(matched)
 

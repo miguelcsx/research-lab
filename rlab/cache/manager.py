@@ -12,4 +12,4 @@ class CacheManager:
         return tuple(sorted(path for path in self.paths.root.rglob("*") if path.is_file()))
 
     def size(self) -> int:
-        return sum(path.stat().st_size for path in self.entries())
+        return sum(path.stat().st_size for path in self.paths.root.rglob("*") if path.is_file())

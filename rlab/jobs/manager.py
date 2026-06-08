@@ -7,6 +7,8 @@ from rlab.jobs.model import JobRecord, JobStatus
 from rlab.jobs.process import cancel_pid, cancel_process, is_same_process, process_start, spawn
 from rlab.jobs.store import JobStore
 
+_REAP_TIMEOUT_SECONDS = 1.0
+
 
 class JobManager:
     def __init__(self, store: JobStore, log_dir: Path) -> None:
@@ -74,8 +76,8 @@ class JobManager:
         process = self._processes.pop(job_id, None)
         if process is not None:
             try:
-                process.wait(timeout=1.0)
-            except Exception:
+                process.wait(timeout=_REAP_TIMEOUT_SECONDS)
+            except (OSError, subprocess.SubprocessError):
                 process.kill()
                 process.wait()
 

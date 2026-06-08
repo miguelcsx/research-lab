@@ -96,7 +96,7 @@ A registry record stores:
 | `source` | source file path |
 | `description` | first line of docstring |
 | `tags` | optional tags |
-| `plugin` | usually `project` |
+| `package` | usually `project` |
 
 ## Naming rules
 
