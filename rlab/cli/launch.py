@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from rlab.cli.state import CliState
+from rlab.constants import JOBS_DB_NAME
 from rlab.external.runner import DockerRunner
 from rlab.jobs.manager import JobManager
 from rlab.jobs.store import JobStore
@@ -48,7 +49,7 @@ def launch_run(
     else:
         raise ValueError(f"Unsupported launcher {launcher!r}")
     manager = JobManager(
-        JobStore(runtime.paths.cache / "jobs.sqlite3"),
+        JobStore(runtime.paths.cache / JOBS_DB_NAME),
         runtime.paths.cache / "jobs" / "logs",
     )
     return manager.start(command, state.root).id

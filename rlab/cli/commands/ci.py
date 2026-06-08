@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import typer
 
 from rlab.cli.state import CliState
+from rlab.project.loader import load_modules
+from rlab.registry.context import using_registry
+from rlab.registry.store import Registry
+from rlab.runs.reader import RunReader
 
+_DEFAULT_DRIFT_THRESHOLD = 0.01
 app = typer.Typer(help="CI integration: smoke, regression checks, reproducibility gate.")
 
 
@@ -20,12 +28,9 @@ def smoke(ctx: typer.Context) -> None:
     except Exception as exc:
         failures.append(f"config: {exc}")
         state.console.print(f"[red]✗[/red] config: {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     # Modules load
-    from rlab.project.loader import load_modules
-    from rlab.registry.context import using_registry
-    from rlab.registry.store import Registry
     registry = Registry()
     with using_registry(registry):
         results = load_modules(state.root, runtime.config.modules.load)
@@ -52,18 +57,19 @@ def compare(
     baseline: str = typer.Option(..., "--baseline"),
     candidate: str = typer.Option(..., "--candidate"),
     metric: str = typer.Option(..., "--metric"),
-    threshold: float = typer.Option(0.01, "--threshold"),
+    threshold: float = typer.Option(_DEFAULT_DRIFT_THRESHOLD, "--threshold"),
 ) -> None:
     """Compare candidate run against baseline; fail on regression."""
-    from pathlib import Path
     state: CliState = ctx.obj
-    from rlab.runs.reader import RunReader
 
     def _find(name: str) -> Path | None:
         runs_dir = state.root / "runs"
         if not runs_dir.exists():
             return None
-        return next((d for d in runs_dir.iterdir() if d.name == name or d.name.endswith(name)), None)
+        return next(
+            (d for d in runs_dir.iterdir() if d.name == name or d.name.endswith(name)),
+            None,
+        )
 
     base_dir = _find(baseline)
     cand_dir = _find(candidate)
@@ -81,10 +87,14 @@ def compare(
         return
 
     delta = cand_val - base_val
-    state.console.print(f"{metric}: baseline={base_val:.6g}, candidate={cand_val:.6g}, delta={delta:+.6g}")
+    state.console.print(
+        f"{metric}: baseline={base_val:.6g}, candidate={cand_val:.6g}, delta={delta:+.6g}"
+    )
 
     if abs(delta) > threshold:
-        state.console.print(f"[red]Regression detected: |delta| {abs(delta):.4g} > threshold {threshold}[/red]")
+        state.console.print(
+            f"[red]Regression detected: |delta| {abs(delta):.4g} > threshold {threshold}[/red]"
+        )
         raise typer.Exit(1)
     state.console.print("[green]No regression detected.[/green]")
 
@@ -92,7 +102,6 @@ def compare(
 @app.command("reproducibility-check")
 def reproducibility_check(ctx: typer.Context) -> None:
     """Fail if any recent run has dirty git state or missing lockfile."""
-    from pathlib import Path
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
     if not runs_dir.exists():
@@ -105,7 +114,6 @@ def reproducibility_check(ctx: typer.Context) -> None:
             continue
         git_file = run_dir / "reproducibility" / "git.json"
         if git_file.exists():
-            import json
             data = json.loads(git_file.read_text())
             if data.get("dirty", False):
                 failures.append(f"{run_dir.name}: dirty git state")

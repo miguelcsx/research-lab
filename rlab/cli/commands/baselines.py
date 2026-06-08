@@ -4,14 +4,16 @@ from typing import Annotated
 
 import typer
 
+from rlab.baseline.model import BaselineEntry
+from rlab.baseline.store import BaselineStore
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.runs.reader import RunReader
 
 app = typer.Typer(help="Manage experiment baselines.")
 
 
-def _store(state: CliState):
-    from rlab.baseline.store import BaselineStore
+def _store(state: CliState) -> BaselineStore:
     return BaselineStore(state.root / ".rlab" / "baselines.db")
 
 
@@ -26,11 +28,13 @@ def add(
 ) -> None:
     """Register a named baseline result."""
     state: CliState = ctx.obj
-    from rlab.baseline.model import BaselineEntry
     store = _store(state)
     entry = BaselineEntry(
-        name=name, metric=metric, value=value,
-        run_id=run_id, description=description,
+        name=name,
+        metric=metric,
+        value=value,
+        run_id=run_id,
+        description=description,
         for_project=state.root.name,
     )
     store.add(entry)
@@ -44,7 +48,13 @@ def list_baselines(ctx: typer.Context) -> None:
     store = _store(state)
     baselines = store.list(for_project=state.root.name)
     rows = [
-        {"name": b.name, "metric": b.metric, "value": str(b.value), "run": b.run_id or "", "description": b.description}
+        {
+            "name": b.name,
+            "metric": b.metric,
+            "value": str(b.value),
+            "run": b.run_id or "",
+            "description": b.description,
+        }
         for b in baselines
     ]
     state.console.print(table("Baselines", rows))
@@ -58,12 +68,19 @@ def compare(
     """Compare a run's metrics against all registered baselines."""
     state: CliState = ctx.obj
     store = _store(state)
-    from rlab.runs.reader import RunReader
     runs_dir = state.root / "runs"
-    run_dir = next(
-        (d for d in runs_dir.iterdir() if d.is_dir() and (d.name == run_id or d.name.endswith(run_id))),
-        None,
-    ) if runs_dir.exists() else None
+    run_dir = (
+        next(
+            (
+                d
+                for d in runs_dir.iterdir()
+                if d.is_dir() and (d.name == run_id or d.name.endswith(run_id))
+            ),
+            None,
+        )
+        if runs_dir.exists()
+        else None
+    )
     if run_dir is None:
         raise typer.BadParameter(f"Run {run_id!r} not found")
     metrics = RunReader(run_dir).metrics_summary()
@@ -72,11 +89,13 @@ def compare(
     for b in baselines:
         run_val = metrics.get(b.metric)
         delta = (run_val - b.value) if run_val is not None and b.value is not None else None
-        rows.append({
-            "baseline": b.name,
-            "metric": b.metric,
-            "baseline_value": str(b.value),
-            "run_value": str(run_val) if run_val is not None else "-",
-            "delta": f"{delta:+.4g}" if delta is not None else "-",
-        })
+        rows.append(
+            {
+                "baseline": b.name,
+                "metric": b.metric,
+                "baseline_value": str(b.value),
+                "run_value": str(run_val) if run_val is not None else "-",
+                "delta": f"{delta:+.4g}" if delta is not None else "-",
+            }
+        )
     state.console.print(table(f"Baseline comparison: {run_dir.name}", rows))

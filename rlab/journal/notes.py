@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -17,10 +16,12 @@ class Note(BaseModel):
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
-def add_note(path: Path, text: str, *, run_id: str | None = None, author: str | None = None) -> Note:
+def add_note(
+    path: Path, text: str, *, run_id: str | None = None, author: str | None = None
+) -> Note:
     note = Note(text=text, timestamp=_now(), run_id=run_id, author=author)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as f:
@@ -32,7 +33,5 @@ def list_notes(path: Path) -> tuple[Note, ...]:
     if not path.exists():
         return ()
     return tuple(
-        Note.model_validate_json(line)
-        for line in path.read_text().splitlines()
-        if line.strip()
+        Note.model_validate_json(line) for line in path.read_text().splitlines() if line.strip()
     )

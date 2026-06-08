@@ -1,4 +1,5 @@
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Protocol
 
@@ -7,6 +8,9 @@ from pydantic import BaseModel, ConfigDict
 from rlab.errors import ExternalRunError
 from rlab.external.command import ExternalCommand
 from rlab.external.sandbox import safe_workdir, sandbox_environment
+
+_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_TRUNCATED_MARKER = "\n... [output truncated]"
 
 
 class CommandResult(BaseModel):
@@ -23,21 +27,53 @@ class ExternalRunner(Protocol):
     def run(self, command: ExternalCommand, root: Path) -> CommandResult: ...
 
 
+def _capture_limited(
+    args: tuple[str, ...],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int | None,
+) -> tuple[int, str, str]:
+    with (
+        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as stdout_file,
+        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as stderr_file,
+    ):
+        process = subprocess.Popen(
+            args,
+            cwd=cwd,
+            env=env,
+            stdout=stdout_file,
+            stderr=stderr_file,
+            text=True,
+        )
+        try:
+            returncode = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            raise
+        stdout_file.seek(0)
+        stderr_file.seek(0)
+        stdout = stdout_file.read(_MAX_OUTPUT_BYTES)
+        stderr = stderr_file.read(_MAX_OUTPUT_BYTES)
+        if len(stdout) >= _MAX_OUTPUT_BYTES:
+            stdout = stdout[:_MAX_OUTPUT_BYTES] + _TRUNCATED_MARKER
+        if len(stderr) >= _MAX_OUTPUT_BYTES:
+            stderr = stderr[:_MAX_OUTPUT_BYTES] + _TRUNCATED_MARKER
+        return returncode, stdout, stderr
+
+
 class ShellRunner:
     def run(self, command: ExternalCommand, root: Path) -> CommandResult:
-        completed = subprocess.run(
+        returncode, stdout, stderr = _capture_limited(
             command.args,
             cwd=safe_workdir(root, command.cwd),
             env=sandbox_environment(command.env),
-            text=True,
-            capture_output=True,
             timeout=command.timeout_seconds,
-            check=False,
         )
         result = CommandResult(
-            returncode=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
             command=command.args,
         )
         if result.returncode:

@@ -20,6 +20,7 @@ def freeze_run_cmd(
     """Create a frozen, named copy of a run."""
     state: CliState = ctx.obj
     from rlab.reports.export import freeze_run
+
     output_dir = output or state.root / "paper"
     dest = freeze_run(run_path, name, output_dir)
     state.console.print(f"[green]Frozen:[/green] {dest}")
@@ -29,6 +30,7 @@ def freeze_run_cmd(
 def lock_cmd(ctx: typer.Context, run_path: Path) -> None:
     """Lock a run against further modification."""
     from rlab.reports.export import is_locked, lock_run
+
     if is_locked(run_path):
         typer.echo(f"{run_path.name} is already locked.")
         return
@@ -45,6 +47,7 @@ def export_cmd(
 ) -> None:
     """Export a run for sharing or reproduction."""
     from rlab.reports.export import export_repro_zip
+
     if fmt == "repro-zip":
         out = export_repro_zip(run_path, output)
         typer.echo(f"Exported: {out}")
@@ -56,4 +59,5 @@ def export_cmd(
 def methods_cmd(ctx: typer.Context, run_path: Path) -> None:
     """Generate a draft methods section from run metadata."""
     from rlab.reports.export import generate_methods_section
+
     typer.echo(generate_methods_section(run_path))

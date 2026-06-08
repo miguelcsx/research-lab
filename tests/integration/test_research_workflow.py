@@ -17,8 +17,12 @@ from rlab.runs.reader import RunReader
 from rlab.testing.assertions import assert_metric_exists, assert_valid_run_dir
 
 
-def test_benchmark_evaluation_experiment_and_reproduction(project: Path, runtime: RuntimeContext) -> None:
-    benchmark = run_benchmark(runtime, "tokenizer:project.byte", "project.tokenizer.length", repeat=2, warmup=1)
+def test_benchmark_evaluation_experiment_and_reproduction(
+    project: Path, runtime: RuntimeContext
+) -> None:
+    benchmark = run_benchmark(
+        runtime, "tokenizer:project.byte", "project.tokenizer.length", repeat=2, warmup=1
+    )
     assert_valid_run_dir(benchmark)
     assert_metric_exists(benchmark, "tokens")
 
@@ -46,9 +50,15 @@ def test_benchmark_evaluation_experiment_and_reproduction(project: Path, runtime
     assert len(compare_runs((benchmark, evaluation, experiment))) == 3
 
 
-def test_experiment_resume_and_data_artifact_workflow(project: Path, runtime: RuntimeContext) -> None:
+def test_experiment_resume_and_data_artifact_workflow(
+    project: Path, runtime: RuntimeContext
+) -> None:
     first = run_experiment(runtime, project / "experiments" / "000_smoke.py", seed=7)
-    resumed = run_experiment(runtime, project / "experiments" / "000_smoke.py", resume=first, run_name="continued")
+    assert isinstance(first, Path)
+    resumed = run_experiment(
+        runtime, project / "experiments" / "000_smoke.py", resume=first, run_name="continued"
+    )
+    assert isinstance(resumed, Path)
     assert RunReader(resumed).manifest().parent_run == RunReader(first).manifest().name
 
     data_v1 = build(runtime, "dataset:project.tiny", "1")
@@ -62,7 +72,9 @@ def test_experiment_resume_and_data_artifact_workflow(project: Path, runtime: Ru
 
     manual = project / "manual.txt"
     manual.write_text("artifact", encoding="utf-8")
-    assert promote_path(runtime, manual, artifact_kind="text", name="manual", version="1", alias="approved").exists()
+    assert promote_path(
+        runtime, manual, artifact_kind="text", name="manual", version="1", alias="approved"
+    ).exists()
 
 
 def test_failed_run_is_persisted(runtime: RuntimeContext) -> None:

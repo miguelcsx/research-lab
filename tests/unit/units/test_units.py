@@ -10,10 +10,14 @@ def test_unit_registry_defaults_and_custom_units() -> None:
     assert registry.get("seconds") is not None
     assert registry.get("MiB") is not None
     assert registry.get("dimensionless") is not None
-    assert registry.get("s").quantity == "time"
+    s = registry.get("s")
+    assert s is not None
+    assert s.quantity == "time"
 
     registry.register(Unit(symbol="kcal", quantity="energy", si_multiplier=4184.0))
-    assert registry.get("kcal").quantity == "energy"
+    kcal = registry.get("kcal")
+    assert kcal is not None
+    assert kcal.quantity == "energy"
 
 
 def test_unit_compatibility() -> None:

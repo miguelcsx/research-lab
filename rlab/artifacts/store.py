@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import shutil
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
 from rlab.artifacts.layout import alias_path, metadata_path, object_path
+from rlab.constants import ARTIFACT_INDEX_NAME
 from rlab.manifests.artifact import ArtifactManifest
 
 _SCHEMA = """
@@ -84,15 +87,24 @@ class ArtifactStore:
     def __init__(self, root: Path) -> None:
         self.root = root
         root.mkdir(parents=True, exist_ok=True)
-        self._db = root / ".index.sqlite3"
+        self._db = root / ARTIFACT_INDEX_NAME
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
         self.index = ArtifactIndex(self)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self._db)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
+        finally:
+            conn.close()
 
     def _resolve_alias(self, kind: str, name: str, alias: str) -> str | None:
         with self._connect() as conn:
@@ -153,7 +165,8 @@ class ArtifactStore:
             )
             if alias:
                 conn.execute(
-                    "INSERT OR REPLACE INTO aliases (kind, name, alias, version) VALUES (?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO aliases"
+                    " (kind, name, alias, version) VALUES (?, ?, ?, ?)",
                     (kind, name, alias, version),
                 )
                 link = alias_path(self.root, kind, name, alias)

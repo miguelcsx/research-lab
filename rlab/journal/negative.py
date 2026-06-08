@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -20,10 +20,10 @@ class NegativeResult(BaseModel):
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
-def add_negative(
+def add_negative(  # noqa: PLR0913
     path: Path,
     hypothesis: str,
     tried: str,
@@ -63,7 +63,8 @@ def list_negatives(path: Path) -> tuple[NegativeResult, ...]:
 def search_negatives(path: Path, text: str) -> tuple[NegativeResult, ...]:
     text_lower = text.lower()
     return tuple(
-        e for e in list_negatives(path)
+        e
+        for e in list_negatives(path)
         if text_lower in e.hypothesis.lower()
         or text_lower in e.tried.lower()
         or text_lower in e.reason.lower()

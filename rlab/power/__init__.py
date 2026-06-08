@@ -1,4 +1,5 @@
 import math
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -20,7 +21,7 @@ def estimate_required_repetitions(
     alpha: float = 0.05,
     power: float = 0.80,
 ) -> int:
-    """Estimate minimum repetitions to detect `effect_size` with `power`.
+    """Estimate minimum repetitions to detect ``effect_size`` with ``power``.
 
     Uses a simple normal approximation for two-sample t-test.
     """
@@ -29,7 +30,7 @@ def estimate_required_repetitions(
     # Z-scores for alpha/2 (two-sided) and 1-beta
     z_alpha = _z_score(1 - alpha / 2)
     z_beta = _z_score(power)
-    n = 2 * observed_variance * ((z_alpha + z_beta) ** 2) / (effect_size ** 2)
+    n = 2 * observed_variance * ((z_alpha + z_beta) ** 2) / (effect_size**2)
     return max(1, math.ceil(n))
 
 
@@ -54,13 +55,16 @@ def estimate_budget(
     )
 
 
+_Z_MIDPOINT = 0.5
+
+
 def _z_score(p: float) -> float:
     """Inverse normal CDF using rational approximation (Abramowitz & Stegun 26.2.17)."""
     if p <= 0:
         return -1e10
     if p >= 1:
         return 1e10
-    if p < 0.5:
+    if p < _Z_MIDPOINT:
         return -_z_score(1 - p)
     t = math.sqrt(-2 * math.log(1 - p))
     c = (2.515517, 0.802853, 0.010328)

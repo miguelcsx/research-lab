@@ -41,4 +41,8 @@ def test_launchers(tmp_path: Path) -> None:
     command = ExternalCommand(args=("python", "-c", "print('ok')"), cwd=tmp_path)
     assert LocalLauncher(tmp_path).launch(command).stdout.strip() == "ok"
     assert SubprocessLauncher(tmp_path).launch(command).returncode == 0
-    assert DockerLauncher(tmp_path).command("image", "echo", "ok").args[:3] == ("docker", "run", "--rm")
+    assert DockerLauncher(tmp_path).command("image", "echo", "ok").args[:3] == (
+        "docker",
+        "run",
+        "--rm",
+    )

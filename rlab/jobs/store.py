@@ -1,5 +1,7 @@
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from rlab.jobs.model import JobRecord
@@ -19,8 +21,18 @@ class JobStore:
         with self.connect() as connection:
             connection.execute(SCHEMA)
 
-    def connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path)
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(self.path)
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
+        finally:
+            conn.close()
 
     def put(self, job: JobRecord) -> None:
         with self.connect() as connection:

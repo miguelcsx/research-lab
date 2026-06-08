@@ -31,7 +31,9 @@ def test_overrides_and_reference_resolution(tmp_path: Path) -> None:
     assert parse_overrides(("a.b=1",)) == {"a.b": 1}
     assert apply_overrides({"a": {"b": 0}}, {"a.b": 2}) == {"a": {"b": 2}}
     assert resolve_string("${project.root}/x", project_root=tmp_path) == f"{tmp_path}/x"
-    assert resolve_values({"x": ["${project.root}"]}, project_root=tmp_path) == {"x": [str(tmp_path)]}
+    assert resolve_values({"x": ["${project.root}"]}, project_root=tmp_path) == {
+        "x": [str(tmp_path)]
+    }
 
     with pytest.raises(ConfigError):
         parse_overrides(("invalid",))
@@ -43,9 +45,14 @@ def test_invalid_config_and_missing_optional_hydra(tmp_path: Path) -> None:
     (tmp_path / "lab.toml").write_text("[modules]\nload='not-a-list'\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(tmp_path)
-    with patch("rlab.config.hydra_adapter.importlib.import_module", side_effect=ImportError("no module")):
-        with pytest.raises(ConfigError, match="Hydra"):
-            compose_hydra(())
+    with (
+        patch(
+            "rlab.config.hydra_adapter.importlib.import_module",
+            side_effect=ImportError("no module"),
+        ),
+        pytest.raises(ConfigError, match="Hydra"),
+    ):
+        compose_hydra(())
 
 
 @pytest.mark.parametrize(
@@ -57,7 +64,9 @@ def test_invalid_config_and_missing_optional_hydra(tmp_path: Path) -> None:
         ("run:abc", ReferenceKind.RUN, None, None),
     ],
 )
-def test_reference_parser(text: str, kind: ReferenceKind, component_kind: str | None, alias: str | None) -> None:
+def test_reference_parser(
+    text: str, kind: ReferenceKind, component_kind: str | None, alias: str | None
+) -> None:
     reference = parse_reference(text)
     assert reference.kind is kind
     assert reference.component_kind == component_kind

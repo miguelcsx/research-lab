@@ -1,4 +1,5 @@
 from rlab.cli.commands import (
+    adapters,
     artifacts,
     baselines,
     bench,
@@ -10,6 +11,7 @@ from rlab.cli.commands import (
     diff,
     discover,
     doctor,
+    errors,
     eval,
     exec,
     freeze,
@@ -30,10 +32,13 @@ from rlab.cli.commands import (
     run,
     runs,
     search,
+    stats,
     status,
+    study,
 )
 
 __all__ = [
+    "adapters",
     "artifacts",
     "baselines",
     "bench",
@@ -45,6 +50,7 @@ __all__ = [
     "diff",
     "discover",
     "doctor",
+    "errors",
     "eval",
     "exec",
     "freeze",
@@ -66,4 +72,6 @@ __all__ = [
     "runs",
     "search",
     "status",
+    "stats",
+    "study",
 ]

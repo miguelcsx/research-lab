@@ -6,6 +6,11 @@ from typing import Annotated
 import typer
 
 from rlab.cli.state import CliState
+from rlab.experiments.loader import load_experiment
+from rlab.experiments.plan import build_plan
+from rlab.power import estimate_budget, estimate_required_repetitions
+from rlab.studies.loader import load_study
+from rlab.studies.plan import plan_study
 
 app = typer.Typer(help="Plan and estimate experiments before running.")
 
@@ -19,12 +24,10 @@ def power(
     power_target: Annotated[float, typer.Option("--power")] = 0.80,
 ) -> None:
     """Estimate required repetitions to detect an effect."""
-    from rlab.power import estimate_required_repetitions
-    n = estimate_required_repetitions(
-        effect_size, variance, alpha=alpha, power=power_target
-    )
+    n = estimate_required_repetitions(effect_size, variance, alpha=alpha, power=power_target)
     typer.echo(
-        f"To detect effect_size={effect_size} (variance={variance}, α={alpha}, power={power_target}):\n"
+        f"To detect effect_size={effect_size} "
+        f"(variance={variance}, α={alpha}, power={power_target}):\n"
         f"  Minimum repetitions per condition: {n}"
     )
 
@@ -41,10 +44,6 @@ def cost(
     """Estimate compute and storage budget for an experiment."""
     state: CliState = ctx.obj
     runtime = state.runtime()
-    from rlab.experiments.plan import build_plan
-    from rlab.experiments.loader import load_experiment
-    from rlab.power import estimate_budget
-
     name, exp = load_experiment(runtime.registry, experiment)
     plan = build_plan(name, exp)
 
@@ -63,3 +62,24 @@ def cost(
     typer.echo(f"  Estimated storage: {budget.estimated_storage_gb:.1f}GB")
     if budget.estimated_cost_usd is not None:
         typer.echo(f"  Estimated cost: ${budget.estimated_cost_usd:.2f}")
+
+
+@app.command("study")
+def study_plan(
+    ctx: typer.Context,
+    path: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+) -> None:
+    """Plan a `@rlab.study` file: planned runs and missing requirements."""
+    state: CliState = ctx.obj
+    runtime = state.runtime()
+    name, study_def = load_study(runtime.registry, path)
+    result = plan_study(runtime, name, study_def)
+    typer.echo(f"Study: {name}")
+    typer.echo(f"  Question: {study_def.question}")
+    typer.echo(f"  Planned runs: {result.planned_runs}")
+    if result.missing:
+        typer.echo("  Missing:")
+        for reference in result.missing:
+            typer.echo(f"    - {reference}")
+    else:
+        typer.echo("  All requirements resolved.")

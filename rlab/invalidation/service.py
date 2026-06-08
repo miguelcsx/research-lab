@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rlab.artifacts.audit import AuditTrail
@@ -11,7 +11,7 @@ from rlab.runs.lifecycle import mark_stale
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 class InvalidationService:

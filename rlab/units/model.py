@@ -11,7 +11,7 @@ class Unit(BaseModel):
 
 
 def check_unit_compatibility(a: str, b: str) -> bool:
-    """Return True if units `a` and `b` measure the same quantity."""
+    """Return True if units ``a`` and ``b`` measure the same quantity."""
     registry = _default_registry()
     unit_a = registry.get(a.lower())
     unit_b = registry.get(b.lower())
@@ -21,5 +21,6 @@ def check_unit_compatibility(a: str, b: str) -> bool:
 
 
 def _default_registry() -> dict[str, Unit]:
-    from rlab.units.registry import UnitRegistry
+    from rlab.units.registry import UnitRegistry  # noqa: PLC0415
+
     return UnitRegistry().units

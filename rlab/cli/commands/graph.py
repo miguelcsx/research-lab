@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import typer
 
+from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.graph.store import KnowledgeGraph
 
+_DEFAULT_LINEAGE_DEPTH = 5
 app = typer.Typer(help="Research knowledge graph: build, query, lineage.")
 
 
-def _graph(state: CliState):
-    from rlab.graph.store import KnowledgeGraph
+def _graph(state: CliState) -> KnowledgeGraph:
     return KnowledgeGraph(state.root / ".rlab" / "graph.db")
 
 
@@ -33,7 +35,6 @@ def build(ctx: typer.Context) -> None:
 @app.command("query")
 def query(ctx: typer.Context, sql: str) -> None:
     """Execute a SQL query against the knowledge graph."""
-    from rlab.cli.render.tables import table
     state: CliState = ctx.obj
     graph = _graph(state)
     rows = graph.query(sql)

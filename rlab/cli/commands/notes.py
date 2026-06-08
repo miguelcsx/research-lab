@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
+from pathlib import Path
 
 import typer
 
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.journal.notes import add_note as _add_note
+from rlab.journal.notes import list_notes as _list_notes
 
 app = typer.Typer(help="Attach and view notes on runs.")
 
@@ -18,9 +20,8 @@ def add_note(
 ) -> None:
     """Add a note to a run."""
     state: CliState = ctx.obj
-    from rlab.journal.notes import add_note as _add
     run_dir = _find_run(state.root, run_id)
-    note = _add(run_dir / "notes.jsonl", text)
+    note = _add_note(run_dir / "notes.jsonl", text)
     state.console.print(f"[green]Note added:[/green] {note.text}")
 
 
@@ -28,15 +29,13 @@ def add_note(
 def list_notes(ctx: typer.Context, run_id: str) -> None:
     """List notes for a run."""
     state: CliState = ctx.obj
-    from rlab.journal.notes import list_notes as _list
     run_dir = _find_run(state.root, run_id)
-    notes = _list(run_dir / "notes.jsonl")
+    notes = _list_notes(run_dir / "notes.jsonl")
     rows = [{"timestamp": n.timestamp, "text": n.text, "author": n.author or ""} for n in notes]
     state.console.print(table("Notes", rows))
 
 
 def _find_run(root: Path, run_id: str) -> Path:
-    from pathlib import Path
     runs_dir = root / "runs"
     if runs_dir.exists():
         for d in runs_dir.iterdir():

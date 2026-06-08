@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,10 +36,19 @@ class ArtifactLineageGraph:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
+        finally:
+            conn.close()
 
     def add_node(
         self,
@@ -48,7 +59,8 @@ class ArtifactLineageGraph:
     ) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO lineage_nodes (id, kind, label, metadata) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO lineage_nodes"
+                " (id, kind, label, metadata) VALUES (?, ?, ?, ?)",
                 (node_id, kind, label, json.dumps(metadata or {})),
             )
 
@@ -57,7 +69,8 @@ class ArtifactLineageGraph:
         self.add_node(target_id)
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO lineage_edges (source_id, target_id, relation) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO lineage_edges"
+                " (source_id, target_id, relation) VALUES (?, ?, ?)",
                 (source_id, target_id, relation),
             )
 

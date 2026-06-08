@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from rlab.constants import RunStatus
 from rlab.context.factory import build_runtime
 from rlab.context.runtime import RuntimeContext
 from rlab.experiments.service import run_experiment
@@ -15,8 +16,6 @@ from rlab.manifests.io import write_manifest
 from rlab.manifests.run import RunManifest
 from rlab.runs.layout import RunLayout
 from rlab.runs.writer import RunWriter
-from rlab.constants import RunStatus
-
 
 SMOKE_EXPERIMENT = Path("experiments") / "000_smoke.py"
 

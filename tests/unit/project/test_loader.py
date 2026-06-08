@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rlab.context.factory import build_runtime
 from rlab.project.loader import load_modules
 from rlab.project.modules import ModulesConfig
 from rlab.project.root import find_project_root
@@ -17,7 +18,9 @@ def test_find_project_root(tmp_path: Path) -> None:
     subdir.mkdir()
     assert find_project_root(tmp_path) == tmp_path
     assert find_project_root(subdir) == tmp_path
-    assert find_project_root(tmp_path / "missing") is None or isinstance(find_project_root(tmp_path / "missing"), Path)
+    assert find_project_root(tmp_path / "missing") is None or isinstance(
+        find_project_root(tmp_path / "missing"), Path
+    )
 
 
 def test_load_modules_success_and_failure(tmp_path: Path) -> None:
@@ -51,10 +54,8 @@ def test_write_project_templates(tmp_path: Path) -> None:
     assert (ai / "benchmarks" / "custom.py").exists()
     lab_toml = (ai / "lab.toml").read_text(encoding="utf-8")
     assert "[modules]" in lab_toml
-    assert "[plugins]" not in lab_toml
+    assert "[adapters]" not in lab_toml
 
 
 def test_build_runtime_loads_project_modules(basic_project: Path) -> None:
-    from rlab.context.factory import build_runtime
-
     assert build_runtime(basic_project).registry is not None

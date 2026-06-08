@@ -10,6 +10,8 @@ class EntryKind(StrEnum):
     EXTERNAL_SUITE = "external_suite"
     WORKFLOW = "workflow"
     WORKFLOW_STEP = "workflow_step"
+    ADAPTER = "adapter"
+    STUDY = "study"
     RESULT_SCHEMA = "result_schema"
     DATA_SOURCE = "data_source"
     DATA_TRANSFORM = "data_transform"
@@ -92,3 +94,8 @@ class DataAvailability(StrEnum):
     SYNTHETIC = "synthetic"
     SAMPLE_ONLY = "sample_only"
     UNAVAILABLE = "unavailable"
+
+
+RUNS_DB_NAME = "runs.db"
+JOBS_DB_NAME = "jobs.sqlite3"
+ARTIFACT_INDEX_NAME = ".index.sqlite3"

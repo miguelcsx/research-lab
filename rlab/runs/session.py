@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import time
+import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from rlab.constants import RunStatus
-from rlab.context.runtime import RuntimeContext
+from rlab.constants import RUNS_DB_NAME, RunStatus
 from rlab.manifests.run import RunManifest
+from rlab.reports.markdown import render_run_report
+from rlab.reproducibility.capture import capture_reproducibility
 from rlab.runs.index import RunIndex
 from rlab.runs.layout import RunLayout
 from rlab.runs.lifecycle import fail_run, finish_run, start_run
 from rlab.runs.writer import RunWriter
+
+if TYPE_CHECKING:
+    from rlab.context.runtime import RuntimeContext
 
 
 def _now() -> datetime:
@@ -66,7 +71,7 @@ class RunSession:
         self._writer.params(self.manifest.parameters)
         if notes:
             self._writer.note(notes)
-        self._index = RunIndex(runtime.paths.cache / "runs.db")
+        self._index = RunIndex(runtime.paths.cache / RUNS_DB_NAME)
 
     def _write_manifest(self) -> None:
         self.layout.manifest_file.write_text(
@@ -117,8 +122,6 @@ class RunSession:
 
     def _capture_reproducibility(self) -> None:
         with suppress(Exception):
-            from rlab.reproducibility.capture import capture_reproducibility
-
             capture_reproducibility(
                 self.runtime.paths.root,
                 self.layout.root,
@@ -139,11 +142,11 @@ class RunSession:
         self._upsert_index()
 
     def _write_report(self) -> None:
-        from rlab.reports.markdown import render_run_report
-
         text = f"# Run {self.manifest.name}\n"
-        with suppress(Exception):
+        try:
             text = render_run_report(self.layout.root)
+        except (OSError, ImportError, ValueError) as exc:
+            warnings.warn(f"Report generation failed: {exc}", stacklevel=2)
         (self.layout.root / "report.md").write_text(text, encoding="utf-8")
 
     def fail(self, error: BaseException | str) -> None:

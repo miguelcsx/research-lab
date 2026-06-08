@@ -53,7 +53,8 @@ def test_artifact_store_put_get_alias_delete_and_dir(tmp_path: Path) -> None:
     resolved = store.index.resolve("model", "tiny", "candidate")
     assert resolved is not None and resolved["version"] == "1"
     store.index.deprecate("model", "tiny", "1")
-    assert store.index.resolve("model", "tiny", "1")["deprecated"] == 1
+    deprecated = store.index.resolve("model", "tiny", "1")
+    assert deprecated is not None and deprecated["deprecated"] == 1
 
     directory = tmp_path / "bundle"
     directory.mkdir()

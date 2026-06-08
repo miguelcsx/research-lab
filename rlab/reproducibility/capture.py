@@ -15,13 +15,15 @@ def capture_reproducibility(
     config: ReproducibilityConfig,
     command: Sequence[str],
 ) -> None:
-    any_capture = any((
-        config.capture_command,
-        config.capture_git,
-        config.capture_diff,
-        config.capture_env,
-        config.capture_lockfile,
-    ))
+    any_capture = any(
+        (
+            config.capture_command,
+            config.capture_git,
+            config.capture_diff,
+            config.capture_env,
+            config.capture_lockfile,
+        )
+    )
     if not any_capture:
         return
     repro_dir = run_dir / "reproducibility"

@@ -44,7 +44,9 @@ def command(
 
     if metric_parser and result.returncode == 0:
         if ":" not in metric_parser:
-            state.console.print(f"[yellow]Parser must be 'module:function', got {metric_parser!r}[/yellow]")
+            state.console.print(
+                f"[yellow]Parser must be 'module:function', got {metric_parser!r}[/yellow]"
+            )
         else:
             module_path, func_name = metric_parser.rsplit(":", 1)
             try:

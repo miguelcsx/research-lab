@@ -1,7 +1,8 @@
+import fnmatch
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class LabPolicy(BaseModel):
@@ -31,7 +32,6 @@ class LabPolicy(BaseModel):
         return cls.model_validate(data)
 
     def check_env(self, env: dict[str, str]) -> list[str]:
-        import fnmatch
         violations: list[str] = []
         for key in env:
             for pattern in self.forbidden_env_patterns:

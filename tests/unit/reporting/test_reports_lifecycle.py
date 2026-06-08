@@ -2,19 +2,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from rlab.assumptions import Assumption, Threat, render_validity_report
 from rlab.baseline.model import BaselineEntry
 from rlab.baseline.store import BaselineStore
 from rlab.constants import RunStatus
 from rlab.data.genealogy import DataGenealogyGraph
 from rlab.data.mixing import DataMixReport
-from rlab.reports.export import export_repro_zip, freeze_run, generate_citation_cff, generate_methods_section, is_locked, lock_run
+from rlab.reports.export import (
+    export_repro_zip,
+    freeze_run,
+    generate_citation_cff,
+    generate_methods_section,
+    is_locked,
+    lock_run,
+)
 from rlab.reports.latex import render_latex_table
 from rlab.reports.markdown import render_run_report
 from rlab.runs.layout import RunLayout
-from rlab.runs.lifecycle import cancel_run, current_status, fail_run, finish_run, mark_stale, resume_run, start_run
+from rlab.runs.lifecycle import (
+    cancel_run,
+    current_status,
+    fail_run,
+    finish_run,
+    mark_stale,
+    resume_run,
+    start_run,
+)
 from rlab.runs.writer import RunWriter
 
 
@@ -31,7 +44,9 @@ def test_markdown_latex_freeze_lock_and_exports(tmp_path: Path) -> None:
     assert "Notes" in report
     assert "empty" in render_run_report(RunLayout(root=tmp_path / "empty").root)
 
-    latex = render_latex_table([{"model": "gpt2", "accuracy": "0.85"}], caption="Main results", label="tab:main")
+    latex = render_latex_table(
+        [{"model": "gpt2", "accuracy": "0.85"}], caption="Main results", label="tab:main"
+    )
     assert "\\begin{table}" in latex
     assert render_latex_table([]) == ""
 
@@ -42,7 +57,10 @@ def test_markdown_latex_freeze_lock_and_exports(tmp_path: Path) -> None:
     lock_run(layout.root)
     assert is_locked(layout.root)
     assert "Miguel Cárdenas" in generate_citation_cff("rlab", "0.1.0", ["Miguel Cárdenas"])
-    assert "run_001" in generate_methods_section(layout.root) or "experiment" in generate_methods_section(layout.root).lower()
+    assert (
+        "run_001" in generate_methods_section(layout.root)
+        or "experiment" in generate_methods_section(layout.root).lower()
+    )
 
 
 def test_run_lifecycle_transitions(tmp_path: Path) -> None:
@@ -66,7 +84,9 @@ def test_run_lifecycle_transitions(tmp_path: Path) -> None:
 
 def test_baselines_validity_data_genealogy_and_mixing(tmp_path: Path) -> None:
     store = BaselineStore(tmp_path / "baselines.db")
-    store.add(BaselineEntry(name="gpt2_babylm", metric="eval.accuracy", value=0.82, for_project="babylm"))
+    store.add(
+        BaselineEntry(name="gpt2_babylm", metric="eval.accuracy", value=0.82, for_project="babylm")
+    )
     assert store.get("gpt2_babylm") is not None
     assert store.get("missing") is None
     assert len(store.list(for_project="babylm")) == 1
@@ -86,7 +106,9 @@ def test_baselines_validity_data_genealogy_and_mixing(tmp_path: Path) -> None:
     assert "clean_v2" in genealogy.children("raw_v1")
     assert "raw_v1" in genealogy.render_tree("raw_v1")
 
-    mix = DataMixReport(sources=("web", "books", "code"), proportions={"web": 0.5, "books": 0.3, "code": 0.2})
+    mix = DataMixReport(
+        sources=("web", "books", "code"), proportions={"web": 0.5, "books": 0.3, "code": 0.2}
+    )
     assert mix.dominant_source() == "web"
     assert 0 < mix.balance_score() <= 1.0
     assert DataMixReport(sources=("web",), proportions={"web": 1.0}).balance_score() == 0.0

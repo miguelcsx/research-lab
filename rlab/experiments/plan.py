@@ -1,6 +1,5 @@
 from pydantic import BaseModel, ConfigDict
 
-from rlab.context.resources import Resources
 from rlab.experiments.matrix import Grid, Sample, expand_matrix
 from rlab.experiments.model import Experiment
 from rlab.typing import JsonValue
@@ -29,7 +28,7 @@ class ExecutionPlan(BaseModel):
     def dry_run_summary(self) -> dict[str, object]:
         factor_sizes: dict[str, int] = {}
         for job in self.jobs:
-            for key, val in job.params.items():
+            for key, _val in job.params.items():
                 if key not in factor_sizes:
                     factor_sizes[key] = 0
                 factor_sizes[key] = max(factor_sizes[key], 1)
@@ -50,9 +49,7 @@ class ExecutionPlan(BaseModel):
 def build_plan(name: str, experiment: Experiment) -> ExecutionPlan:
     matrix = experiment.matrix
 
-    if isinstance(matrix, Grid):
-        combinations = matrix.expand() or ({},)
-    elif isinstance(matrix, Sample):
+    if isinstance(matrix, (Grid, Sample)):
         combinations = matrix.expand() or ({},)
     else:
         combinations = expand_matrix(matrix) or ({},)

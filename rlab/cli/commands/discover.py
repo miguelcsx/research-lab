@@ -21,7 +21,7 @@ def command(
             "version": record.version,
             "namespace": record.namespace,
             "module": record.module,
-            "plugin": record.plugin,
+            "package": record.package,
             "description": record.description,
             "tags": ",".join(record.tags),
         }

@@ -42,17 +42,16 @@ def build_dataset(
         records = registry.get(EntryKind.DATA_TRANSFORM, transform_name).value(records, ctx)
     materialized = output_root / "data.jsonl"
     write_jsonl(materialized, records)
+    data = list(read_jsonl(materialized))
     checks: dict[str, str] = {}
     for check_name in pipeline.checks:
-        result = registry.get(EntryKind.DATA_CHECK, check_name).value(read_jsonl(materialized), ctx)
+        result = registry.get(EntryKind.DATA_CHECK, check_name).value(data, ctx)
         if not isinstance(result, DataCheckResult):
             result = DataCheckResult.model_validate(result)
         checks[check_name] = "passed" if result.success else result.severity.value
-    profile = cast(dict[str, JsonValue], profile_records(read_jsonl(materialized)))
+    profile = cast(dict[str, JsonValue], profile_records(data))
     for metric_name in pipeline.metrics:
-        value = registry.get(EntryKind.DATA_METRIC, metric_name).value(
-            read_jsonl(materialized), ctx
-        )
+        value = registry.get(EntryKind.DATA_METRIC, metric_name).value(data, ctx)
         profile[metric_name] = value
     outputs = {"data": materialized}
     manifest = dataset_manifest(

@@ -35,7 +35,9 @@ def test_result_contract_validates_required_artifacts() -> None:
     )
     assert validate_bundle(bundle, contract) == ()
 
-    violations = validate_bundle(ResultBundle(), ResultContract(required_metrics=("accuracy", "f1")))
+    violations = validate_bundle(
+        ResultBundle(), ResultContract(required_metrics=("accuracy", "f1"))
+    )
     assert len(violations) == 1
     assert violations[0].field == "metrics"
     assert set(violations[0].missing) == {"accuracy", "f1"}

@@ -1,5 +1,8 @@
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 _SCHEMA = """
@@ -34,10 +37,19 @@ class KnowledgeGraph:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
+        finally:
+            conn.close()
 
     def add_node(
         self,
@@ -46,14 +58,18 @@ class KnowledgeGraph:
         label: str,
         metadata: dict[str, object] | None = None,
     ) -> None:
-        from datetime import datetime, timezone
         with self._connect() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO graph_nodes
                    (id, kind, label, metadata_json, created_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (node_id, kind, label, json.dumps(metadata or {}),
-                 datetime.now(tz=timezone.utc).isoformat()),
+                (
+                    node_id,
+                    kind,
+                    label,
+                    json.dumps(metadata or {}),
+                    datetime.now(tz=UTC).isoformat(),
+                ),
             )
 
     def add_edge(
@@ -63,14 +79,12 @@ class KnowledgeGraph:
         relation: str = "produced",
         weight: float = 1.0,
     ) -> None:
-        from datetime import datetime, timezone
         with self._connect() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO graph_edges
                    (source_id, target_id, relation, weight, created_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (source_id, target_id, relation, weight,
-                 datetime.now(tz=timezone.utc).isoformat()),
+                (source_id, target_id, relation, weight, datetime.now(tz=UTC).isoformat()),
             )
 
     def neighbors(self, node_id: str, *, relation: str | None = None) -> tuple[str, ...]:
@@ -103,9 +117,11 @@ class KnowledgeGraph:
         for _ in range(depth):
             if not frontier:
                 break
+            placeholders = ",".join("?" * len(frontier))
             with self._connect() as conn:
                 rows = conn.execute(
-                    f"SELECT source_id, target_id FROM graph_edges WHERE source_id IN ({','.join('?' * len(frontier))})",
+                    f"SELECT source_id, target_id FROM graph_edges"
+                    f" WHERE source_id IN ({placeholders})",
                     tuple(frontier),
                 ).fetchall()
             new_frontier: set[str] = set()

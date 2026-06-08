@@ -36,7 +36,10 @@ def test_data_io_profile_sample_diff_and_report(tmp_path: Path) -> None:
     assert sample_records(read_jsonl(path), 1) == (records[0],)
     assert record_key(records[0])
     assert diff_records(records, (records[1], {"text": "c"}))["removed"] == (records[0],)
-    assert compare_profiles({"a": {"records": 1}, "b": {"records": 2}})["records"] == {"a": 1, "b": 2}
+    assert compare_profiles({"a": {"records": 1}, "b": {"records": 2}})["records"] == {
+        "a": 1,
+        "b": 2,
+    }
     assert "Dataset x" in data_report("x", profile, {"check": "passed"})
 
 

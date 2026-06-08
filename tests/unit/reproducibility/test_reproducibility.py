@@ -43,7 +43,9 @@ def test_capture_reproducibility_variants(project: Path, tmp_path: Path) -> None
     assert environment_diff(run_dir) == {}
     repro = run_dir / "reproducibility"
     repro.mkdir()
-    (repro / "env.json").write_text(json.dumps({"python": "different", "executable": "x", "platform": "x"}), encoding="utf-8")
+    (repro / "env.json").write_text(
+        json.dumps({"python": "different", "executable": "x", "platform": "x"}), encoding="utf-8"
+    )
     assert environment_diff(run_dir)
 
 
@@ -56,7 +58,9 @@ def test_reproduction_plan_and_dry_run(project: Path) -> None:
     run_dir.mkdir(parents=True)
     assert reproduction_plan(run_dir) == ()
     (run_dir / "reproducibility").mkdir(exist_ok=True)
-    (run_dir / "reproducibility" / "command.txt").write_text("rlab run experiments/001.py --seed 42\n", encoding="utf-8")
+    (run_dir / "reproducibility" / "command.txt").write_text(
+        "rlab run experiments/001.py --seed 42\n", encoding="utf-8"
+    )
     assert "rlab" in reproduction_plan(run_dir)
 
 
@@ -65,9 +69,11 @@ def test_reproduce_strict_rejects_dirty_git(project: Path) -> None:
     run_path = run_smoke_experiment(project, runtime)
     repro_dir = run_path / "reproducibility"
     repro_dir.mkdir(exist_ok=True)
-    (repro_dir / "git.json").write_text(json.dumps({"dirty": True, "commit": "abc123"}), encoding="utf-8")
+    (repro_dir / "git.json").write_text(
+        json.dumps({"dirty": True, "commit": "abc123"}), encoding="utf-8"
+    )
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError):
         reproduce(runtime, run_path, strict=True, allow_dirty=False)
 
 
@@ -77,7 +83,9 @@ def test_runner_error_branches(project: Path) -> None:
     def invalid(_target: object, _context: object) -> str:
         return "invalid"
 
-    register(runtime.registry, EntryKind.BENCHMARK, "project.invalid", invalid, target_kind="tokenizer")
+    register(
+        runtime.registry, EntryKind.BENCHMARK, "project.invalid", invalid, target_kind="tokenizer"
+    )
     with pytest.raises(TypeError):
         execute_benchmark(runtime, "tokenizer:project.byte", "project.invalid")
 
@@ -100,7 +108,10 @@ def test_runner_error_branches(project: Path) -> None:
 
 
 def test_project_locking(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("rlab.project.templates.subprocess.run", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stderr=""))
+    monkeypatch.setattr(
+        "rlab.project.templates.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stderr=""),
+    )
     templates.lock_project(project)
     monkeypatch.setattr(
         "rlab.project.templates.subprocess.run",
@@ -119,6 +130,8 @@ def test_reproduction_modes(project: Path, monkeypatch: pytest.MonkeyPatch) -> N
         reproduce(runtime, source.layout.root, checkout=True)
     with pytest.raises(RuntimeError, match="docker_image"):
         reproduce(runtime, source.layout.root, container=True)
-    monkeypatch.setattr("rlab.reproducibility.service.git_snapshot", lambda _root: {"commit": None, "dirty": True})
+    monkeypatch.setattr(
+        "rlab.reproducibility.service.git_snapshot", lambda _root: {"commit": None, "dirty": True}
+    )
     with pytest.raises(RuntimeError, match="clean Git"):
         reproduce(runtime, source.layout.root, strict=True, use_current_env=True)

@@ -72,6 +72,16 @@ def workflow_step(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
     return _decorator(EntryKind.WORKFLOW_STEP, name, version=version)
 
 
+def adapter(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
+    """Register a class as a `rlab.ExternalAdapter` under `name`."""
+    return _decorator(EntryKind.ADAPTER, name, version=version)
+
+
+def study(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
+    """Register a `rlab.Study` provider under `name`."""
+    return _decorator(EntryKind.STUDY, name, version=version)
+
+
 def result_schema(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.RESULT_SCHEMA, name)
 

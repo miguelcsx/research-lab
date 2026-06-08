@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 
 from rlab.cli.commands import (
+    adapters,
     artifacts,
     baselines,
     bench,
@@ -14,6 +15,7 @@ from rlab.cli.commands import (
     diff,
     discover,
     doctor,
+    errors,
     eval,
     exec,
     freeze,
@@ -34,7 +36,10 @@ from rlab.cli.commands import (
     run,
     runs,
     search,
+    stats,
     status,
+    study,
+    table,
 )
 from rlab.cli.render import console, render_error
 from rlab.cli.state import CliState
@@ -63,7 +68,11 @@ app.add_typer(ci.app, name="ci")
 app.add_typer(freeze.app, name="freeze")
 app.add_typer(baselines.app, name="baselines")
 app.add_typer(plan.app, name="plan")
+app.add_typer(adapters.app, name="adapters")
+app.add_typer(study.app, name="study")
 app.add_typer(graph.app, name="graph")
+app.add_typer(stats.app, name="stats")
+app.add_typer(errors.app, name="errors")
 
 # Single commands
 app.command("run")(run.command)
@@ -82,6 +91,7 @@ app.command("impact")(impact.command)
 app.command("invalidate")(invalidate.command)
 app.command("lint")(lint.command)
 app.command("handoff")(handoff.command)
+app.command("table")(table.command)
 
 
 @app.callback()

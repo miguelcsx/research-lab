@@ -21,7 +21,7 @@ def register(  # noqa: PLR0913
     version: str = "1.0.0",
     target_kind: str | None = None,
     tags: tuple[str, ...] = (),
-    plugin: str = "project",
+    package: str = "project",
 ) -> T:
     validate_name(name)
     validate_version(version)
@@ -39,7 +39,7 @@ def register(  # noqa: PLR0913
             source=Path(source).resolve() if source else None,
             description=(inspect.getdoc(value) or "").split("\n", maxsplit=1)[0],
             tags=tags,
-            plugin=plugin,
+            package=package,
         )
     )
     return value

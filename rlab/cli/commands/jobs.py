@@ -4,6 +4,7 @@ import typer
 
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.constants import JOBS_DB_NAME
 from rlab.jobs.manager import JobManager
 from rlab.jobs.store import JobStore
 
@@ -12,7 +13,7 @@ app = typer.Typer(help="Manage persistent local jobs.")
 
 def _manager(state: CliState) -> JobManager:
     cache = state.runtime().paths.cache
-    return JobManager(JobStore(cache / "jobs.sqlite3"), cache / "jobs" / "logs")
+    return JobManager(JobStore(cache / JOBS_DB_NAME), cache / "jobs" / "logs")
 
 
 @app.command("start")

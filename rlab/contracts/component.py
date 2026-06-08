@@ -17,13 +17,17 @@ class ComponentContract(BaseModel):
     version: str = "1.0.0"
 
 
-def validate_compatibility(contract: ComponentContract, target_contract: ComponentContract) -> list[str]:
+def validate_compatibility(
+    contract: ComponentContract, target_contract: ComponentContract
+) -> list[str]:
     """Return list of incompatibility messages."""
     issues: list[str] = []
-    if contract.input_type != "any" and target_contract.output_type != "any":
-        if contract.input_type != target_contract.output_type:
-            issues.append(
-                f"Type mismatch: requires {contract.input_type!r}, "
-                f"target produces {target_contract.output_type!r}"
-            )
+    if (
+        "any" not in {contract.input_type, target_contract.output_type}
+        and contract.input_type != target_contract.output_type
+    ):
+        issues.append(
+            f"Type mismatch: requires {contract.input_type!r}, "
+            f"target produces {target_contract.output_type!r}"
+        )
     return issues

@@ -1,8 +1,6 @@
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from rlab.errors import ValidationError as RlabValidationError
+import yaml
 
 
 class ManifestValidationError:
@@ -16,8 +14,6 @@ class ManifestValidationError:
 
 def validate_manifest(path: Path) -> tuple[ManifestValidationError, ...]:
     """Validate a manifest YAML file against its declared kind."""
-    import yaml
-
     if not path.exists():
         return (ManifestValidationError(path, "file not found"),)
 

@@ -9,6 +9,7 @@ from rlab.data.ablation import DataAblation
 from rlab.data.compare import compare_profiles
 from rlab.data.service import build, diff, profile, promote, sample, write_sample
 
+_DEFAULT_SAMPLE_COUNT = 100
 app = typer.Typer(help="Build, validate, compare, and promote datasets.")
 
 
@@ -58,7 +59,7 @@ def ablate(ctx: typer.Context, base: str, factor: list[str] = typer.Option(...))
 def sample_command(
     ctx: typer.Context,
     manifest: Path,
-    count: int = typer.Option(100, "--n"),
+    count: int = typer.Option(_DEFAULT_SAMPLE_COUNT, "--n"),
     output: Path | None = typer.Option(None),
 ) -> None:
     state: CliState = ctx.obj

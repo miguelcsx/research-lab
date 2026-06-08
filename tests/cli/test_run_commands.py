@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from rlab.constants import RunStatus
 from rlab.runs.layout import RunLayout
 from rlab.runs.lifecycle import fail_run, start_run
 from rlab.runs.writer import RunWriter
@@ -12,11 +11,17 @@ from tests.helpers.factories import run_smoke_experiment
 
 
 def test_run_bench_and_eval_commands(project: Path) -> None:
-    assert_success(invoke_cli(project, "run", str(project / "experiments" / "000_smoke.py"), "--dry-run"))
     assert_success(
-        invoke_cli(project, "bench", "tokenizer:project.byte", "project.tokenizer.length", "--repeat", "2")
+        invoke_cli(project, "run", str(project / "experiments" / "000_smoke.py"), "--dry-run")
     )
-    assert_success(invoke_cli(project, "eval", "project.quick", "--model", "model:project.constant"))
+    assert_success(
+        invoke_cli(
+            project, "bench", "tokenizer:project.byte", "project.tokenizer.length", "--repeat", "2"
+        )
+    )
+    assert_success(
+        invoke_cli(project, "eval", "project.quick", "--model", "model:project.constant")
+    )
     assert_success(invoke_cli(project, "run", str(project / "experiments" / "000_smoke.py")))
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from typing import Any
@@ -9,16 +10,12 @@ from typing import Any
 from pydantic import JsonValue
 
 
-# ── core expansion ────────────────────────────────────────────────────────────
-
 def expand_matrix(matrix: Mapping[str, Sequence[JsonValue]]) -> tuple[dict[str, JsonValue], ...]:
     keys = tuple(matrix)
     return tuple(
         dict(zip(keys, values, strict=True)) for values in product(*(matrix[key] for key in keys))
     )
 
-
-# ── Factor ────────────────────────────────────────────────────────────────────
 
 class Factor:
     """A named experiment dimension with optional metadata."""
@@ -43,8 +40,6 @@ def factor(name: str, values: Sequence[JsonValue], *, description: str = "") -> 
     return Factor(name, values, description=description)
 
 
-# ── Grid ──────────────────────────────────────────────────────────────────────
-
 class Grid:
     """Cartesian product of parameter values with optional row filtering."""
 
@@ -60,7 +55,7 @@ class Grid:
 
         self._filters: list[Callable[[dict[str, JsonValue]], bool]] = []
 
-    def where(self, predicate: Callable[[Any], bool]) -> "Grid":
+    def where(self, predicate: Callable[[Any], bool]) -> Grid:
         """Filter expanded rows by a predicate function."""
         copy = Grid({})
         copy._params = dict(self._params)
@@ -86,9 +81,14 @@ def grid(params: dict[str, Sequence[JsonValue] | Factor]) -> Grid:
     return Grid(params)
 
 
-# ── Samplers ──────────────────────────────────────────────────────────────────
+class _Sampler(ABC):
+    """Base class for objects that can be sampled."""
 
-class _LogUniform:
+    @abstractmethod
+    def sample(self, rng: random.Random | None = None) -> Any: ...
+
+
+class _LogUniform(_Sampler):
     def __init__(self, low: float, high: float) -> None:
         self.low = low
         self.high = high
@@ -98,7 +98,7 @@ class _LogUniform:
         return math.exp(_rng.uniform(math.log(self.low), math.log(self.high)))
 
 
-class _Uniform:
+class _Uniform(_Sampler):
     def __init__(self, low: float, high: float) -> None:
         self.low = low
         self.high = high
@@ -108,7 +108,18 @@ class _Uniform:
         return _rng.uniform(self.low, self.high)
 
 
-class _Choice:
+class _Choice(_Sampler):
+    def __init__(self, values: Sequence[Any]) -> None:
+        self.values = list(values)
+
+    def sample(self, rng: random.Random | None = None) -> Any:
+        _rng = rng or random
+        return _rng.choice(self.values)
+
+
+class _SequenceSampler(_Sampler):
+    """Wraps a sequence as a sampler."""
+
     def __init__(self, values: Sequence[Any]) -> None:
         self.values = list(values)
 
@@ -138,9 +149,23 @@ class Sample:
         n: int,
         seed: int | None = None,
     ) -> None:
-        self._params = params
+        self._params = self._normalize_params(params)
         self.n = n
         self.seed = seed
+
+    @staticmethod
+    def _normalize_params(
+        params: dict[str, _LogUniform | _Uniform | _Choice | Sequence[Any]],
+    ) -> dict[str, _Sampler]:
+        """Convert all parameter values to samplers."""
+        normalized: dict[str, _Sampler] = {}
+        for key, value in params.items():
+            if isinstance(value, _Sampler):
+                normalized[key] = value
+            else:
+                # It's a Sequence, wrap it as a sampler
+                normalized[key] = _SequenceSampler(value)
+        return normalized
 
     def expand(self) -> tuple[dict[str, JsonValue], ...]:
         rng = random.Random(self.seed)
@@ -148,10 +173,7 @@ class Sample:
         for _ in range(self.n):
             row: dict[str, JsonValue] = {}
             for key, sampler in self._params.items():
-                if hasattr(sampler, "sample"):
-                    row[key] = sampler.sample(rng)  # type: ignore[assignment]
-                else:
-                    row[key] = rng.choice(list(sampler))  # type: ignore[arg-type, assignment]
+                row[key] = sampler.sample(rng)
             rows.append(row)
         return tuple(rows)
 

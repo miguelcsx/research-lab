@@ -38,10 +38,7 @@ def doctor(ctx: typer.Context) -> None:
     with using_registry(registry):
         results = load_modules(state.root, config.modules.load)
     failed = [r for r in results if not r.loaded]
-    rows = [
-        {"module": r.name, "ok": r.loaded, "error": r.error or ""}
-        for r in results
-    ]
+    rows = [{"module": r.name, "ok": r.loaded, "error": r.error or ""} for r in results]
     state.console.print(table("Module Health", rows))
     if failed:
         state.console.print(f"[red]{len(failed)} module(s) failed to load.[/red]")

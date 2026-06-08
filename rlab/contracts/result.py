@@ -19,7 +19,9 @@ class ContractViolation(BaseModel):
     missing: tuple[str, ...]
 
 
-def validate_bundle(bundle: ResultBundle, contract: ResultContract) -> tuple[ContractViolation, ...]:
+def validate_bundle(  # noqa: E501
+    bundle: ResultBundle, contract: ResultContract
+) -> tuple[ContractViolation, ...]:
     violations: list[ContractViolation] = []
 
     present_metrics = {m.name for m in bundle.metrics}

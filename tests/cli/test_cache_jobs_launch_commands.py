@@ -25,7 +25,9 @@ def test_cache_and_job_commands(project: Path) -> None:
     assert_success(invoke_cli(project, "cache", "prune", "downloads"))
 
 
-def test_run_command_can_launch_in_subprocess_mode(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_command_can_launch_in_subprocess_mode(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(run_command, "launch_run", lambda *_args, **_kwargs: "job-1")
 
     result = assert_success(
@@ -44,7 +46,9 @@ def test_artifacts_push_requires_input(project: Path) -> None:
     assert_failure(invoke_cli(project, "artifacts", "push"))
 
 
-def test_launch_subprocess_builds_expected_command(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_launch_subprocess_builds_expected_command(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     captured: dict[str, object] = {}
 
     def start(_self: JobManager, command: tuple[str, ...], cwd: Path) -> JobRecord:
@@ -70,7 +74,7 @@ def test_launch_subprocess_builds_expected_command(project: Path, monkeypatch: p
 
     assert job_id == "job-1"
     assert captured["cwd"] == project
-    assert "--only" in captured["command"]
+    assert "--only" in captured["command"]  # type: ignore[operator]
 
 
 def test_launch_validates_launcher_configuration(project: Path) -> None:

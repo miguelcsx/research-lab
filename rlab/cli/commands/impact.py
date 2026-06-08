@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typer
 
-from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
 
 
@@ -10,6 +9,7 @@ def command(ctx: typer.Context, subject: str) -> None:
     """Show downstream impact of an artifact or dataset."""
     state: CliState = ctx.obj
     from rlab.artifacts.lineage import ArtifactLineageGraph
+
     lineage = ArtifactLineageGraph(state.root / ".rlab" / "lineage.db")
     descendants = lineage.descendants(subject)
     ancestors = lineage.ancestors(subject)

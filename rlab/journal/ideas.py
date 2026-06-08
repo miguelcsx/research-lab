@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -21,11 +21,10 @@ class Idea(BaseModel):
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _idea_id() -> str:
-    import uuid
     return uuid.uuid4().hex[:8]
 
 
@@ -40,9 +39,7 @@ def list_ideas(path: Path, *, status: IdeaStatus | None = None) -> tuple[Idea, .
     if not path.exists():
         return ()
     ideas = tuple(
-        Idea.model_validate_json(line)
-        for line in path.read_text().splitlines()
-        if line.strip()
+        Idea.model_validate_json(line) for line in path.read_text().splitlines() if line.strip()
     )
     if status:
         ideas = tuple(i for i in ideas if i.status == status)

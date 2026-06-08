@@ -7,11 +7,10 @@ from rlab.reports.export import (
     is_locked,
     lock_run,
 )
-from rlab.reports.latex import export_latex_table, render_latex_table
-from rlab.reports.markdown import render_run_report
+from rlab.reports.latex import render_latex_table
+from rlab.reports.markdown import render_experiment_report, render_run_report
 
 __all__ = [
-    "export_latex_table",
     "export_paper_package",
     "export_repro_zip",
     "freeze_run",
@@ -19,6 +18,7 @@ __all__ = [
     "generate_methods_section",
     "is_locked",
     "lock_run",
+    "render_experiment_report",
     "render_latex_table",
     "render_run_report",
 ]

@@ -20,8 +20,8 @@ def inject_module_load(project: Path, module: str) -> Path:
     path = project / "lab.toml"
     content = path.read_text(encoding="utf-8")
     if "load = [" in content:
-        content = content.replace("load = [", f"load = [\n  \"{module}\",")
+        content = content.replace("load = [", f'load = [\n  "{module}",')
     else:
-        content = f"{content}\n[modules]\nload = [\"{module}\"]\n"
+        content = f'{content}\n[modules]\nload = ["{module}"]\n'
     path.write_text(content, encoding="utf-8")
     return path

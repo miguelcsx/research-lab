@@ -21,8 +21,12 @@ _OPEN = {"mit", "apache-2.0", "bsd-2-clause", "bsd-3-clause", "cc0", "public dom
 def check_compatibility(manifests: tuple[LicenseManifest, ...]) -> dict[str, object]:
     """Return a compatibility summary for a set of licenses."""
     licenses = [m.license.lower() for m in manifests]
-    non_commercial = [l for l in licenses if l in _COMMERCIAL_FORBIDDEN]
-    unknown = [l for l in licenses if l not in _COMMERCIAL_FORBIDDEN and l not in _OPEN]
+    non_commercial = [license for license in licenses if license in _COMMERCIAL_FORBIDDEN]
+    unknown = [
+        license
+        for license in licenses
+        if license not in _COMMERCIAL_FORBIDDEN and license not in _OPEN
+    ]
     return {
         "can_publish_commercially": len(non_commercial) == 0 and len(unknown) == 0,
         "non_commercial_licenses": non_commercial,

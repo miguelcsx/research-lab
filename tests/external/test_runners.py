@@ -12,18 +12,28 @@ from rlab.external.cache import external_cache
 from rlab.external.command import ExternalCommand
 from rlab.external.parser import json_metrics
 from rlab.external.repo import checkout_repository
-from rlab.external.runner import CondaRunner, DockerRunner, PythonModuleRunner, ShellRunner, UvRunner
+from rlab.external.runner import (
+    CondaRunner,
+    DockerRunner,
+    PythonModuleRunner,
+    ShellRunner,
+    UvRunner,
+)
 from rlab.external.sandbox import safe_workdir, sandbox_environment
 from tests.helpers.factories import create_git_repository
 
 
 def test_shell_runner_returns_stdout_and_raises_on_failure(tmp_path: Path) -> None:
     runner = ShellRunner()
-    result = runner.run(ExternalCommand(args=("python", "-c", "print('ok')"), cwd=tmp_path), tmp_path)
+    result = runner.run(
+        ExternalCommand(args=("python", "-c", "print('ok')"), cwd=tmp_path), tmp_path
+    )
     assert result.stdout.strip() == "ok"
 
     with pytest.raises(ExternalRunError):
-        runner.run(ExternalCommand(args=("python", "-c", "raise SystemExit(2)"), cwd=tmp_path), tmp_path)
+        runner.run(
+            ExternalCommand(args=("python", "-c", "raise SystemExit(2)"), cwd=tmp_path), tmp_path
+        )
 
 
 def test_shell_runner_honors_timeout(tmp_path: Path) -> None:
@@ -39,7 +49,7 @@ def test_json_metrics_parser_accepts_numeric_fields_only(tmp_path: Path) -> None
     output.write_text(json.dumps({"score": 1, "ignored": "x"}), encoding="utf-8")
     assert json_metrics(output) == {"score": 1.0}
 
-    for invalid in ([], {"ignored": "x"}):
+    for invalid in ([], {"ignored": "x"}):  # type: ignore[var-annotated]
         output.write_text(json.dumps(invalid), encoding="utf-8")
         with pytest.raises(ValueError):
             json_metrics(output)
@@ -61,7 +71,9 @@ def test_command_factories_and_sandbox_helpers(tmp_path: Path) -> None:
     assert external_cache(tmp_path, "repo", "rev") == tmp_path / "external" / "repo" / "rev"
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason="git is required for repository checkout tests")
+@pytest.mark.skipif(
+    shutil.which("git") is None, reason="git is required for repository checkout tests"
+)
 def test_repository_checkout_is_cached(tmp_path: Path) -> None:
     source, revision = create_git_repository(tmp_path / "source")
     checkout = checkout_repository(str(source), revision, tmp_path / "cache")

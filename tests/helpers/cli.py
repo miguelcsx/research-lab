@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 
 from rlab.cli.app import app
 
-
 Command = tuple[str, ...]
 
 

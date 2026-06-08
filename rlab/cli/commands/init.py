@@ -8,7 +8,15 @@ from rlab.cli.templates import lock_project, write_project, write_skeleton
 app = typer.Typer(help="Create projects and extension skeletons.")
 
 _TEMPLATES = ["basic", "ai", "data", "simulation", "lean", "systems", "paper"]
-_NEW_KINDS = ["experiment", "benchmark", "workflow", "data-pipeline", "report", "external-adapter", "causal-experiment"]
+_NEW_KINDS = [
+    "experiment",
+    "benchmark",
+    "workflow",
+    "ingest",
+    "report",
+    "adapter",
+    "causal-experiment",
+]
 
 
 @app.command("project")
@@ -38,9 +46,7 @@ def new(
 ) -> None:
     """Generate a skeleton file for a benchmark, workflow, experiment, etc."""
     if kind not in _NEW_KINDS:
-        raise typer.BadParameter(
-            f"Unknown kind {kind!r}; available: {', '.join(_NEW_KINDS)}"
-        )
+        raise typer.BadParameter(f"Unknown kind {kind!r}; available: {', '.join(_NEW_KINDS)}")
     state: CliState = ctx.obj
     path = write_skeleton(state.root, kind, name)
     state.console.print(f"[green]Created:[/green] {path}")
@@ -64,7 +70,7 @@ def workflow(ctx: typer.Context, name: str) -> None:
     new(ctx, "workflow", name)
 
 
-@app.command("external-adapter")
-def external_adapter(ctx: typer.Context, name: str) -> None:
-    """Shortcut for `rlab init new external-adapter <name>`."""
-    new(ctx, "external-adapter", name)
+@app.command("adapter")
+def adapter(ctx: typer.Context, name: str) -> None:
+    """Shortcut for `rlab init new adapter <name>`."""
+    new(ctx, "adapter", name)

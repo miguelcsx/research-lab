@@ -1,4 +1,8 @@
+import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rlab.baseline.model import BaselineEntry
@@ -26,26 +30,44 @@ class BaselineStore:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
+        finally:
+            conn.close()
 
     def add(self, entry: BaselineEntry) -> None:
-        import json
-        from datetime import datetime, timezone
         with self._connect() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO baselines
-                   (name, kind, run_id, metric, value, description, for_project, source, tags, created_at)
+                   (
+                       name, kind, run_id, metric, value,
+                       description, for_project, source, tags, created_at
+                   )
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (entry.name, entry.kind, entry.run_id, entry.metric, entry.value,
-                 entry.description, entry.for_project, entry.source,
-                 json.dumps(list(entry.tags)), datetime.now(tz=timezone.utc).isoformat()),
+                (
+                    entry.name,
+                    entry.kind,
+                    entry.run_id,
+                    entry.metric,
+                    entry.value,
+                    entry.description,
+                    entry.for_project,
+                    entry.source,
+                    json.dumps(list(entry.tags)),
+                    datetime.now(tz=UTC).isoformat(),
+                ),
             )
 
     def get(self, name: str) -> BaselineEntry | None:
-        import json
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM baselines WHERE name = ?", (name,)).fetchone()
         if row is None:
@@ -55,7 +77,6 @@ class BaselineStore:
         return BaselineEntry(**{k: v for k, v in d.items() if k != "created_at"})
 
     def list(self, *, for_project: str | None = None) -> tuple[BaselineEntry, ...]:
-        import json
         with self._connect() as conn:
             if for_project:
                 rows = conn.execute(

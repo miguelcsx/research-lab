@@ -1,4 +1,5 @@
 import re
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -23,7 +24,7 @@ def scan_for_pii(text: str) -> tuple[PiiHit, ...]:
             hits.append(PiiHit(kind="email", value=match.group(), line=lineno))
         for match in _PHONE.finditer(line):
             hits.append(PiiHit(kind="phone", value=match.group(), line=lineno))
-        for match in _SSN.finditer(line):
+        for _match in _SSN.finditer(line):
             hits.append(PiiHit(kind="ssn", value="[REDACTED]", line=lineno))
         for match in _IP.finditer(line):
             hits.append(PiiHit(kind="ip_address", value=match.group(), line=lineno))

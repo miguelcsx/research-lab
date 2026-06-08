@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,7 +17,7 @@ class Decision(BaseModel):
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def add_decision(
@@ -45,7 +45,5 @@ def list_decisions(path: Path) -> tuple[Decision, ...]:
     if not path.exists():
         return ()
     return tuple(
-        Decision.model_validate_json(line)
-        for line in path.read_text().splitlines()
-        if line.strip()
+        Decision.model_validate_json(line) for line in path.read_text().splitlines() if line.strip()
     )

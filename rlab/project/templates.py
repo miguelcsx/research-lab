@@ -1,8 +1,6 @@
 import subprocess
 from pathlib import Path
 
-# ── lab.toml templates ────────────────────────────────────────────────────────
-
 _LAB_TOML_BASE = """\
 [project]
 name = "{name}"
@@ -44,7 +42,6 @@ dev = ["pytest", "ruff", "mypy"]
 
 _GITIGNORE = ".venv/\n.rlab/\nruns/\nartifacts/\n"
 
-# ── module stubs ──────────────────────────────────────────────────────────────
 
 _SMOKE_EXPERIMENT = """\
 import rlab
@@ -165,15 +162,23 @@ class BasicSolver:
         return {"result": 1.0}
 """
 
-# ── template definitions ──────────────────────────────────────────────────────
 
 _TEMPLATES: dict[str, dict[str, object]] = {
     "basic": {
         "modules": [
-            "  \"components.models\",",
-            "  \"benchmarks.custom\",",
+            '  "components.models",',
+            '  "benchmarks.custom",',
         ],
-        "dirs": ["experiments", "components", "benchmarks", "manifests", "runs", "artifacts", "reports", "tests"],
+        "dirs": [
+            "experiments",
+            "components",
+            "benchmarks",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
         "packages": ["components", "benchmarks"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
@@ -183,44 +188,85 @@ _TEMPLATES: dict[str, dict[str, object]] = {
     },
     "ai": {
         "modules": [
-            "  \"components.tokenizers\",",
-            "  \"components.models\",",
-            "  \"benchmarks.custom\",",
-            "  \"evaluations.suites\",",
-            "  \"data_pipelines.sources\",",
+            '  "components.tokenizers",',
+            '  "components.models",',
+            '  "benchmarks.custom",',
+            '  "evaluations.suites",',
+            '  "ingest.sources",',
         ],
-        "dirs": ["experiments", "components", "benchmarks", "evaluations", "suites", "data_pipelines", "workflows", "external_adapters", "manifests", "runs", "artifacts", "reports", "tests"],
-        "packages": ["components", "benchmarks", "evaluations", "suites", "data_pipelines", "workflows", "external_adapters"],
+        "dirs": [
+            "experiments",
+            "components",
+            "benchmarks",
+            "evaluations",
+            "suites",
+            "ingest",
+            "workflows",
+            "adapters",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
+        "packages": [
+            "components",
+            "benchmarks",
+            "evaluations",
+            "suites",
+            "ingest",
+            "workflows",
+            "adapters",
+        ],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
             "components/tokenizers.py": _COMPONENT_STUB,
             "components/models.py": _MODEL_STUB,
             "benchmarks/custom.py": _BENCHMARK_STUB,
             "evaluations/suites.py": _SUITE_STUB,
-            "data_pipelines/sources.py": _DATA_STUB,
+            "ingest/sources.py": _DATA_STUB,
         },
     },
     "data": {
         "modules": [
-            "  \"data_pipelines.sources\",",
-            "  \"data_pipelines.cleaning\",",
-            "  \"benchmarks.quality\",",
+            '  "ingest.sources",',
+            '  "ingest.cleaning",',
+            '  "benchmarks.quality",',
         ],
-        "dirs": ["experiments", "data_pipelines", "benchmarks", "manifests", "runs", "artifacts", "reports", "tests"],
-        "packages": ["data_pipelines", "benchmarks"],
+        "dirs": [
+            "experiments",
+            "ingest",
+            "benchmarks",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
+        "packages": ["ingest", "benchmarks"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
-            "data_pipelines/sources.py": _DATA_STUB,
+            "ingest/sources.py": _DATA_STUB,
             "benchmarks/quality.py": _BENCHMARK_STUB,
         },
     },
     "simulation": {
         "modules": [
-            "  \"components.solvers\",",
-            "  \"workflows.main\",",
-            "  \"benchmarks.convergence\",",
+            '  "components.solvers",',
+            '  "workflows.main",',
+            '  "benchmarks.convergence",',
         ],
-        "dirs": ["experiments", "components", "workflows", "benchmarks", "manifests", "runs", "artifacts", "reports", "tests"],
+        "dirs": [
+            "experiments",
+            "components",
+            "workflows",
+            "benchmarks",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
         "packages": ["components", "workflows", "benchmarks"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
@@ -231,11 +277,20 @@ _TEMPLATES: dict[str, dict[str, object]] = {
     },
     "lean": {
         "modules": [
-            "  \"external_adapters.lake\",",
-            "  \"benchmarks.proofs\",",
+            '  "adapters.lake",',
+            '  "benchmarks.proofs",',
         ],
-        "dirs": ["experiments", "external_adapters", "benchmarks", "manifests", "runs", "artifacts", "reports", "tests"],
-        "packages": ["external_adapters", "benchmarks"],
+        "dirs": [
+            "experiments",
+            "adapters",
+            "benchmarks",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
+        "packages": ["adapters", "benchmarks"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
             "benchmarks/proofs.py": _BENCHMARK_STUB,
@@ -243,12 +298,23 @@ _TEMPLATES: dict[str, dict[str, object]] = {
     },
     "systems": {
         "modules": [
-            "  \"components.compilers\",",
-            "  \"workflows.benchmark_run\",",
-            "  \"benchmarks.performance\",",
+            '  "components.compilers",',
+            '  "workflows.benchmark_run",',
+            '  "benchmarks.performance",',
         ],
-        "dirs": ["experiments", "components", "workflows", "benchmarks", "external_adapters", "manifests", "runs", "artifacts", "reports", "tests"],
-        "packages": ["components", "workflows", "benchmarks", "external_adapters"],
+        "dirs": [
+            "experiments",
+            "components",
+            "workflows",
+            "benchmarks",
+            "adapters",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "tests",
+        ],
+        "packages": ["components", "workflows", "benchmarks", "adapters"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
             "components/compilers.py": _COMPONENT_STUB,
@@ -257,12 +323,24 @@ _TEMPLATES: dict[str, dict[str, object]] = {
     },
     "paper": {
         "modules": [
-            "  \"components.models\",",
-            "  \"benchmarks.main\",",
-            "  \"evaluations.paper_eval\",",
-            "  \"workflows.paper_pipeline\",",
+            '  "components.models",',
+            '  "benchmarks.main",',
+            '  "evaluations.paper_eval",',
+            '  "workflows.paper_pipeline",',
         ],
-        "dirs": ["experiments", "components", "benchmarks", "evaluations", "workflows", "manifests", "runs", "artifacts", "reports", "paper", "tests"],
+        "dirs": [
+            "experiments",
+            "components",
+            "benchmarks",
+            "evaluations",
+            "workflows",
+            "manifests",
+            "runs",
+            "artifacts",
+            "reports",
+            "paper",
+            "tests",
+        ],
         "packages": ["components", "benchmarks", "evaluations", "workflows"],
         "files": {
             "experiments/000_smoke.py": _SMOKE_EXPERIMENT,
@@ -273,8 +351,6 @@ _TEMPLATES: dict[str, dict[str, object]] = {
     },
 }
 
-
-# ── skeleton stubs for `rlab new` ─────────────────────────────────────────────
 
 _NEW_EXPERIMENT = """\
 import rlab
@@ -340,16 +416,16 @@ def generate(run_dir, ctx):
     pass
 """
 
-_NEW_EXTERNAL_ADAPTER = """\
+_NEW_ADAPTER = """\
 import rlab
 
 
-@rlab.external_suite("{name}")
-def evaluation() -> rlab.ExternalEvaluation:
-    return rlab.ExternalEvaluation(
-        name="{name}",
-        command=("python", "-m", "evaluation_module", "--target", "{{model}}"),
-    )
+@rlab.adapter("{name}")
+class MyAdapter(rlab.BaseAdapter):
+    def command(self, ctx: rlab.AdapterContext) -> rlab.ExternalCommand:
+        return rlab.ExternalCommand(
+            args=("python", "-m", "evaluation_module", "--target", "{{model}}"),
+        )
 """
 
 _NEW_CAUSAL_EXPERIMENT = """\
@@ -379,14 +455,12 @@ _NEW_TEMPLATES = {
     "experiment": _NEW_EXPERIMENT,
     "benchmark": _NEW_BENCHMARK,
     "workflow": _NEW_WORKFLOW,
-    "data-pipeline": _NEW_DATA_PIPELINE,
+    "ingest": _NEW_DATA_PIPELINE,
     "report": _NEW_REPORT,
-    "external-adapter": _NEW_EXTERNAL_ADAPTER,
+    "adapter": _NEW_ADAPTER,
     "causal-experiment": _NEW_CAUSAL_EXPERIMENT,
 }
 
-
-# ── public API ────────────────────────────────────────────────────────────────
 
 def write_project(root: Path, name: str, template: str = "ai") -> Path:
     project = root / name
@@ -439,9 +513,9 @@ def write_skeleton(root: Path, kind: str, name: str) -> Path:
         "experiment": "experiments",
         "benchmark": "benchmarks",
         "workflow": "workflows",
-        "data-pipeline": "data_pipelines",
+        "ingest": "ingest",
         "report": "reports",
-        "external-adapter": "external_adapters",
+        "adapter": "adapters",
         "causal-experiment": "experiments",
     }
     directory = root / dir_map.get(kind, kind)

@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 
 from rlab.cli.state import CliState
+from rlab.runs.reader import RunReader
 
 
 def command(
@@ -16,16 +17,22 @@ def command(
     """Generate a handoff document for another team."""
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
-    run_dir = next(
-        (d for d in runs_dir.iterdir() if d.is_dir() and (d.name == run_id or d.name.endswith(run_id))),
-        None,
-    ) if runs_dir.exists() else None
+    run_dir = (
+        next(
+            (
+                d
+                for d in runs_dir.iterdir()
+                if d.is_dir() and (d.name == run_id or d.name.endswith(run_id))
+            ),
+            None,
+        )
+        if runs_dir.exists()
+        else None
+    )
 
     if run_dir is None:
         raise typer.BadParameter(f"Run {run_id!r} not found")
 
-    from rlab.runs.reader import RunReader
-    from rlab.reports.markdown import render_run_report
     reader = RunReader(run_dir)
 
     lines: list[str] = [
@@ -50,12 +57,14 @@ def command(
             lines.append(f"- {n.get('text', '')}")
         lines.append("")
 
-    lines.extend([
-        "## Known Issues\n",
-        "- (fill in known issues)\n",
-        "## Suggested Next Experiments\n",
-        "- (fill in suggestions)\n",
-    ])
+    lines.extend(
+        [
+            "## Known Issues\n",
+            "- (fill in known issues)\n",
+            "## Suggested Next Experiments\n",
+            "- (fill in suggestions)\n",
+        ]
+    )
 
     content = "\n".join(lines)
     dest = output or (run_dir / "handoff.md")

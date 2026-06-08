@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import inspect
-import json
-from pathlib import Path
-from typing import Any
 
 from rlab.constants import EntryKind
 from rlab.context.runtime import RuntimeContext
 from rlab.errors import WorkflowError
 from rlab.results.bundle import ResultBundle, bundle_from_metrics, empty_bundle
-from rlab.results.metric import Metric
 from rlab.workflows.context import WorkflowContext
 from rlab.workflows.external import run_external_step
 from rlab.workflows.model import ExternalStep, Workflow, WorkflowStep
@@ -45,7 +40,7 @@ def _resolve_step(
             continue
         fn = record.value
         if not callable(fn):
-            continue
+            continue  # type: ignore[unreachable]
         return step_ref, WorkflowStep(name=step_ref, fn=fn)
 
     raise WorkflowError(

@@ -49,8 +49,8 @@ class AuditTrail:
         if not self.path.exists():
             return ()
         events: list[AuditEvent] = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
+        for raw_line in self.path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
             if not line:
                 continue
             events.append(AuditEvent.model_validate(json.loads(line)))

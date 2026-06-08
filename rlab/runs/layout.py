@@ -59,5 +59,12 @@ class RunLayout(BaseModel):
         return self.root / "results"
 
     def create(self) -> None:
-        for directory in (self.root, self.logs, self.tables, self.figures, self.artifacts, self.results):
+        for directory in (
+            self.root,
+            self.logs,
+            self.tables,
+            self.figures,
+            self.artifacts,
+            self.results,
+        ):
             directory.mkdir(parents=True, exist_ok=True)

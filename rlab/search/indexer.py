@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import yaml
+
+from rlab.runs.reader import RunReader
 from rlab.search.index import SearchIndex
 
 
 def index_run(run_dir: Path, search: SearchIndex) -> None:
     """Index all textual content from a run directory."""
-    from rlab.runs.reader import RunReader
     reader = RunReader(run_dir)
 
     if reader.layout.manifest_file.exists():
@@ -36,8 +38,6 @@ def index_run(run_dir: Path, search: SearchIndex) -> None:
 
 def index_artifact(manifest_path: Path, search: SearchIndex) -> None:
     """Index an artifact manifest."""
-    import yaml
-
     if not manifest_path.is_file():
         return
     try:
@@ -46,7 +46,7 @@ def index_artifact(manifest_path: Path, search: SearchIndex) -> None:
         return
 
     name = str(data.get("name", manifest_path.stem))
-    kind = str(data.get("kind", "artifact"))
+    _kind = str(data.get("kind", "artifact"))
     body = " ".join(str(v) for v in data.values() if isinstance(v, str))
 
     search.index(

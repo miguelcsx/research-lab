@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from typing import Any
 
 import typer
 
@@ -7,7 +8,7 @@ from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
 
 
-def command(ctx: typer.Context) -> None:
+def command(ctx: typer.Context) -> None:  # noqa: PLR0915
     """Run all project health checks."""
     state: CliState = ctx.obj
 
@@ -43,7 +44,10 @@ def command(ctx: typer.Context) -> None:
     else:
         result = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
-            cwd=state.root, capture_output=True, text=True, check=False
+            cwd=state.root,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode != 0:
             warn("git repo", "not a git repository")
@@ -55,6 +59,7 @@ def command(ctx: typer.Context) -> None:
         from rlab.project.loader import load_modules
         from rlab.registry.context import using_registry
         from rlab.registry.store import Registry
+
         registry = Registry()
         with using_registry(registry):
             results = load_modules(state.root, runtime.config.modules.load)
@@ -62,18 +67,26 @@ def command(ctx: typer.Context) -> None:
         check(
             "modules",
             len(failed) == 0,
-            f"{len(results)} declared, {len(failed)} failed" if failed else f"{len(results)} loaded",
+            (
+                f"{len(results)} declared, {len(failed)} failed"
+                if failed
+                else f"{len(results)} loaded"
+            ),
         )
+
+    # External tool availability
+    _check_external_tools(check, warn)
 
     # Project validation (warnings only for non-errors)
     from rlab.project.validation import validate_project
+
     issues = validate_project(state.root)
     errors = [i for i in issues if i.severity.value == "error"]
-    warnings = [i for i in issues if i.severity.value != "error"]
+    warnings_list = [i for i in issues if i.severity.value != "error"]
     if errors:
         check("project validation", False, f"{len(errors)} error(s)")
-    elif warnings:
-        warn("project validation", f"{len(warnings)} warning(s)")
+    elif warnings_list:
+        warn("project validation", f"{len(warnings_list)} warning(s)")
     else:
         check("project validation", True)
 
@@ -85,3 +98,17 @@ def command(ctx: typer.Context) -> None:
         raise typer.Exit(1)
     else:
         state.console.print("\n[green]All checks passed.[/green]")
+
+
+def _check_external_tools(check: Any, warn: Any) -> None:
+    """Check common external research tools."""
+    tools = {
+        "docker": shutil.which("docker") is not None,
+        "conda": shutil.which("conda") is not None,
+        "pytest": shutil.which("pytest") is not None,
+    }
+    for name, available in tools.items():
+        if available:
+            check(name, True)
+        else:
+            warn(name, "not found in PATH")

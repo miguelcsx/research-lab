@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from rlab.context.runtime import RuntimeContext
+from rlab.experiments.plan import ExecutionPlan
 from rlab.experiments.runner import execute_experiment, plan_experiment
 from rlab.runs.reader import RunReader
 from rlab.runs.session import RunSession
@@ -17,7 +18,7 @@ def run_experiment(  # noqa: PLR0913
     seed: int | None = None,
     run_name: str | None = None,
     resume: Path | None = None,
-) -> Path | object:
+) -> Path | ExecutionPlan:
     plan, experiment = plan_experiment(runtime, path, seed=seed)
     if dry_run:
         return plan

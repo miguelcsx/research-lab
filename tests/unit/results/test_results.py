@@ -18,16 +18,30 @@ def test_metric_and_artifact_models() -> None:
     assert metric.unit == "dimensionless"
     assert metric.direction == Direction.MINIMIZE
     assert metric.step is None
-    assert TableArtifact(name="results", path=Path("tables/results.csv"), format="csv").format == "csv"
-    assert "pdf" in FigureArtifact(name="loss_curve", path=Path("figures/loss.png"), formats=("png", "pdf")).formats
-    assert FileArtifact(name="mesh", path=Path("artifacts/mesh.vtk"), media_type="model/vtk").media_type == "model/vtk"
+    assert (
+        TableArtifact(name="results", path=Path("tables/results.csv"), format="csv").format == "csv"
+    )
+    assert (
+        "pdf"
+        in FigureArtifact(
+            name="loss_curve", path=Path("figures/loss.png"), formats=("png", "pdf")
+        ).formats
+    )
+    assert (
+        FileArtifact(
+            name="mesh", path=Path("artifacts/mesh.vtk"), media_type="model/vtk"
+        ).media_type
+        == "model/vtk"
+    )
     assert LogArtifact(name="solver", path=Path("logs/solver.log")).name == "solver"
 
 
 def test_result_bundle_factories_merge_and_validation() -> None:
     assert empty_bundle().as_metrics_dict() == {}
     bundle = bundle_from_metrics({"accuracy": 0.92, "loss": 0.4})
-    assert bundle.metric("accuracy").value == pytest.approx(0.92)
+    accuracy = bundle.metric("accuracy")
+    assert accuracy is not None
+    assert accuracy.value == pytest.approx(0.92)
 
     merged = ResultBundle(metrics=(Metric(name="m1", value=1.0),)).merge(
         ResultBundle(metrics=(Metric(name="m2", value=2.0),))

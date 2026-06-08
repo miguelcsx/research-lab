@@ -35,7 +35,9 @@ def test_power_and_budget_estimates() -> None:
     assert budget.total_jobs == 10
     assert budget.estimated_gpu_hours == pytest.approx(10.0)
     assert budget.estimated_storage_gb == pytest.approx(50.0)
-    assert estimate_budget(100, seconds_per_job=3600.0, gpus_per_job=1.0, gpu_hour_cost_usd=2.0).estimated_cost_usd == pytest.approx(200.0)
+    assert estimate_budget(
+        100, seconds_per_job=3600.0, gpus_per_job=1.0, gpu_hour_cost_usd=2.0
+    ).estimated_cost_usd == pytest.approx(200.0)
     assert BudgetEstimate(total_jobs=5, estimated_gpu_hours=10.0).total_jobs == 5
 
 

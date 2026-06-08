@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
-from rlab.constants import RunStatus
+from rlab.constants import RUNS_DB_NAME, RunStatus
+
+_DEFAULT_RUNS_LIMIT = 50
+_FOLLOW_INTERVAL_SECONDS = 1.0
 
 app = typer.Typer(help="Inspect and manage runs.")
 
@@ -19,12 +21,13 @@ def list_runs(
     ctx: typer.Context,
     status: Annotated[str | None, typer.Option("--status")] = None,
     tag: Annotated[list[str] | None, typer.Option("--tag")] = None,
-    limit: int = typer.Option(50),
+    limit: int = typer.Option(_DEFAULT_RUNS_LIMIT),
 ) -> None:
     """List runs with their status and metric summary."""
     state: CliState = ctx.obj
     from rlab.runs.index import RunIndex
-    index = RunIndex(state.root / ".rlab" / "runs.db")
+
+    index = RunIndex(state.root / ".rlab" / RUNS_DB_NAME)
     run_status = RunStatus(status) if status else None
     rows = index.list(status=run_status, tags=tuple(tag or ()), limit=limit)
     if state.json_output:
@@ -38,8 +41,13 @@ def show(ctx: typer.Context, run_id: str) -> None:
     """Show full metadata for a single run."""
     state: CliState = ctx.obj
     from rlab.runs.reader import RunReader
+
     runs_dir = state.root / "runs"
-    run_dir = next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None) if runs_dir.exists() else None
+    run_dir = (
+        next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None)
+        if runs_dir.exists()
+        else None
+    )
     if run_dir is None:
         raise typer.BadParameter(f"Run {run_id!r} not found")
     reader = RunReader(run_dir)
@@ -62,7 +70,11 @@ def logs(ctx: typer.Context, run_id: str) -> None:
     """Stream log files from a run."""
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
-    run_dir = next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None) if runs_dir.exists() else None
+    run_dir = (
+        next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None)
+        if runs_dir.exists()
+        else None
+    )
     if run_dir is None:
         raise typer.BadParameter(f"Run {run_id!r} not found")
     logs_dir = run_dir / "logs"
@@ -83,7 +95,9 @@ def clean(
 ) -> None:
     """Remove failed or old runs from the runs directory."""
     import shutil
+
     from rlab.runs.reader import RunReader
+
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
     if not runs_dir.exists():
@@ -107,13 +121,50 @@ def clean(
 
 
 @app.command("query")
-def query(ctx: typer.Context, expr: str) -> None:
-    """Query runs using a SQL WHERE expression."""
+def query(
+    ctx: typer.Context,
+    expr: str = typer.Argument("", help="SQL WHERE clause against the SQLite index"),
+    where: Annotated[
+        str | None, typer.Option("--where", help="Python predicate over run columns")
+    ] = None,
+    order_by: Annotated[
+        str | None, typer.Option("--order-by", help="metric name, optionally with 'desc'")
+    ] = None,
+    limit: Annotated[int | None, typer.Option("--limit")] = None,
+) -> None:
+    """Query runs. Use SQL via the positional arg, or rich expressions via flags."""
     state: CliState = ctx.obj
+    if where is not None or order_by is not None or limit is not None or not expr:
+        from rlab.runs.query import collect_run_rows, filter_rows, sort_rows
+
+        rows = collect_run_rows(state.root / "runs")
+        rows = filter_rows(rows, where)
+        rows = sort_rows(rows, order_by)
+        if limit is not None:
+            rows = rows[:limit]
+        state.console.print(table("Query Results", rows))
+        return
     from rlab.runs.index import RunIndex
-    index = RunIndex(state.root / ".rlab" / "runs.db")
-    rows = index.query(expr)
-    state.console.print(table("Query Results", rows))
+
+    index = RunIndex(state.root / ".rlab" / RUNS_DB_NAME)
+    state.console.print(table("Query Results", index.query(expr)))
+
+
+@app.command("best")
+def best(
+    ctx: typer.Context,
+    metric: Annotated[str, typer.Option("--metric", help="Metric to optimize")],
+    group_by: Annotated[str | None, typer.Option("--group-by")] = None,
+    where: Annotated[str | None, typer.Option("--where")] = None,
+    minimize: Annotated[bool, typer.Option("--minimize")] = False,
+) -> None:
+    """Show the best run per group (or overall) for a metric."""
+    state: CliState = ctx.obj
+    from rlab.runs.query import collect_run_rows, filter_rows, group_best
+
+    rows = filter_rows(collect_run_rows(state.root / "runs"), where)
+    winners = group_best(rows, metric=metric, group_by=group_by, maximize=not minimize)
+    state.console.print(table(f"Best by {metric}", winners))
 
 
 @app.command("tail")
@@ -121,7 +172,11 @@ def tail(ctx: typer.Context, run_id: str) -> None:
     """Follow metrics.jsonl for a running experiment."""
     state: CliState = ctx.obj
     runs_dir = state.root / "runs"
-    run_dir = next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None) if runs_dir.exists() else None
+    run_dir = (
+        next((d for d in runs_dir.iterdir() if d.name.endswith(run_id) or d.name == run_id), None)
+        if runs_dir.exists()
+        else None
+    )
     if run_dir is None:
         raise typer.BadParameter(f"Run {run_id!r} not found")
     metrics_file = run_dir / "metrics.jsonl"
@@ -137,6 +192,6 @@ def tail(ctx: typer.Context, run_id: str) -> None:
                             rec = json.loads(line)
                             state.console.print(f"{rec.get('name')}: {rec.get('value')}")
                     last_pos = f.tell()
-            time.sleep(1)
+            time.sleep(_FOLLOW_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         pass

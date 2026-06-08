@@ -6,13 +6,14 @@ from pathlib import Path
 import typer
 
 from rlab.cli.state import CliState
+from rlab.runs.reader import RunReader
+
+_METRIC_TOLERANCE = 1e-9
 
 
-def command(ctx: typer.Context, run_a: Path, run_b: Path) -> None:
+def command(ctx: typer.Context, run_a: Path, run_b: Path) -> None:  # noqa: PLR0912
     """Show what changed between two runs."""
     state: CliState = ctx.obj
-    from rlab.runs.reader import RunReader
-
     reader_a = RunReader(run_a)
     reader_b = RunReader(run_b)
 
@@ -24,7 +25,7 @@ def command(ctx: typer.Context, run_a: Path, run_b: Path) -> None:
     all_param_keys = sorted(set(params_a) | set(params_b))
     all_metric_keys = sorted(set(metrics_a) | set(metrics_b))
 
-    state.console.print(f"\n[bold]Comparing:[/bold]")
+    state.console.print("\n[bold]Comparing:[/bold]")
     state.console.print(f"  A: {run_a.name}")
     state.console.print(f"  B: {run_b.name}")
 
@@ -49,7 +50,7 @@ def command(ctx: typer.Context, run_a: Path, run_b: Path) -> None:
                 state.console.print(f"  {key}: [missing] → {vb:.6g}")
             elif vb is None:
                 state.console.print(f"  {key}: {va:.6g} → [missing]")
-            elif abs(va - vb) > 1e-9:
+            elif abs(va - vb) > _METRIC_TOLERANCE:
                 delta = vb - va
                 state.console.print(f"  [cyan]{key}[/cyan]: {va:.6g} → {vb:.6g} ({delta:+.6g})")
             else:

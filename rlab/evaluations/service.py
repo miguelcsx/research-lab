@@ -41,17 +41,19 @@ def run_evaluation(  # noqa: PLR0913
         },
     )
     with session.running() as active:
-        active = active.model_copy(
+        updated = active.model_copy(
             update={"params": {key: value for key, value in options.items() if value is not None}}
         )
-        external_names = {record.name for record in active.registry.list(EntryKind.EXTERNAL_SUITE)}
+        external_names = {record.name for record in updated.registry.list(EntryKind.EXTERNAL_SUITE)}
         if suite in external_names:
             results = [
-                execute_external(active, suite, reference, external_runner)
+                execute_external(updated, suite, reference, external_runner)
                 for reference in (model, *baselines)
             ]
         else:
-            results = [execute_suite(active, suite, reference) for reference in (model, *baselines)]
+            results = [
+                execute_suite(updated, suite, reference) for reference in (model, *baselines)
+            ]
         for result in results:
             for task in result.tasks:
                 for name, value in task.metrics.items():

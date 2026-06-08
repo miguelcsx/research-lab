@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import subprocess
 import time
 from pathlib import Path
@@ -40,7 +41,8 @@ def run_external_step(step: ExternalStep, ctx: RuntimeContext) -> ResultBundle:
 
     if result.returncode != 0:
         raise WorkflowError(
-            f"External step {step.name!r} failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
+            f"External step {step.name!r} failed"
+            f" (exit {result.returncode}):\n{result.stderr[-2000:]}"
         )
 
     parsed = _parse_result(step, result.stdout, ctx.run_dir)
@@ -58,7 +60,6 @@ def _parse_result(
     if callable(step.parser):
         raw = step.parser(stdout)
     elif isinstance(step.parser, str) and ":" in step.parser:
-        import importlib
         module_path, func_name = step.parser.rsplit(":", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)

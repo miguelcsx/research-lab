@@ -1,3 +1,10 @@
+from rlab.adapters import (
+    AdapterContext,
+    AdapterResult,
+    AdapterValidationError,
+    BaseAdapter,
+    ExternalAdapter,
+)
 from rlab.assumptions import Assumption, Threat
 from rlab.baseline import BaselineEntry, BaselineStore
 from rlab.benchmarks import BenchmarkContext, BenchmarkResult, BenchmarkSpec
@@ -9,10 +16,11 @@ from rlab.data import (
     DataExperiment,
     DataPipeline,
 )
+from rlab.errors_analysis import ErrorComparison, compare_runs_errors
 from rlab.evaluations import EvaluationResult, EvaluationSuite, EvaluationTask
 from rlab.experiments import Experiment, ExperimentResult
+from rlab.experiments.matrix import Grid, Sample, choice, factor, grid, log_uniform, uniform
 from rlab.experiments.model import RetryPolicy
-from rlab.experiments.matrix import Grid, Sample, factor, grid, log_uniform, uniform, choice
 from rlab.external import ExternalCommand, ExternalEvaluation, ExternalResult
 from rlab.manifests import ArtifactManifest, DatasetManifest, ModelManifest, RunManifest
 from rlab.power import BudgetEstimate, estimate_budget, estimate_required_repetitions
@@ -26,6 +34,8 @@ from rlab.results import (
     TableArtifact,
     bundle_from_metrics,
 )
+from rlab.stats import MetricComparison, compare_metric_arrays, compare_runs
+from rlab.studies import Study, StudyPlan
 from rlab.units import Unit, UnitRegistry
 from rlab.workflows import ExternalStep, Workflow, WorkflowStep
 
@@ -44,15 +54,22 @@ __all__ = [
     "DataExperiment",
     "DataPipeline",
     "DatasetManifest",
+    "ErrorComparison",
     "EvaluationResult",
     "EvaluationSuite",
     "EvaluationTask",
     "Experiment",
     "ExperimentResult",
+    "BaseAdapter",
+    "ExternalAdapter",
     "ExternalCommand",
     "ExternalEvaluation",
     "ExternalResult",
     "ExternalStep",
+    "AdapterContext",
+    "AdapterResult",
+    "AdapterValidationError",
+    "MetricComparison",
     "FigureArtifact",
     "FileArtifact",
     "Grid",
@@ -65,6 +82,8 @@ __all__ = [
     "RunManifest",
     "RuntimeContext",
     "Sample",
+    "Study",
+    "StudyPlan",
     "TableArtifact",
     "Threat",
     "Unit",
@@ -73,6 +92,9 @@ __all__ = [
     "WorkflowStep",
     "bundle_from_metrics",
     "choice",
+    "compare_metric_arrays",
+    "compare_runs",
+    "compare_runs_errors",
     "estimate_budget",
     "estimate_required_repetitions",
     "factor",

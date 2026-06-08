@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from rlab.results.figure import FigureArtifact
 from rlab.results.file import FileArtifact
@@ -28,7 +28,7 @@ class ResultBundle(BaseModel):
             (self.files, "files"),
             (self.logs, "logs"),
         ):
-            names = [item.name for item in collection]  # type: ignore[union-attr]
+            names = [item.name for item in collection]
             duplicates = {n for n in names if names.count(n) > 1}
             if duplicates:
                 raise ValueError(f"Duplicate {label} names: {', '.join(sorted(duplicates))}")
@@ -57,8 +57,5 @@ def empty_bundle() -> ResultBundle:
 
 
 def bundle_from_metrics(metrics: dict[str, float | int]) -> ResultBundle:
-    from rlab.results.metric import Metric
 
-    return ResultBundle(
-        metrics=tuple(Metric(name=k, value=v) for k, v in metrics.items())
-    )
+    return ResultBundle(metrics=tuple(Metric(name=k, value=v) for k, v in metrics.items()))

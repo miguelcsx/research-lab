@@ -4,7 +4,10 @@ import typer
 
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.constants import RUNS_DB_NAME
 from rlab.runs.index import RunIndex
+
+_DEFAULT_STATUS_LIMIT = 10
 
 
 def command(ctx: typer.Context) -> None:
@@ -30,6 +33,6 @@ def command(ctx: typer.Context) -> None:
     state.console.print(
         table(
             "Recent runs",
-            RunIndex(runtime.paths.cache / "runs.db").list(limit=10),
+            RunIndex(runtime.paths.cache / RUNS_DB_NAME).list(limit=_DEFAULT_STATUS_LIMIT),
         )
     )

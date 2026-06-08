@@ -10,7 +10,7 @@ def local_store(runtime: RuntimeContext) -> ArtifactStore:
     return ArtifactStore(runtime.paths.artifacts)
 
 
-def promote_path(
+def promote_path(  # noqa: PLR0913
     runtime: RuntimeContext,
     source: Path,
     *,

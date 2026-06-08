@@ -20,7 +20,7 @@ class RegistryRecord(BaseModel):
     source: Path | None = None
     description: str = ""
     tags: tuple[str, ...] = ()
-    plugin: str = "project"
+    package: str = "project"
     capabilities: tuple[str, ...] = Field(default_factory=tuple)
 
     @property

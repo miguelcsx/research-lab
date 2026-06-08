@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -13,8 +14,6 @@ from rlab.registry.store import Registry
 from rlab.typing import JsonValue, MetricValue, UnitStr
 
 if TYPE_CHECKING:
-    from rlab.results.bundle import ResultBundle
-    from rlab.results.metric import Metric
     from rlab.typing import Serializer
 
 
@@ -62,9 +61,9 @@ class RuntimeContext(BaseModel):
         unit: UnitStr = "dimensionless",
         direction: Direction = Direction.MINIMIZE,
         step: int | None = None,
-    ) -> "RuntimeContext":
-        from rlab.runs.writer import RunWriter
-        from rlab.runs.layout import RunLayout
+    ) -> RuntimeContext:
+        from rlab.runs.layout import RunLayout  # noqa: PLC0415
+        from rlab.runs.writer import RunWriter  # noqa: PLC0415
 
         if self.run_dir is not None:
             writer = RunWriter(RunLayout(root=self.run_dir))
@@ -80,7 +79,7 @@ class RuntimeContext(BaseModel):
         fig: Any,
         *,
         formats: tuple[str, ...] = ("png",),
-    ) -> "RuntimeContext":
+    ) -> RuntimeContext:
         if self.run_dir is None:
             return self
         dest = self._run_subdir("figures") / name
@@ -94,9 +93,9 @@ class RuntimeContext(BaseModel):
         data: Any,
         *,
         formats: tuple[str, ...] = ("csv",),
-    ) -> "RuntimeContext":
-        from rlab.runs.writer import RunWriter
-        from rlab.runs.layout import RunLayout
+    ) -> RuntimeContext:
+        from rlab.runs.layout import RunLayout  # noqa: PLC0415
+        from rlab.runs.writer import RunWriter  # noqa: PLC0415
 
         if self.run_dir is None:
             return self
@@ -105,9 +104,7 @@ class RuntimeContext(BaseModel):
             writer.table(name, data, fmt=fmt)
         return self
 
-    def save_artifact(self, name: str, path: str | Path) -> "RuntimeContext":
-        import shutil
-
+    def save_artifact(self, name: str, path: str | Path) -> RuntimeContext:
         if self.run_dir is None:
             return self
         src = Path(path)
@@ -119,9 +116,9 @@ class RuntimeContext(BaseModel):
             shutil.copy2(src, dest)
         return self
 
-    def note(self, text: str, author: str | None = None) -> "RuntimeContext":
-        from rlab.runs.writer import RunWriter
-        from rlab.runs.layout import RunLayout
+    def note(self, text: str, author: str | None = None) -> RuntimeContext:
+        from rlab.runs.layout import RunLayout  # noqa: PLC0415
+        from rlab.runs.writer import RunWriter  # noqa: PLC0415
 
         if self.run_dir is not None:
             RunWriter(RunLayout(root=self.run_dir)).note(text, author)
@@ -131,8 +128,8 @@ class RuntimeContext(BaseModel):
         self,
         name: str,
         obj: Any,
-        serializer: "Serializer",
-    ) -> "RuntimeContext":
+        serializer: Serializer,
+    ) -> RuntimeContext:
         if self.run_dir is None:
             return self
         dest = self._run_subdir("artifacts") / name
@@ -163,7 +160,6 @@ def _save_figure_obj(fig: Any, dest: Path, name: str, formats: tuple[str, ...]) 
             fig.save(dest / f"{name}.{fmt}")
         return
     # Path-like: copy the file
-    import shutil
     src = Path(str(fig))
     if src.exists():
         for fmt in formats:

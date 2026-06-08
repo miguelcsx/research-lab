@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rlab.reports.markdown import render_run_report
@@ -15,7 +15,7 @@ def freeze_run(run_dir: Path, name: str, output_dir: Path) -> Path:
         shutil.rmtree(dest)
     shutil.copytree(run_dir, dest)
     (dest / "frozen.txt").write_text(
-        f"Frozen from: {run_dir}\nAt: {datetime.now(tz=timezone.utc).isoformat()}\n"
+        f"Frozen from: {run_dir}\nAt: {datetime.now(tz=UTC).isoformat()}\n"
     )
     return dest
 
@@ -54,15 +54,18 @@ def export_paper_package(
 def generate_methods_section(run_dir: Path) -> str:
     """Generate a draft methods section from run metadata."""
     from rlab.runs.reader import RunReader
+
     reader = RunReader(run_dir)
 
+    operation = "experiment"
+    tags = "none"
     if reader.layout.manifest_file.exists():
-        manifest = reader.manifest()
-        operation = manifest.operation
-        tags = ", ".join(manifest.tags) if manifest.tags else "none"
-    else:
-        operation = "experiment"
-        tags = "none"
+        try:
+            manifest = reader.manifest()
+            operation = manifest.operation
+            tags = ", ".join(manifest.tags) if manifest.tags else "none"
+        except Exception:
+            pass
 
     params = reader.params()
     param_text = ""
@@ -79,22 +82,20 @@ def generate_methods_section(run_dir: Path) -> str:
 
 def generate_citation_cff(name: str, version: str, authors: list[str]) -> str:
     """Generate a CITATION.cff entry for the project."""
-    author_lines = "".join(
-        f"  - name: {author}\n" for author in authors
-    )
+    author_lines = "".join(f"  - name: {author}\n" for author in authors)
     return (
         f"cff-version: 1.2.0\n"
         f"message: If you use this software, please cite it.\n"
         f"title: {name}\n"
         f"version: {version}\n"
-        f"date-released: {datetime.now(tz=timezone.utc).date().isoformat()}\n"
+        f"date-released: {datetime.now(tz=UTC).date().isoformat()}\n"
         f"authors:\n{author_lines}"
     )
 
 
 def lock_run(run_dir: Path) -> None:
     """Mark a run as locked against further modification."""
-    (run_dir / ".locked").write_text(datetime.now(tz=timezone.utc).isoformat() + "\n")
+    (run_dir / ".locked").write_text(datetime.now(tz=UTC).isoformat() + "\n")
 
 
 def is_locked(run_dir: Path) -> bool:

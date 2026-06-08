@@ -24,7 +24,9 @@ def test_policy_defaults_load_and_env_checks(tmp_path: Path) -> None:
 
 
 def test_secret_redaction_and_detection() -> None:
-    redacted = redact_secrets({"PATH": "/usr/bin", "HF_TOKEN": "hf_secret123", "WANDB_API_KEY": "abc"})
+    redacted = redact_secrets(
+        {"PATH": "/usr/bin", "HF_TOKEN": "hf_secret123", "WANDB_API_KEY": "abc"}
+    )
     assert redacted["PATH"] == "/usr/bin"
     assert redacted["HF_TOKEN"] == "[REDACTED]"
     assert redact_secrets({"MY_TOKEN": "keep_me"}, allowlist=("MY_TOKEN",))["MY_TOKEN"] == "keep_me"
@@ -48,4 +50,4 @@ def test_license_compatibility() -> None:
 
     non_commercial = check_compatibility((LicenseManifest(name="dataset_x", license="cc-by-nc"),))
     assert non_commercial["can_publish_commercially"] is False
-    assert "cc-by-nc" in non_commercial["non_commercial_licenses"]
+    assert "cc-by-nc" in non_commercial["non_commercial_licenses"]  # type: ignore[operator]

@@ -24,10 +24,12 @@ def render_latex_table(
     for row in rows:
         cells = " & ".join(_escape(str(row.get(c, ""))) for c in columns)
         lines.append(f"{cells} \\\\")
-    lines.extend([
-        "\\hline",
-        "\\end{tabular}",
-    ])
+    lines.extend(
+        [
+            "\\hline",
+            "\\end{tabular}",
+        ]
+    )
     if caption:
         lines.append(f"\\caption{{{_escape(caption)}}}")
     lines.append(f"\\label{{{label}}}")

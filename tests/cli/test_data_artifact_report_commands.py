@@ -47,7 +47,9 @@ def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
     ):
         assert_success(invoke_cli(project, *args))
 
-    assert_success(invoke_cli(project, "data", "ablate", "dataset:x", "--factor", "enabled=true,false"))
+    assert_success(
+        invoke_cli(project, "data", "ablate", "dataset:x", "--factor", "enabled=true,false")
+    )
     assert_success(
         invoke_cli(
             project,
@@ -60,7 +62,9 @@ def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
             "candidate",
         )
     )
-    assert_success(invoke_cli(project, "artifacts", "pull", "artifact:dataset/project.tiny@candidate"))
+    assert_success(
+        invoke_cli(project, "artifacts", "pull", "artifact:dataset/project.tiny@candidate")
+    )
 
     reference = "artifact:dataset/project.tiny@1"
     for args in (

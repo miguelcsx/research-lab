@@ -16,7 +16,7 @@ def load_file(path: Path) -> None:
         raise ImportError(f"Cannot load {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[path.stem] = module
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    spec.loader.exec_module(module)
 
 
 def load_experiment(registry: Registry, path: Path) -> tuple[str, Experiment]:
