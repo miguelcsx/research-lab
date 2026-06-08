@@ -26,7 +26,10 @@ def load_config(root: Path, cli_overrides: Iterable[str] = ()) -> LabConfig:
     data: dict[str, Any] = {}
     if path.exists():
         with path.open("rb") as stream:
-            data = tomllib.load(stream)
+            try:
+                data = tomllib.load(stream)
+            except tomllib.TOMLDecodeError as error:
+                raise ConfigError(f"{path}: {error}") from error
     overrides = {**_environment_overrides(), **parse_overrides(cli_overrides)}
     resolved = resolve_values(apply_overrides(data, overrides), project_root=root)
     if "project" not in resolved:

@@ -78,3 +78,23 @@ def test_reference_parser(
 def test_invalid_references(text: str) -> None:
     with pytest.raises(ReferenceError):
         parse_reference(text)
+
+
+def test_malformed_toml_raises_config_error(tmp_path: Path) -> None:
+    (tmp_path / "lab.toml").write_text(
+        '[modules]\nload = [\n  "a"\n  "b"\n]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)
+
+
+def test_project_specific_sections_accepted(tmp_path: Path) -> None:
+    (tmp_path / "lab.toml").write_text(
+        '[project]\nname = "test"\n\n[babylm_eval]\nrepo = "external/babylm"\n',
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    assert config.project.name == "test"
+    assert config.section("babylm_eval") == {"repo": "external/babylm"}
+    assert config.section("nonexistent") is None

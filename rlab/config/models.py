@@ -1,8 +1,11 @@
 from pathlib import Path
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from rlab.project.modules import ModulesConfig
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class ConfigModel(BaseModel):
@@ -50,7 +53,9 @@ class LauncherConfig(ConfigModel):
     docker_image: str | None = None
 
 
-class LabConfig(ConfigModel):
+class LabConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     modules: ModulesConfig = Field(default_factory=ModulesConfig)
     paths: PathConfig = Field(default_factory=PathConfig)
@@ -58,3 +63,11 @@ class LabConfig(ConfigModel):
     artifacts: ArtifactConfig = Field(default_factory=ArtifactConfig)
     reproducibility: ReproducibilityConfig = Field(default_factory=ReproducibilityConfig)
     launcher: LauncherConfig = Field(default_factory=LauncherConfig)
+
+    def section(self, name: str, schema: type[T] | None = None) -> Any:
+        raw = self.model_extra.get(name) if self.model_extra else None
+        if raw is None:
+            return None
+        if schema is not None:
+            return schema.model_validate(raw)
+        return raw
