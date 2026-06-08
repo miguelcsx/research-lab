@@ -12,9 +12,7 @@ artifacts/
 build/
 dist/
 
-runs/*
-!runs/.gitkeep
-
+/runs/
 artifacts/*
 !artifacts/.gitkeep
 

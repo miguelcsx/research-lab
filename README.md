@@ -90,8 +90,8 @@ rlab jobs list
   </tr>
   <tr>
     <td>
-      <h4>🔌 Pluggable</h4>
-      <p>Extend with plugins via the <code>rlab.plugins</code> entry-point. Reuse components across projects.</p>
+      <h4>🧩 Composable</h4>
+      <p>Decorate functions and classes to register them. Share modules across projects as ordinary Python imports.</p>
     </td>
     <td>
       <h4>⚙️ Strict</h4>
@@ -142,7 +142,7 @@ Perfect for debugging, auditing, and reproducing experiments months later.
 
 ## 🏗️ Architecture
 
-**Plugin-based registry system:** Projects and installed packages register experiments, benchmarks, evaluations, datasets, and components through decorators. The registry is immutable, typed, and queryable via the CLI or Python API.
+**Decorator-driven registry:** Projects register experiments, benchmarks, evaluations, datasets, and components through decorators. The registry is immutable, typed, and queryable via the CLI or Python API.
 
 ### Core Modules
 
@@ -197,13 +197,23 @@ All code is strictly typed, comprehensively tested, and linted.
 Projects register components, benchmarks, suites, datasets, and experiments through decorators:
 
 ```python
-@rlab.component("kind", "name")
-@rlab.benchmark("name", target="component_kind")
-@rlab.eval("suite_name", target="model_kind")
-@rlab.data("dataset_name")
+@rlab.component("kind", "name")           # reusable model/tool component
+@rlab.benchmark("name", target="kind")    # atomic performance measurement
+@rlab.suite("suite_name")                 # Python evaluation suite
+@rlab.external_suite("suite_name")        # external command evaluation
+@rlab.experiment("name")                  # declarative experiment definition
+@rlab.workflow("name")                    # composed pipeline
+@rlab.workflow_step("name")               # individual workflow step
+@rlab.dataset_variant("name")             # dataset pipeline
+@rlab.data_source("name")                 # raw data source
+@rlab.data_transform("name")              # data transform
+@rlab.data_check("name")                  # data validation check
+@rlab.data_metric("name")                 # data quality metric
+@rlab.baseline("name")                    # baseline definition
+@rlab.result_schema("name")               # typed result schema
 ```
 
-Installed packages can contribute the same declarations through the `rlab.plugins` entry-point group, making it easy to share reusable research components across your team or the community.
+Share modules between projects by importing them as ordinary Python packages — the decorators register components into the active project's registry on import.
 
 ## 💭 Philosophy
 
