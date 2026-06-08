@@ -50,6 +50,7 @@ rlab.EvaluationResult
 
 ```python
 rlab.DataPipeline
+rlab.DataBuildResult
 rlab.DataContext
 rlab.DataCheckResult
 rlab.DataAblation

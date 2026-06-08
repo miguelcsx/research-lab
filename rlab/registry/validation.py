@@ -14,6 +14,7 @@ EXPECTED_PARAMETERS = {
     EntryKind.DATA_TRANSFORM: 2,
     EntryKind.DATA_CHECK: 2,
     EntryKind.DATA_METRIC: 2,
+    EntryKind.DATA_BUILDER: 1,
 }
 
 

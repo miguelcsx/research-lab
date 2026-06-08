@@ -17,6 +17,7 @@ class EntryKind(StrEnum):
     DATA_TRANSFORM = "data_transform"
     DATA_CHECK = "data_check"
     DATA_METRIC = "data_metric"
+    DATA_BUILDER = "data_builder"
     DATASET = "dataset"
     DATA_EXPERIMENT = "data_experiment"
     DATA_ABLATION = "data_ablation"

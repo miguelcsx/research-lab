@@ -10,6 +10,7 @@ class DatasetOutput(Manifest):
     path: Path
     sha256: str
     size_bytes: int
+    is_directory: bool = False
 
 
 class DatasetManifest(Manifest):

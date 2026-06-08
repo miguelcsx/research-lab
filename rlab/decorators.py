@@ -102,6 +102,10 @@ def data_metric(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.DATA_METRIC, name)
 
 
+def data_builder(name: str) -> Callable[[T], T]:
+    return _decorator(EntryKind.DATA_BUILDER, name)
+
+
 def dataset_variant(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.DATASET, name)
 

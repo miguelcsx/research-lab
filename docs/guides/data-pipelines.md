@@ -74,6 +74,36 @@ def clean() -> rlab.DataPipeline:
 rlab data build dataset:project.clean
 ```
 
+## Build a multi-artifact dataset
+
+Use a data builder when curation produces a bundle such as training shards,
+validation data, audits, reports, and a native dataset directory.
+
+```python
+@rlab.data_builder("project.corpus_builder")
+def build_corpus(ctx: rlab.DataContext) -> rlab.DataBuildResult:
+    data = ctx.work_dir / "data.jsonl"
+    bundle = ctx.work_dir / "corpus"
+    # Build every output under ctx.work_dir.
+    return rlab.DataBuildResult(
+        outputs={"data": data, "bundle": bundle},
+        stats={"records": 1000},
+        checks={"word_budget": "passed"},
+        licenses=("CC-BY-4.0",),
+    )
+
+@rlab.dataset_variant("project.corpus")
+def corpus() -> rlab.DataPipeline:
+    return rlab.DataPipeline(
+        builder="project.corpus_builder",
+        params={"word_budget": 1_000_000},
+    )
+```
+
+Builder outputs may be files or directories. They must exist under
+`ctx.work_dir`; rlab rejects missing outputs and paths outside the active run.
+Directory checksums include relative file paths and contents.
+
 The output run contains:
 
 ```text

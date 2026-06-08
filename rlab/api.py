@@ -11,6 +11,7 @@ from rlab.benchmarks import BenchmarkContext, BenchmarkResult, BenchmarkSpec
 from rlab.context import RuntimeContext
 from rlab.data import (
     DataAblation,
+    DataBuildResult,
     DataCheckResult,
     DataContext,
     DataExperiment,
@@ -49,6 +50,7 @@ __all__ = [
     "BenchmarkSpec",
     "BudgetEstimate",
     "DataAblation",
+    "DataBuildResult",
     "DataCheckResult",
     "DataContext",
     "DataExperiment",

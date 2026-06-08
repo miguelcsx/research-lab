@@ -28,10 +28,17 @@ def dataset_manifest(  # noqa: PLR0913
                 version=version,
                 path=path,
                 sha256=sha256(path),
-                size_bytes=path.stat().st_size,
+                size_bytes=_path_size(path),
+                is_directory=path.is_dir(),
             )
             for key, path in outputs.items()
         },
         stats=stats,
         checks=checks,
     )
+
+
+def _path_size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    return sum(child.stat().st_size for child in path.rglob("*") if child.is_file())

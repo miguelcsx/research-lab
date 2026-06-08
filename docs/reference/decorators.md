@@ -102,6 +102,9 @@ def check(records, ctx): ...
 
 @rlab.data_metric("project.record_count")
 def metric(records, ctx): ...
+
+@rlab.data_builder("project.corpus")
+def builder(ctx) -> rlab.DataBuildResult: ...
 ```
 
 ## `@rlab.baseline(name)`

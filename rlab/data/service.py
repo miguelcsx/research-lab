@@ -32,7 +32,7 @@ def build(runtime: RuntimeContext, reference: str, version: str = "1") -> Path:
 
 def manifest_data_path(path: Path) -> Path:
     manifest = read_dataset_manifest(path)
-    output = next(iter(manifest.outputs.values()))
+    output = manifest.outputs.get("data") or next(iter(manifest.outputs.values()))
     return output.path if output.path.is_absolute() else path.parent / output.path
 
 

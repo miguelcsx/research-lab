@@ -8,7 +8,7 @@ from rlab.data.check import DataCheckResult
 from rlab.data.context import DataContext
 from rlab.data.io import read_jsonl, write_jsonl
 from rlab.data.manifest import dataset_manifest
-from rlab.data.pipeline import DataPipeline
+from rlab.data.pipeline import DataBuildResult, DataPipeline
 from rlab.data.profile import profile_records
 from rlab.data.report import data_report
 from rlab.manifests.dataset import DatasetManifest
@@ -33,6 +33,8 @@ def build_dataset(
     version: str = "1",
 ) -> DatasetManifest:
     pipeline = cast(DataPipeline, definition(registry, EntryKind.DATASET, name, DataPipeline))
+    if pipeline.builder is not None:
+        return _build_custom_dataset(registry, name, pipeline, ctx, output_root, version)
     records: Iterable[Record] = (
         record
         for source_name in pipeline.sources
@@ -65,3 +67,44 @@ def build_dataset(
     )
     (output_root / "data_report.md").write_text(data_report(name, profile, checks))
     return manifest
+
+
+def _build_custom_dataset(  # noqa: PLR0913
+    registry: Registry,
+    name: str,
+    pipeline: DataPipeline,
+    ctx: DataContext,
+    output_root: Path,
+    version: str,
+) -> DatasetManifest:
+    assert pipeline.builder is not None
+    builder = registry.get(EntryKind.DATA_BUILDER, pipeline.builder).value
+    result = builder(ctx.model_copy(update={"params": pipeline.params}))
+    if not isinstance(result, DataBuildResult):
+        result = DataBuildResult.model_validate(result)
+    outputs = {
+        key: _validated_output(output_root, path)
+        for key, path in result.outputs.items()
+    }
+    if not outputs:
+        raise ValueError("data builder must produce at least one output")
+    manifest = dataset_manifest(
+        name,
+        version,
+        outputs,
+        inputs=(),
+        stages=(pipeline.builder,),
+        stats=result.stats,
+        checks=result.checks,
+    )
+    return manifest.model_copy(update={"licenses": result.licenses})
+
+
+def _validated_output(output_root: Path, path: Path) -> Path:
+    root = output_root.resolve()
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"data builder output must be inside {output_root}: {path}")
+    if not resolved.exists():
+        raise FileNotFoundError(f"data builder output does not exist: {path}")
+    return resolved
