@@ -21,6 +21,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["rlab*"]
 
+[tool.setuptools.package-data]
+rlab = ["py.typed"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.10",
