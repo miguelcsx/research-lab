@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import yaml
 
-from rlab.components.builders import build_component
+from rlab.components.builders import try_build_component
 from rlab.constants import EntryKind
 from rlab.context.runtime import RuntimeContext
 from rlab.evaluations.result import EvaluationResult, TaskResult
@@ -28,10 +28,8 @@ def execute_suite(
 ) -> EvaluationResult:
     record = runtime.registry.get(EntryKind.SUITE, suite_name)
     suite = cast(EvaluationSuite, _definition(record.value, EvaluationSuite))
-    try:
-        model = build_component(runtime.registry, model_ref)
-    except Exception:
-        model = model_ref
+    built = try_build_component(runtime.registry, model_ref)
+    model = built if built is not None else model_ref
     tasks = tuple(
         TaskResult(
             task=task.name,

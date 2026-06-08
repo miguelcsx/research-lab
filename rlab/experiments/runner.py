@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from rlab.benchmarks.runner import execute_benchmark
-from rlab.constants import FailureKind, RunStatus
+from rlab.constants import EntryKind, FailureKind
 from rlab.context.runtime import RuntimeContext
 from rlab.evaluations.runner import execute_external, execute_suite
 from rlab.experiments.loader import load_experiment
@@ -14,7 +14,7 @@ from rlab.experiments.model import Experiment, RetryPolicy
 from rlab.experiments.plan import ExecutionPlan, build_plan
 from rlab.experiments.result import ExperimentResult, ExperimentStep
 from rlab.manifests.resolver import capture_dataset_manifest
-from rlab.results.bundle import ResultBundle, bundle_from_metrics, empty_bundle
+from rlab.results.bundle import ResultBundle, empty_bundle
 from rlab.workflows.runner import run_workflow
 
 
@@ -85,7 +85,7 @@ def _execute_job(
             if step.error is None:
                 return step
             last_error = step.error
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — user code may raise anything
             last_error = str(exc)
             failure_kind = _classify_exception(exc)
             if retry.on and failure_kind not in retry.on:
@@ -114,25 +114,20 @@ def _run_job_once(
     bundle = empty_bundle()
 
     try:
-        # Run workflow if declared
         if experiment.workflow:
-            wf_record = ctx.registry.get(__import__("rlab.constants", fromlist=["EntryKind"]).EntryKind.WORKFLOW, experiment.workflow)
+            wf_record = ctx.registry.get(EntryKind.WORKFLOW, experiment.workflow)
             wf = wf_record.value() if callable(wf_record.value) else wf_record.value
             if hasattr(wf, "steps"):
                 wf_bundle = run_workflow(wf, ctx)
                 bundle = bundle.merge(wf_bundle)
                 metrics.update(wf_bundle.as_metrics_dict())
 
-        # Run run function if declared
         if experiment.run:
-            EntryKind_ = __import__("rlab.constants", fromlist=["EntryKind"]).EntryKind
             run_record = None
-            for kind_ in (EntryKind_.WORKFLOW_STEP, EntryKind_.WORKFLOW):
-                try:
-                    run_record = ctx.registry.get(kind_, experiment.run)
+            for kind_ in (EntryKind.WORKFLOW_STEP, EntryKind.WORKFLOW):
+                run_record = ctx.registry.try_get(kind_, experiment.run)
+                if run_record is not None:
                     break
-                except Exception:
-                    continue
             if run_record is None or not callable(run_record.value):
                 from rlab.errors import RegistryError
                 raise RegistryError(
@@ -147,7 +142,6 @@ def _run_job_once(
             elif isinstance(result, dict):
                 metrics.update({k: v for k, v in result.items() if isinstance(v, (int, float))})
 
-        # Run benchmarks
         target = params.get("target")
         if isinstance(target, str):
             for bname in experiment.benchmarks:
@@ -158,20 +152,20 @@ def _run_job_once(
                     {f"{bname}.{k}": v for k, v in bench_result.metrics.items()}
                 )
 
-        # Run evaluations
         model = params.get("model")
         if isinstance(model, str):
+            external_suite_names = {r.name for r in ctx.registry.list(EntryKind.EXTERNAL_SUITE)}
             for sname in experiment.evaluations:
-                try:
-                    eval_result = execute_suite(ctx, sname, model)
-                except Exception:
+                if sname in external_suite_names:
                     eval_result = execute_external(ctx, sname, model)
+                else:
+                    eval_result = execute_suite(ctx, sname, model)
                 for task in eval_result.tasks:
                     metrics.update(
                         {f"{sname}.{task.task}.{k}": v for k, v in task.metrics.items()}
                     )
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — capture user-code failures into step result
         return ExperimentStep(
             job_id=job_id,
             params=params,

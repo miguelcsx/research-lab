@@ -36,11 +36,14 @@ class Registry:
 
     def get(self, kind: EntryKind, name: str) -> RegistryRecord:
         key = RegistryKey(kind=kind, name=name)
-        try:
-            return self._records[key]
-        except KeyError as error:
-            choices = ", ".join(record.name for record in self.list(kind)) or "none"
-            raise RegistryError(f"Unknown {kind.value} {name!r}; available: {choices}") from error
+        record = self._records.get(key)
+        if record is None:
+            choices = ", ".join(r.name for r in self.list(kind)) or "none"
+            raise RegistryError(f"Unknown {kind.value} {name!r}; available: {choices}")
+        return record
+
+    def try_get(self, kind: EntryKind, name: str) -> RegistryRecord | None:
+        return self._records.get(RegistryKey(kind=kind, name=name))
 
     def list(self, kind: EntryKind | None = None) -> tuple[RegistryRecord, ...]:
         records: Iterable[RegistryRecord] = self._records.values()

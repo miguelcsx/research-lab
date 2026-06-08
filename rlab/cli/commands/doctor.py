@@ -38,7 +38,9 @@ def command(ctx: typer.Context) -> None:
     check("uv", shutil.which("uv") is not None)
 
     # Git repo (warning only — not a hard failure)
-    try:
+    if shutil.which("git") is None:
+        warn("git repo", "git not available")
+    else:
         result = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
             cwd=state.root, capture_output=True, text=True, check=False
@@ -47,8 +49,6 @@ def command(ctx: typer.Context) -> None:
             warn("git repo", "not a git repository")
         else:
             check("git repo", True)
-    except Exception:
-        warn("git repo", "git not available")
 
     # Module loading
     if runtime is not None:

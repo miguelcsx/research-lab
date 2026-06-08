@@ -21,17 +21,13 @@ def _dataset_name(reference: str) -> str:
 def build(runtime: RuntimeContext, reference: str, version: str = "1") -> Path:
     name = _dataset_name(reference)
     session = RunSession(runtime, "data.build", name, {"dataset": reference})
-    active = session.start()
-    try:
+    with session.running() as active:
         output = session.layout.artifacts / "dataset"
         context = DataContext(runtime=active, work_dir=output)
         manifest = build_dataset(active.registry, name, context, output, version=version)
         write_manifest(output / "manifest.yaml", manifest)
         session.complete(manifest)
-        return session.layout.root
-    except Exception as error:
-        session.fail(error)
-        raise
+    return session.layout.root
 
 
 def manifest_data_path(path: Path) -> Path:

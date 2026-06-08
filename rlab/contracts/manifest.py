@@ -23,7 +23,7 @@ def validate_manifest(path: Path) -> tuple[ManifestValidationError, ...]:
 
     try:
         data = yaml.safe_load(path.read_text()) or {}
-    except Exception as exc:
+    except (yaml.YAMLError, OSError) as exc:
         return (ManifestValidationError(path, f"YAML parse error: {exc}"),)
 
     kind = data.get("kind", "")

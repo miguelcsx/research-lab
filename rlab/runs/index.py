@@ -31,6 +31,16 @@ def _ensure_select(sql: str) -> None:
         raise ValueError("Only SELECT/WITH queries are permitted")
 
 
+def _decode_json_field(value: str) -> Any:
+    text = value.strip() if isinstance(value, str) else ""
+    if not text:
+        return value
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return value
+
+
 class RunIndex:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -123,10 +133,6 @@ class RunIndex:
     def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         data = dict(row)
         for field in ("tags", "params"):
-            value = data.get(field)
-            if isinstance(value, str):
-                try:
-                    data[field] = json.loads(value)
-                except json.JSONDecodeError:
-                    pass
+            if field in data:
+                data[field] = _decode_json_field(data[field])
         return data

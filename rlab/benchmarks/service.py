@@ -22,8 +22,7 @@ def run_benchmark(  # noqa: PLR0913
         benchmark,
         {"target": target, "benchmark": benchmark, "data": data, "repeat": repeat},
     )
-    active = session.start()
-    try:
+    with session.running() as active:
         for _ in range(warmup):
             execute_benchmark(active, target, benchmark, data=data, params=params)
         results = [
@@ -40,7 +39,4 @@ def run_benchmark(  # noqa: PLR0913
             {"target": target, "benchmark": benchmark, "metrics": metrics},
             "\n".join(("# Benchmark", "", *(f"- `{k}`: {v:g}" for k, v in metrics.items()))),
         )
-        return session.layout.root
-    except Exception as error:
-        session.fail(error)
-        raise
+    return session.layout.root

@@ -39,13 +39,9 @@ def _resolve_step(
     if isinstance(step_ref, (WorkflowStep, ExternalStep)):
         return step_ref.name, step_ref
 
-    # String reference: prefer @rlab.workflow_step, fall back to @rlab.workflow
-    # for backwards compatibility (allowing a callable registered as a workflow
-    # that returns a step result).
     for kind in (EntryKind.WORKFLOW_STEP, EntryKind.WORKFLOW):
-        try:
-            record = ctx.registry.get(kind, step_ref)
-        except Exception:
+        record = ctx.registry.try_get(kind, step_ref)
+        if record is None:
             continue
         fn = record.value
         if not callable(fn):

@@ -11,6 +11,19 @@ from rlab.manifests.run import RunManifest
 from rlab.runs.layout import RunLayout
 
 
+def _load_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 class RunReader:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -23,13 +36,7 @@ class RunReader:
         return RunStatus(path.read_text(encoding="utf-8").strip())
 
     def params(self) -> dict[str, Any]:
-        path = self.layout.params_file
-        if not path.exists():
-            return {}
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
+        return _load_json_dict(self.layout.params_file)
 
     def metrics(self) -> list[dict[str, Any]]:
         path = self.layout.metrics_file
@@ -42,10 +49,9 @@ class RunReader:
     def metrics_summary(self) -> dict[str, float]:
         path = self.layout.metrics_summary_file
         if path.exists():
-            try:
-                return json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                return {}
+            data = _load_json_dict(path)
+            if data:
+                return data  # type: ignore[return-value]
         summary: dict[str, float] = {}
         for record in self.metrics():
             name = record.get("name")
@@ -70,14 +76,8 @@ class RunReader:
         return RunManifest.model_validate(data)
 
     def results(self) -> dict[str, Any]:
-        path = self.layout.results_file
-        if not path.exists():
-            return {}
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-        return data if isinstance(data, dict) else {"value": data}
+        data = _load_json_dict(self.layout.results_file)
+        return data if data else {}
 
     def figures(self) -> tuple[Path, ...]:
         if not self.layout.figures.exists():

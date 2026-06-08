@@ -9,7 +9,7 @@ def render_run_report(run_dir: Path) -> str:
     lines: list[str] = []
     lines.append(f"# Run Report: {run_dir.name}\n")
 
-    try:
+    if reader.layout.manifest_file.exists():
         manifest = reader.manifest()
         lines.append(f"**Operation:** {manifest.operation}")
         lines.append(f"**Status:** {manifest.status.value}")
@@ -17,8 +17,6 @@ def render_run_report(run_dir: Path) -> str:
         if manifest.tags:
             lines.append(f"**Tags:** {', '.join(manifest.tags)}")
         lines.append("")
-    except Exception:
-        pass
 
     params = reader.params()
     if params:

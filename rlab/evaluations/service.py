@@ -40,10 +40,10 @@ def run_evaluation(  # noqa: PLR0913
             **options,
         },
     )
-    active = session.start().model_copy(
-        update={"params": {key: value for key, value in options.items() if value is not None}}
-    )
-    try:
+    with session.running() as active:
+        active = active.model_copy(
+            update={"params": {key: value for key, value in options.items() if value is not None}}
+        )
         external_names = {record.name for record in active.registry.list(EntryKind.EXTERNAL_SUITE)}
         if suite in external_names:
             results = [
@@ -68,7 +68,4 @@ def run_evaluation(  # noqa: PLR0913
                 version=session.manifest.name,
                 alias="candidate",
             )
-        return session.layout.root
-    except Exception as error:
-        session.fail(error)
-        raise
+    return session.layout.root

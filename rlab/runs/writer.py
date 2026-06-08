@@ -21,6 +21,19 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         fh.write(json.dumps(payload, default=str) + "\n")
 
 
+def _load_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 class RunWriter:
     def __init__(self, layout: RunLayout) -> None:
         self.layout = layout
@@ -39,22 +52,12 @@ class RunWriter:
         _append_jsonl(self.layout.metrics_file, payload)
 
         summary_path = self.layout.metrics_summary_file
-        summary: dict[str, float] = {}
-        if summary_path.exists():
-            try:
-                summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                summary = {}
+        summary = _load_json_dict(summary_path)
         summary[name] = float(value)
         summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     def params(self, mapping: Mapping[str, Any]) -> None:
-        existing: dict[str, Any] = {}
-        if self.layout.params_file.exists():
-            try:
-                existing = json.loads(self.layout.params_file.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                existing = {}
+        existing = _load_json_dict(self.layout.params_file)
         existing.update(dict(mapping))
         self.layout.params_file.write_text(
             json.dumps(existing, indent=2, default=str) + "\n", encoding="utf-8"

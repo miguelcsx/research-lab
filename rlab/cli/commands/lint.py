@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+
 import typer
 
 from rlab.cli.state import CliState
@@ -28,8 +31,7 @@ def command(ctx: typer.Context) -> None:
                 issues.append(("warning", f"runs/{run_dir.name}: Missing run.yaml"))
 
     # Check git-ignored large files
-    try:
-        import subprocess
+    if shutil.which("git") is not None:
         result = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard"],
             cwd=state.root, capture_output=True, text=True, check=False
@@ -38,8 +40,6 @@ def command(ctx: typer.Context) -> None:
             path = state.root / fname
             if path.exists() and path.stat().st_size > 50 * 1024 * 1024:
                 issues.append(("warning", f"{fname}: Untracked large file ({path.stat().st_size // 1024 // 1024}MB)"))
-    except Exception:
-        pass
 
     # Check modules declared but missing
     runtime = state.runtime()

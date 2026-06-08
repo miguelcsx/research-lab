@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from typing import Any
 
@@ -78,7 +80,7 @@ class RunSession:
         self._write_manifest()
 
     def _upsert_index(self) -> None:
-        try:
+        with suppress(Exception):
             self._index.upsert(
                 run_id=self.manifest.name,
                 name=self.manifest.name,
@@ -90,8 +92,6 @@ class RunSession:
                 tags=self.tags,
                 params=dict(self.manifest.parameters),
             )
-        except Exception:
-            pass
 
     def start(self) -> RuntimeContext:
         start_run(self.layout.root)
@@ -106,8 +106,17 @@ class RunSession:
             }
         )
 
-    def _capture_reproducibility(self) -> None:
+    @contextmanager
+    def running(self) -> Iterator[RuntimeContext]:
+        active = self.start()
         try:
+            yield active
+        except Exception as error:
+            self.fail(error)
+            raise
+
+    def _capture_reproducibility(self) -> None:
+        with suppress(Exception):
             from rlab.reproducibility.capture import capture_reproducibility
 
             capture_reproducibility(
@@ -116,8 +125,6 @@ class RunSession:
                 self.runtime.config.reproducibility,
                 ("rlab", self.operation, self.manifest.name),
             )
-        except Exception:
-            pass
 
     def metric(self, name: str, value: float, **attrs: Any) -> None:
         self._writer.metric(name, float(value), **{k: v for k, v in attrs.items() if _jsonable(v)})
@@ -132,12 +139,11 @@ class RunSession:
         self._upsert_index()
 
     def _write_report(self) -> None:
-        try:
-            from rlab.reports.markdown import render_run_report
+        from rlab.reports.markdown import render_run_report
 
+        text = f"# Run {self.manifest.name}\n"
+        with suppress(Exception):
             text = render_run_report(self.layout.root)
-        except Exception:
-            text = f"# Run {self.manifest.name}\n"
         (self.layout.root / "report.md").write_text(text, encoding="utf-8")
 
     def fail(self, error: BaseException | str) -> None:

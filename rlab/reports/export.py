@@ -56,11 +56,11 @@ def generate_methods_section(run_dir: Path) -> str:
     from rlab.runs.reader import RunReader
     reader = RunReader(run_dir)
 
-    try:
+    if reader.layout.manifest_file.exists():
         manifest = reader.manifest()
         operation = manifest.operation
         tags = ", ".join(manifest.tags) if manifest.tags else "none"
-    except Exception:
+    else:
         operation = "experiment"
         tags = "none"
 

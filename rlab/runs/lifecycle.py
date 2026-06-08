@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -27,18 +28,23 @@ def _set_status(root: Path, status: RunStatus) -> None:
     _patch_manifest(layout, {"status": status.value, "updated_at": _now()})
 
 
-def _patch_manifest(layout: RunLayout, fields: dict[str, object]) -> None:
-    path = layout.manifest_file
+def _load_yaml_dict(path: Path) -> dict[str, Any] | None:
+    """Return parsed YAML dict, or None if the file is missing or unparseable."""
     if not path.exists():
-        return
+        return None
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        result = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError:
-        return
-    if not isinstance(data, dict):
+        return None
+    return result if isinstance(result, dict) else {}
+
+
+def _patch_manifest(layout: RunLayout, fields: dict[str, object]) -> None:
+    data = _load_yaml_dict(layout.manifest_file)
+    if data is None:
         return
     data.update(fields)
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    layout.manifest_file.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
 
 def start_run(root: Path) -> None:

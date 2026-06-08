@@ -8,21 +8,19 @@ def index_run(run_dir: Path, search: SearchIndex) -> None:
     from rlab.runs.reader import RunReader
     reader = RunReader(run_dir)
 
-    try:
+    if reader.layout.manifest_file.exists():
         manifest = reader.manifest()
         title = manifest.name
         operation = manifest.operation
-    except Exception:
+    else:
         title = run_dir.name
         operation = "unknown"
 
     body_parts: list[str] = [title, operation]
 
-    # Include notes
     for note in reader.notes():
         body_parts.append(str(note.get("text", "")))
 
-    # Include params
     params = reader.params()
     if params:
         body_parts.append(" ".join(f"{k}={v}" for k, v in params.items()))
@@ -39,9 +37,12 @@ def index_run(run_dir: Path, search: SearchIndex) -> None:
 def index_artifact(manifest_path: Path, search: SearchIndex) -> None:
     """Index an artifact manifest."""
     import yaml
+
+    if not manifest_path.is_file():
+        return
     try:
         data = yaml.safe_load(manifest_path.read_text()) or {}
-    except Exception:
+    except yaml.YAMLError:
         return
 
     name = str(data.get("name", manifest_path.stem))

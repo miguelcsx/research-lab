@@ -39,14 +39,10 @@ def run_experiment(  # noqa: PLR0913
         notes=notes,
         parent_run=parent_run,
     )
-    active = session.start()
-    try:
+    with session.running() as active:
         result = execute_experiment(active, plan, experiment, only=only, skip=skip)
         for step_index, step in enumerate(result.steps):
             for name, value in step.metrics.items():
                 session.metric(name, value, step=step_index, job_id=step.job_id)
         session.complete(result)
-        return session.layout.root
-    except Exception as error:
-        session.fail(error)
-        raise
+    return session.layout.root

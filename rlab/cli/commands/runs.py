@@ -50,12 +50,10 @@ def show(ctx: typer.Context, run_id: str) -> None:
         "status": reader.status().value,
         "notes": [n.get("text", "") for n in reader.notes()],
     }
-    try:
+    if reader.layout.manifest_file.exists():
         m = reader.manifest()
         data["operation"] = m.operation
         data["tags"] = list(m.tags)
-    except Exception:
-        pass
     state.console.print_json(json.dumps(data, default=str))
 
 
@@ -97,12 +95,9 @@ def clean(
             continue
         should_remove = False
         if failed:
-            try:
-                reader = RunReader(run_dir)
-                if reader.status() == RunStatus.FAILED:
-                    should_remove = True
-            except Exception:
-                pass
+            reader = RunReader(run_dir)
+            if reader.status() == RunStatus.FAILED:
+                should_remove = True
         if should_remove:
             state.console.print(f"{'[dry-run] ' if dry_run else ''}Removing {run_dir.name}")
             if not dry_run:

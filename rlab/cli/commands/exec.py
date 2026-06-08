@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 import time
@@ -41,16 +42,18 @@ def command(
         "cwd": str(cwd) if cwd else None,
     }
 
-    # Parse metrics if parser provided
     if metric_parser and result.returncode == 0:
-        try:
-            import importlib
+        if ":" not in metric_parser:
+            state.console.print(f"[yellow]Parser must be 'module:function', got {metric_parser!r}[/yellow]")
+        else:
             module_path, func_name = metric_parser.rsplit(":", 1)
-            func = getattr(importlib.import_module(module_path), func_name)
-            metrics = func(result.stdout)
-            record["metrics"] = metrics
-        except Exception as exc:
-            state.console.print(f"[yellow]Parser failed: {exc}[/yellow]")
+            try:
+                func = getattr(importlib.import_module(module_path), func_name)
+                record["metrics"] = func(result.stdout)
+            except (ImportError, AttributeError) as exc:
+                state.console.print(f"[yellow]Parser not found: {exc}[/yellow]")
+            except Exception as exc:  # noqa: BLE001 — user-provided parser may raise anything
+                state.console.print(f"[yellow]Parser failed: {exc}[/yellow]")
 
     # Append to exec log
     exec_log = state.root / ".rlab" / "exec_log.jsonl"
