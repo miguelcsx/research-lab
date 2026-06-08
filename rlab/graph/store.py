@@ -88,6 +88,9 @@ class KnowledgeGraph:
         return tuple(r["target_id"] for r in rows)
 
     def query(self, sql: str, params: tuple[object, ...] = ()) -> tuple[dict[str, object], ...]:
+        stripped = sql.lstrip().lower()
+        if not (stripped.startswith("select") or stripped.startswith("with")):
+            raise ValueError("Only SELECT/WITH queries are permitted")
         with self._connect() as conn:
             rows = conn.execute(sql, params).fetchall()
         return tuple(dict(r) for r in rows)

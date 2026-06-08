@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Decision(BaseModel):
@@ -11,7 +11,7 @@ class Decision(BaseModel):
 
     rationale: str
     selected_run: str | None = None
-    criteria: dict[str, str] = {}
+    criteria: dict[str, str] = Field(default_factory=dict)
     created_at: str = ""
     author: str | None = None
 

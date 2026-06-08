@@ -68,6 +68,10 @@ def workflow(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
     return _decorator(EntryKind.WORKFLOW, name, version=version)
 
 
+def workflow_step(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
+    return _decorator(EntryKind.WORKFLOW_STEP, name, version=version)
+
+
 def result_schema(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.RESULT_SCHEMA, name)
 

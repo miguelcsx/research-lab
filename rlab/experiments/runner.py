@@ -125,7 +125,20 @@ def _run_job_once(
 
         # Run run function if declared
         if experiment.run:
-            run_record = ctx.registry.get(__import__("rlab.constants", fromlist=["EntryKind"]).EntryKind.WORKFLOW, experiment.run)
+            EntryKind_ = __import__("rlab.constants", fromlist=["EntryKind"]).EntryKind
+            run_record = None
+            for kind_ in (EntryKind_.WORKFLOW_STEP, EntryKind_.WORKFLOW):
+                try:
+                    run_record = ctx.registry.get(kind_, experiment.run)
+                    break
+                except Exception:
+                    continue
+            if run_record is None or not callable(run_record.value):
+                from rlab.errors import RegistryError
+                raise RegistryError(
+                    f"Experiment.run={experiment.run!r} must reference a "
+                    "@rlab.workflow_step callable"
+                )
             fn = run_record.value
             result = fn(ctx)
             if isinstance(result, ResultBundle):

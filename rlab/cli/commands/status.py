@@ -30,6 +30,6 @@ def command(ctx: typer.Context) -> None:
     state.console.print(
         table(
             "Recent runs",
-            RunIndex(runtime.paths.cache / "index.sqlite3").list(limit=10),
+            RunIndex(runtime.paths.cache / "runs.db").list(limit=10),
         )
     )

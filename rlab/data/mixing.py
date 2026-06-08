@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+import math
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DataMixReport(BaseModel):
@@ -6,9 +8,9 @@ class DataMixReport(BaseModel):
 
     sources: tuple[str, ...]
     proportions: dict[str, float]
-    quality_scores: dict[str, float] = {}
-    domain_coverage: dict[str, float] = {}
-    dedup_overlap: dict[str, float] = {}
+    quality_scores: dict[str, float] = Field(default_factory=dict)
+    domain_coverage: dict[str, float] = Field(default_factory=dict)
+    dedup_overlap: dict[str, float] = Field(default_factory=dict)
     notes: str = ""
 
     def dominant_source(self) -> str | None:
@@ -20,7 +22,6 @@ class DataMixReport(BaseModel):
         """1.0 = perfectly balanced, 0.0 = single source dominates."""
         if len(self.proportions) <= 1:
             return 0.0
-        import math
         n = len(self.proportions)
         entropy = -sum(p * math.log(p) for p in self.proportions.values() if p > 0)
         max_entropy = math.log(n)

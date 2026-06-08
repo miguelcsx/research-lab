@@ -44,7 +44,6 @@ __all__ = [
     "DataExperiment",
     "DataPipeline",
     "DatasetManifest",
-    "EstimationResult",
     "EvaluationResult",
     "EvaluationSuite",
     "EvaluationTask",

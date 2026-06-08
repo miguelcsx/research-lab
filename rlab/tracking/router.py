@@ -9,7 +9,7 @@ from rlab.tracking.null import NullTracking
 
 def tracking_backend(name: str, cache: Path, runs: Path) -> TrackingBackend:
     if name == "local":
-        return LocalTracking(RunIndex(cache / "index.sqlite3"), runs)
+        return LocalTracking(RunIndex(cache / "runs.db"), runs)
     if name == "null":
         return NullTracking()
     raise ConfigError(f"Tracking backend {name!r} requires an installed adapter")

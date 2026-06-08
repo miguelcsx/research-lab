@@ -64,6 +64,7 @@ from rlab.decorators import (
     result_schema,
     suite,
     workflow,
+    workflow_step,
 )
 
 __all__ = [
@@ -130,4 +131,5 @@ __all__ = [
     "suite",
     "uniform",
     "workflow",
+    "workflow_step",
 ]

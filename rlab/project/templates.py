@@ -342,22 +342,14 @@ def generate(run_dir, ctx):
 
 _NEW_EXTERNAL_ADAPTER = """\
 import rlab
-from pathlib import Path
 
 
-@rlab.evaluation("{name}")
+@rlab.external_suite("{name}")
 def evaluation() -> rlab.ExternalEvaluation:
     return rlab.ExternalEvaluation(
         name="{name}",
-        command=["python", "-m", "evaluation_module", "--target", "{{target}}"],
-        cwd=".rlab/external/{name}",
-        parser="{name}:parse_results",
+        command=("python", "-m", "evaluation_module", "--target", "{{model}}"),
     )
-
-
-def parse_results(output_dir: Path) -> rlab.ResultBundle:
-    \"\"\"Parse raw evaluation output into a ResultBundle.\"\"\"
-    return rlab.ResultBundle(metrics=[])
 """
 
 _NEW_CAUSAL_EXPERIMENT = """\

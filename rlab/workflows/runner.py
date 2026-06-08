@@ -39,18 +39,22 @@ def _resolve_step(
     if isinstance(step_ref, (WorkflowStep, ExternalStep)):
         return step_ref.name, step_ref
 
-    # String reference: look up in registry
-    try:
-        record = ctx.registry.get(EntryKind.WORKFLOW, step_ref)
+    # String reference: prefer @rlab.workflow_step, fall back to @rlab.workflow
+    # for backwards compatibility (allowing a callable registered as a workflow
+    # that returns a step result).
+    for kind in (EntryKind.WORKFLOW_STEP, EntryKind.WORKFLOW):
+        try:
+            record = ctx.registry.get(kind, step_ref)
+        except Exception:
+            continue
         fn = record.value
+        if not callable(fn):
+            continue
         return step_ref, WorkflowStep(name=step_ref, fn=fn)
-    except Exception:
-        pass
 
-    # Try component lookup (any kind registered as the step name)
     raise WorkflowError(
         f"Workflow step {step_ref!r} not found in registry. "
-        "Register it with @rlab.workflow or pass a WorkflowStep directly."
+        "Register it with @rlab.workflow_step or pass a WorkflowStep directly."
     )
 
 

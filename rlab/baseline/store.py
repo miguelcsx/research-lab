@@ -27,7 +27,6 @@ class BaselineStore:
             conn.executescript(_SCHEMA)
 
     def _connect(self) -> sqlite3.Connection:
-        import json
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         return conn

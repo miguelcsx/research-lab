@@ -9,6 +9,7 @@ class EntryKind(StrEnum):
     BASELINE = "baseline"
     EXTERNAL_SUITE = "external_suite"
     WORKFLOW = "workflow"
+    WORKFLOW_STEP = "workflow_step"
     RESULT_SCHEMA = "result_schema"
     DATA_SOURCE = "data_source"
     DATA_TRANSFORM = "data_transform"

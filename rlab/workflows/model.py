@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkflowStep(BaseModel):
@@ -20,7 +20,7 @@ class ExternalStep(BaseModel):
     command: tuple[str, ...]
     parser: Callable[..., Any] | str | None = None
     cwd: Path | str | None = None
-    env: dict[str, str] = {}
+    env: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: int | None = None
     description: str = ""
 
