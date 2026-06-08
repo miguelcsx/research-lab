@@ -23,6 +23,8 @@ def project(
             f"Unknown template {template!r}; available: {', '.join(_TEMPLATES)}"
         )
     state: CliState = ctx.obj
+    if (state.root / name).exists():
+        raise typer.BadParameter(f"Project {name!r} already exists at {state.root / name}")
     generated = write_project(state.root, name, template=template)
     lock_project(generated)
     state.console.print(f"[green]Created project:[/green] {generated}")

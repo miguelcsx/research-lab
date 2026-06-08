@@ -390,7 +390,7 @@ _NEW_TEMPLATES = {
 
 def write_project(root: Path, name: str, template: str = "ai") -> Path:
     project = root / name
-    project.mkdir(parents=True, exist_ok=False)
+    project.mkdir(parents=True, exist_ok=True)
 
     spec = _TEMPLATES.get(template, _TEMPLATES["ai"])
     dirs: list[str] = spec["dirs"]  # type: ignore[assignment]
