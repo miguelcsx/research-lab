@@ -15,8 +15,8 @@ def test_public_declaration_modules_import_and_render_helpers(tmp_path: Path) ->
     for module in (
         "rlab.cli.options",
         "rlab.data.metric",
-        "rlab.data.source",
-        "rlab.data.transform",
+        "rlab.data.recipe",
+        "rlab.data.sinks",
         "rlab.launchers.base",
     ):
         assert importlib.import_module(module)

@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from rlab.context.runtime import RuntimeContext
 from rlab.typing import Record
@@ -12,8 +12,12 @@ class Tokenizer(Protocol):
     def decode(self, ids: list[int]) -> str: ...
 
 
-class Model(Protocol):
-    def __call__(self, inputs: Any) -> Any: ...
+InputT_contra = TypeVar("InputT_contra", contravariant=True)
+OutputT_co = TypeVar("OutputT_co", covariant=True)
+
+
+class Model(Protocol[InputT_contra, OutputT_co]):
+    def __call__(self, inputs: InputT_contra) -> OutputT_co: ...
 
 
 class DatasetSource(Protocol):

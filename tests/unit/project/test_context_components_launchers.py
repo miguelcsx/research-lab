@@ -7,6 +7,7 @@ import pytest
 from rlab.benchmarks.context import BenchmarkContext
 from rlab.components.builders import build_component
 from rlab.components.loader import load_component
+from rlab.components.protocols import Tokenizer
 from rlab.components.specs import BuildSpec, ComponentSpec
 from rlab.config.defaults import DEFAULT_CONFIG
 from rlab.context.project import find_project
@@ -24,8 +25,17 @@ def test_context_component_and_testing_helpers(project: Path, runtime: RuntimeCo
         find_project(project.parent)
 
     tokenizer = build_component(runtime.registry, "tokenizer:project.byte")
+    assert isinstance(tokenizer, Tokenizer)
     assert tokenizer.decode(tokenizer.encode("x")) == "x"
-    assert load_component(runtime.registry, "tokenizer:project.byte").encode("x")
+    loaded = load_component(runtime.registry, "tokenizer:project.byte")
+    assert isinstance(loaded, Tokenizer)
+    assert loaded.encode("x")
+    with pytest.raises(TypeError, match="must be FakeTokenizer"):
+        build_component(
+            runtime.registry,
+            "tokenizer:project.byte",
+            expected=FakeTokenizer,
+        )
     assert BuildSpec(component=ComponentSpec(ref=parse_reference("tokenizer:project.byte"))).cache
     assert DEFAULT_CONFIG.tracking.backend == "local"
 

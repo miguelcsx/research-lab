@@ -1,235 +1,96 @@
-# Data pipelines
+# Data recipes
 
-`rlab` can define, build, validate, profile, compare, sample, and promote datasets.
+`rlab` builds datasets from immutable, typed recipes. A recipe declares sources,
+stages, checks, metrics, and sinks as Python objects; the runtime owns execution,
+output validation, manifests, checksums, lineage, and run capture.
 
-A dataset pipeline is made of:
-
-1. data sources;
-2. transforms;
-3. checks;
-4. metrics;
-5. a dataset variant.
-
-## Define a data source
+## Define one recipe
 
 ```python
+from collections.abc import Iterable
+
 import rlab
 
-@rlab.data_source("project.raw")
-def raw(ctx: rlab.DataContext):
-    yield {"text": "research"}
+
+def raw(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
+    yield {"text": "  research  "}
     yield {"text": "lab"}
-```
 
-A source returns an iterable of records. A record is a `dict[str, JsonValue]`.
 
-## Define a transform
-
-```python
-@rlab.data_transform("project.uppercase")
-def uppercase(records, ctx: rlab.DataContext):
+def strip(
+    records: Iterable[dict[str, object]],
+    ctx: rlab.DataContext,
+) -> Iterable[dict[str, object]]:
+    del ctx
     for record in records:
-        yield {**record, "text": str(record["text"]).upper()}
+        yield {**record, "text": str(record["text"]).strip()}
+
+
+flow = rlab.DataFlow.from_source(
+    rlab.FunctionSource(rlab.SourceId("project.raw"), raw)
+).then(rlab.FunctionStage(rlab.StageId("project.strip"), strip))
+
+CLEAN = rlab.DatasetRecipe(
+    id=rlab.DatasetId("project.clean"),
+    flow=flow,
+    sinks=(rlab.JsonlSink(),),
+    checks=(
+        rlab.FunctionCheck(
+            rlab.CheckId("project.nonempty"),
+            lambda rows, _ctx: rlab.CheckResult(bool(rows)),
+        ),
+    ),
+    metrics=(
+        rlab.FunctionMetric(
+            rlab.MetricId("project.record-count"),
+            lambda rows, _ctx: len(rows),
+        ),
+    ),
+)
+
+rlab.register_datasets(rlab.DatasetCatalog(CLEAN))
 ```
 
-Transforms receive records and yield records.
-
-## Define a check
-
-```python
-@rlab.data_check("project.nonempty")
-def nonempty(records, ctx: rlab.DataContext):
-    return rlab.DataCheckResult(
-        success=any(True for _ in records),
-        message="dataset must contain at least one record",
-    )
-```
-
-Checks return either `DataCheckResult` or a dict that can be validated into one.
-
-## Define a metric
-
-```python
-@rlab.data_metric("project.record_count")
-def record_count(records, ctx: rlab.DataContext) -> float:
-    return float(sum(1 for _ in records))
-```
-
-## Define a dataset variant
-
-```python
-@rlab.dataset_variant("project.clean")
-def clean() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        sources=("project.raw",),
-        transforms=("project.uppercase",),
-        checks=("project.nonempty",),
-        metrics=("project.record_count",),
-    )
-```
-
-## Build the dataset
+Build it with:
 
 ```bash
 rlab data build dataset:project.clean
 ```
 
-## Build a multi-artifact dataset
+## Reuse and variants
 
-Use a data builder when curation produces a bundle such as training shards,
-validation data, audits, reports, and a native dataset directory.
-
-```python
-@rlab.data_builder("project.corpus_builder")
-def build_corpus(ctx: rlab.DataContext) -> rlab.DataBuildResult:
-    data = ctx.work_dir / "data.jsonl"
-    bundle = ctx.work_dir / "corpus"
-    # Build every output under ctx.work_dir.
-    return rlab.DataBuildResult(
-        outputs={"data": data, "bundle": bundle},
-        stats={"records": 1000},
-        checks={"word_budget": "passed"},
-        licenses=("CC-BY-4.0",),
-    )
-
-@rlab.dataset_variant("project.corpus")
-def corpus() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        builder="project.corpus_builder",
-        params={"word_budget": 1_000_000},
-    )
-```
-
-Builder outputs may be files or directories. They must exist under
-`ctx.work_dir`; rlab rejects missing outputs and paths outside the active run.
-Directory checksums include relative file paths and contents.
-
-The output run contains:
-
-```text
-artifacts/dataset/
-├── data.jsonl
-├── data_report.md
-└── manifest.yaml
-```
-
-## Dataset manifest
-
-A generated manifest includes:
-
-- dataset name;
-- version;
-- inputs;
-- pipeline stages;
-- outputs;
-- SHA-256 checksums;
-- size in bytes;
-- stats;
-- check results;
-- licenses.
-
-Example:
-
-```yaml
-kind: dataset
-name: project.clean
-version: '1'
-inputs:
-  - project.raw
-stages:
-  - project.uppercase
-outputs:
-  data:
-    kind: dataset_output
-    name: data
-    version: '1'
-    path: data.jsonl
-    sha256: ...
-    size_bytes: 123
-stats:
-  records: 2
-checks:
-  project.nonempty: passed
-```
-
-## Profile a dataset
-
-```bash
-rlab data profile runs/<run-id>/artifacts/dataset/manifest.yaml
-```
-
-The profiler reports record count, fields, nulls, and text character counts.
-
-## Sample records
-
-```bash
-rlab data sample runs/<run-id>/artifacts/dataset/manifest.yaml --n 5
-```
-
-Write to a file:
-
-```bash
-rlab data sample path/to/manifest.yaml --n 100 --output samples.jsonl
-```
-
-## Compare datasets
-
-```bash
-rlab data compare manifest_a.yaml manifest_b.yaml
-rlab data diff manifest_a.yaml manifest_b.yaml
-```
-
-`compare` compares profiles. `diff` compares records.
-
-## Promote a dataset
-
-```bash
-rlab data promote runs/<run-id>/artifacts/dataset/manifest.yaml --as project.clean --alias candidate
-```
-
-This promotes the materialized dataset file into the artifact store as:
-
-```text
-artifact:dataset/project.clean@candidate
-```
-
-## Data ablations
-
-```bash
-rlab data ablate dataset:project.clean --factor dedup=true,false --factor source=web,books
-```
-
-Python:
+Recipes are immutable. Use `replace()` to derive an experiment while retaining
+the same typed flow:
 
 ```python
-ablation = rlab.DataAblation(
-    base="dataset:project.clean",
-    factors={
-        "dedup": [True, False],
-        "source": ["web", "books"],
-    },
-)
-variants = ablation.variants()
+SMALL = CLEAN.replace(id=rlab.DatasetId("project.clean-small"))
+rlab.register_datasets(rlab.DatasetCatalog(CLEAN, SMALL))
 ```
 
-## Genealogy
+For repeated behavior, implement the `DataSource`, `DataStage`, `DataCheck`,
+`DataMetric`, or `DataSink` protocol as a small frozen dataclass. Use
+`FunctionSource` and related wrappers for one-off functions.
 
-Use `DataGenealogyGraph` to track dataset parent-child relationships.
+## Built-in adapters and sinks
 
-```python
-from rlab.data.genealogy import DataGenealogyGraph
+- `TextFileSource`
+- `JsonlSource`
+- `HuggingFaceSource` through the optional `rlab[hf]` dependency
+- `JsonlSink`
+- `materialize()` for idempotent JSONL downloads
 
-g = DataGenealogyGraph(Path(".rlab/genealogy.db"))
-g.add_edge("clean_v2", "raw_v1", transform="dedup+normalize")
-g.ancestors("clean_v2")
-```
+Custom sinks may produce several files or directories by returning
+`SinkResult`. Every path must exist inside `DataContext.work_dir`.
 
-## Best practices
+## Manifest behavior
 
-- Treat manifests as contracts.
-- Keep dataset versions immutable.
-- Promote only datasets that passed checks.
-- Record licenses before publication.
-- Use explicit names for sources and transforms.
-- Make transforms streaming when possible.
-- Avoid global state inside sources and transforms.
+The generated manifest records:
+
+- recipe, source, and stage IDs;
+- output paths, directory flags, sizes, and SHA-256 checksums;
+- check statuses and metrics;
+- licenses returned by sinks.
+
+Keep IDs stable, stages deterministic, and output files immutable after the
+manifest is written.

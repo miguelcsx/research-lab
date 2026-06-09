@@ -44,4 +44,4 @@ def test_power_and_budget_estimates() -> None:
 def test_public_api_exports() -> None:
     assert rlab.Experiment is Experiment
     assert callable(rlab.component)
-    assert callable(rlab.data_source)
+    assert callable(rlab.register_datasets)

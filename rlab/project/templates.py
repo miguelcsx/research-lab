@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from typing import TypedDict
 
 _LAB_TOML_BASE = """\
 [project]
@@ -105,39 +106,49 @@ def quick() -> rlab.EvaluationSuite:
 """
 
 _DATA_STUB = """\
+from collections.abc import Iterable
+
 import rlab
 
 
-@rlab.data_source("project.tiny_source")
-def source(ctx: rlab.DataContext):
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
     yield {"text": "research"}
     yield {"text": "lab"}
 
 
-@rlab.data_transform("project.uppercase")
-def uppercase(records, ctx: rlab.DataContext):
+def uppercase(
+    records: Iterable[dict[str, object]],
+    ctx: rlab.DataContext,
+) -> Iterable[dict[str, object]]:
+    del ctx
     for record in records:
         yield {**record, "text": str(record["text"]).upper()}
 
 
-@rlab.data_check("project.nonempty")
-def nonempty(records, ctx: rlab.DataContext):
-    return {"success": any(True for _ in records), "severity": "error"}
+flow = rlab.DataFlow.from_source(
+    rlab.FunctionSource(rlab.SourceId("project.tiny-source"), source)
+).then(rlab.FunctionStage(rlab.StageId("project.uppercase"), uppercase))
 
+TINY = rlab.DatasetRecipe(
+    id=rlab.DatasetId("project.tiny"),
+    flow=flow,
+    sinks=(rlab.JsonlSink(),),
+    checks=(
+        rlab.FunctionCheck(
+            rlab.CheckId("project.nonempty"),
+            lambda rows, _ctx: rlab.CheckResult(bool(rows)),
+        ),
+    ),
+    metrics=(
+        rlab.FunctionMetric(
+            rlab.MetricId("project.record-count"),
+            lambda rows, _ctx: len(rows),
+        ),
+    ),
+)
 
-@rlab.data_metric("project.record_count")
-def record_count(records, ctx: rlab.DataContext) -> float:
-    return float(sum(1 for _ in records))
-
-
-@rlab.dataset_variant("project.tiny")
-def tiny() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        sources=("project.tiny_source",),
-        transforms=("project.uppercase",),
-        checks=("project.nonempty",),
-        metrics=("project.record_count",),
-    )
+rlab.register_datasets(rlab.DatasetCatalog(TINY))
 """
 
 _WORKFLOW_STUB = """\
@@ -163,7 +174,14 @@ class BasicSolver:
 """
 
 
-_TEMPLATES: dict[str, dict[str, object]] = {
+class ProjectTemplate(TypedDict):
+    modules: list[str]
+    dirs: list[str]
+    packages: list[str]
+    files: dict[str, str]
+
+
+_TEMPLATES: dict[str, ProjectTemplate] = {
     "basic": {
         "modules": [
             '  "components.models",',
@@ -391,17 +409,25 @@ def workflow() -> rlab.Workflow:
 """
 
 _NEW_DATA_PIPELINE = """\
+from collections.abc import Iterable
+
 import rlab
 
 
-@rlab.dataset_variant("{name}")
-def pipeline() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        sources=("source.raw",),
-        transforms=("transform.clean",),
-        checks=("check.schema",),
-        metrics=("metric.count",),
-    )
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
+    yield {{"text": "example"}}
+
+
+RECIPE = rlab.DatasetRecipe(
+    id=rlab.DatasetId("{name}"),
+    flow=rlab.DataFlow.from_source(
+        rlab.FunctionSource(rlab.SourceId("{name}.raw"), source)
+    ),
+    sinks=(rlab.JsonlSink(),),
+)
+
+rlab.register_datasets(rlab.DatasetCatalog(RECIPE))
 """
 
 _NEW_REPORT = """\
@@ -467,10 +493,10 @@ def write_project(root: Path, name: str, template: str = "ai") -> Path:
     project.mkdir(parents=True, exist_ok=True)
 
     spec = _TEMPLATES.get(template, _TEMPLATES["ai"])
-    dirs: list[str] = spec["dirs"]  # type: ignore[assignment]
-    packages: list[str] = spec["packages"]  # type: ignore[assignment]
-    module_lines: list[str] = spec["modules"]  # type: ignore[assignment]
-    files: dict[str, str] = spec["files"]  # type: ignore[assignment]
+    dirs = spec["dirs"]
+    packages = spec["packages"]
+    module_lines = spec["modules"]
+    files = spec["files"]
 
     for directory in dirs:
         (project / directory).mkdir(parents=True, exist_ok=True)

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from rlab.config.hydra_adapter import compose_hydra
 from rlab.config.loader import load_config
@@ -98,3 +99,18 @@ def test_project_specific_sections_accepted(tmp_path: Path) -> None:
     assert config.project.name == "test"
     assert config.section("babylm_eval") == {"repo": "external/babylm"}
     assert config.section("nonexistent") is None
+
+
+def test_project_specific_section_can_be_typed(tmp_path: Path) -> None:
+    class AdapterConfig(BaseModel):
+        model_config = ConfigDict(frozen=True, extra="forbid")
+
+        repo: Path
+
+    (tmp_path / "lab.toml").write_text(
+        '[project]\nname = "test"\n\n[adapter]\nrepo = "external/tool"\n',
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    section = config.section("adapter", AdapterConfig)
+    assert section == AdapterConfig(repo=Path("external/tool"))

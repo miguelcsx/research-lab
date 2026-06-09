@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class Study(BaseModel):
@@ -20,7 +19,7 @@ class Study(BaseModel):
     question: str
     hypotheses: tuple[str, ...] = ()
     domain: str = "general"
-    variables: Mapping[str, tuple[Any, ...]] = Field(default_factory=dict)
+    variables: Mapping[str, tuple[JsonValue, ...]] = Field(default_factory=dict)
     outcomes: tuple[str, ...] = ()
     decision_rule: str = ""
     experiments: tuple[str, ...] = ()

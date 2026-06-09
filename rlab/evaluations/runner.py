@@ -1,6 +1,4 @@
-import inspect
 import shutil
-from typing import Any, cast
 
 import yaml
 
@@ -12,13 +10,7 @@ from rlab.evaluations.suite import EvaluationSuite
 from rlab.external.model import ExternalEvaluation
 from rlab.external.parser import json_metrics
 from rlab.external.runner import DockerRunner, ExternalRunner, ShellRunner
-
-
-def _definition(value: Any, expected: type[Any]) -> Any:
-    result = value() if callable(value) and not inspect.isclass(value) else value
-    if not isinstance(result, expected):
-        raise TypeError(f"Expected {expected.__name__}, got {type(result).__name__}")
-    return result
+from rlab.registry.resolve import resolve_definition
 
 
 def execute_suite(
@@ -27,7 +19,7 @@ def execute_suite(
     model_ref: str,
 ) -> EvaluationResult:
     record = runtime.registry.get(EntryKind.SUITE, suite_name)
-    suite = cast(EvaluationSuite, _definition(record.value, EvaluationSuite))
+    suite = resolve_definition(record.value, EvaluationSuite)
     built = try_build_component(runtime.registry, model_ref)
     model = built if built is not None else model_ref
     tasks = tuple(
@@ -47,7 +39,7 @@ def execute_external(
     runner_name: str = "local",
 ) -> EvaluationResult:
     record = runtime.registry.get(EntryKind.EXTERNAL_SUITE, suite_name)
-    definition = cast(ExternalEvaluation, _definition(record.value, ExternalEvaluation))
+    definition = resolve_definition(record.value, ExternalEvaluation)
     command = definition.command.model_copy(
         update={
             "args": tuple(part.format(model=model_ref) for part in definition.command.args),

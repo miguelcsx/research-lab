@@ -1,27 +1,17 @@
-import inspect
+from __future__ import annotations
+
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from rlab.constants import EntryKind
-from rlab.data.check import DataCheckResult
 from rlab.data.context import DataContext
-from rlab.data.io import read_jsonl, write_jsonl
 from rlab.data.manifest import dataset_manifest
-from rlab.data.pipeline import DataBuildResult, DataPipeline
-from rlab.data.profile import profile_records
-from rlab.data.report import data_report
+from rlab.data.recipe import DatasetRecipe
 from rlab.manifests.dataset import DatasetManifest
+from rlab.registry.resolve import resolve_definition
 from rlab.registry.store import Registry
-from rlab.typing import JsonValue, Record
-
-
-def definition(registry: Registry, kind: EntryKind, name: str, expected: type[Any]) -> Any:
-    value = registry.get(kind, name).value
-    result = value() if callable(value) and not inspect.isclass(value) else value
-    if not isinstance(result, expected):
-        raise TypeError(f"{kind.value} {name!r} must return {expected.__name__}")
-    return result
+from rlab.typing import JsonValue
 
 
 def build_dataset(
@@ -32,79 +22,58 @@ def build_dataset(
     *,
     version: str = "1",
 ) -> DatasetManifest:
-    pipeline = cast(DataPipeline, definition(registry, EntryKind.DATASET, name, DataPipeline))
-    if pipeline.builder is not None:
-        return _build_custom_dataset(registry, name, pipeline, ctx, output_root, version)
-    records: Iterable[Record] = (
-        record
-        for source_name in pipeline.sources
-        for record in registry.get(EntryKind.DATA_SOURCE, source_name).value(ctx)
+    recipe: DatasetRecipe[Any] = resolve_definition(
+        registry.get(EntryKind.DATASET, name).value,
+        DatasetRecipe,
     )
-    for transform_name in pipeline.transforms:
-        records = registry.get(EntryKind.DATA_TRANSFORM, transform_name).value(records, ctx)
-    materialized = output_root / "data.jsonl"
-    write_jsonl(materialized, records)
-    data = list(read_jsonl(materialized))
+    records: Iterable[Any] = (
+        record for source in recipe.flow.sources for record in source.read(ctx)
+    )
+    for stage in recipe.flow.stages:
+        records = stage.apply(records, ctx)
+    data = tuple(records)
+
+    outputs: dict[str, Path] = {}
+    stats: dict[str, JsonValue] = {}
     checks: dict[str, str] = {}
-    for check_name in pipeline.checks:
-        result = registry.get(EntryKind.DATA_CHECK, check_name).value(data, ctx)
-        if not isinstance(result, DataCheckResult):
-            result = DataCheckResult.model_validate(result)
-        checks[check_name] = "passed" if result.success else result.severity.value
-    profile = cast(dict[str, JsonValue], profile_records(data))
-    for metric_name in pipeline.metrics:
-        value = registry.get(EntryKind.DATA_METRIC, metric_name).value(data, ctx)
-        profile[metric_name] = value
-    outputs = {"data": materialized}
+    licenses: list[str] = []
+    for sink in recipe.sinks:
+        sink_result = sink.write(data, ctx)
+        for output_id, path in sink_result.outputs.items():
+            key = str(output_id)
+            if key in outputs:
+                raise ValueError(f"duplicate dataset output: {key}")
+            outputs[key] = _validated_output(output_root, path)
+        stats.update(sink_result.stats)
+        checks.update(sink_result.checks)
+        licenses.extend(sink_result.licenses)
+    for check in recipe.checks:
+        check_result = check.evaluate(data, ctx)
+        checks[str(check.id)] = check_result.manifest_status
+        for key, value in check_result.metrics.items():
+            stats[f"{check.id}.{key}"] = value
+    for metric in recipe.metrics:
+        stats[str(metric.id)] = metric.measure(data, ctx)
+    if not outputs:
+        raise ValueError("dataset recipe must produce at least one output")
+
     manifest = dataset_manifest(
         name,
-        version,
+        version or recipe.version,
         outputs,
-        inputs=pipeline.sources,
-        stages=pipeline.transforms,
-        stats=profile,
+        inputs=tuple(str(source.id) for source in recipe.flow.sources),
+        stages=tuple(str(stage.id) for stage in recipe.flow.stages),
+        stats=stats,
         checks=checks,
     )
-    (output_root / "data_report.md").write_text(data_report(name, profile, checks))
-    return manifest
-
-
-def _build_custom_dataset(  # noqa: PLR0913
-    registry: Registry,
-    name: str,
-    pipeline: DataPipeline,
-    ctx: DataContext,
-    output_root: Path,
-    version: str,
-) -> DatasetManifest:
-    assert pipeline.builder is not None
-    builder = registry.get(EntryKind.DATA_BUILDER, pipeline.builder).value
-    result = builder(ctx.model_copy(update={"params": pipeline.params}))
-    if not isinstance(result, DataBuildResult):
-        result = DataBuildResult.model_validate(result)
-    outputs = {
-        key: _validated_output(output_root, path)
-        for key, path in result.outputs.items()
-    }
-    if not outputs:
-        raise ValueError("data builder must produce at least one output")
-    manifest = dataset_manifest(
-        name,
-        version,
-        outputs,
-        inputs=(),
-        stages=(pipeline.builder,),
-        stats=result.stats,
-        checks=result.checks,
-    )
-    return manifest.model_copy(update={"licenses": result.licenses})
+    return manifest.model_copy(update={"licenses": tuple(dict.fromkeys(licenses))})
 
 
 def _validated_output(output_root: Path, path: Path) -> Path:
     root = output_root.resolve()
     resolved = path.resolve()
     if not resolved.is_relative_to(root):
-        raise ValueError(f"data builder output must be inside {output_root}: {path}")
+        raise ValueError(f"dataset output must be inside {output_root}: {path}")
     if not resolved.exists():
-        raise FileNotFoundError(f"data builder output does not exist: {path}")
+        raise FileNotFoundError(f"dataset output does not exist: {path}")
     return resolved

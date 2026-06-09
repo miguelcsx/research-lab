@@ -77,34 +77,35 @@ def quick() -> rlab.EvaluationSuite:
 
 ```python
 # ingest/tiny.py
+from collections.abc import Iterable
+
 import rlab
 
-@rlab.data_source("project.tiny_source")
-def source(ctx: rlab.DataContext):
+
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
     yield {"text": "research"}
     yield {"text": "lab"}
 
-@rlab.data_transform("project.uppercase")
-def uppercase(records, ctx: rlab.DataContext):
+
+def uppercase(
+    records: Iterable[dict[str, object]],
+    ctx: rlab.DataContext,
+) -> Iterable[dict[str, object]]:
+    del ctx
     for record in records:
         yield {**record, "text": str(record["text"]).upper()}
 
-@rlab.data_check("project.nonempty")
-def nonempty(records, ctx: rlab.DataContext):
-    return rlab.DataCheckResult(success=any(True for _ in records))
 
-@rlab.data_metric("project.record_count")
-def record_count(records, ctx: rlab.DataContext) -> float:
-    return float(sum(1 for _ in records))
+TINY = rlab.DatasetRecipe(
+    id=rlab.DatasetId("project.tiny"),
+    flow=rlab.DataFlow.from_source(
+        rlab.FunctionSource(rlab.SourceId("project.tiny-source"), source)
+    ).then(rlab.FunctionStage(rlab.StageId("project.uppercase"), uppercase)),
+    sinks=(rlab.JsonlSink(),),
+)
 
-@rlab.dataset_variant("project.tiny")
-def tiny() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        sources=("project.tiny_source",),
-        transforms=("project.uppercase",),
-        checks=("project.nonempty",),
-        metrics=("project.record_count",),
-    )
+rlab.register_datasets(rlab.DatasetCatalog(TINY))
 ```
 
 ## Experiment

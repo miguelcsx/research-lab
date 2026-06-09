@@ -52,12 +52,16 @@ def energy_error(target: object, ctx: rlab.BenchmarkContext) -> dict[str, float]
 Internally, the runtime uses:
 
 ```python
-from rlab.components.builders import build_component
+from rlab.components import Tokenizer, build_component
 
 component = build_component(runtime.registry, "tokenizer:project.byte")
+if not isinstance(component, Tokenizer):
+    raise TypeError("component must implement Tokenizer")
 ```
 
 If the registered value is a class, `rlab` instantiates it. If it is already an object or factory value, it returns it.
+Pass `expected=ConcreteComponent` when a concrete component class is available;
+`rlab` then validates the value and preserves that type in the return value.
 
 ## Load modules
 

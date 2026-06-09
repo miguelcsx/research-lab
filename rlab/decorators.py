@@ -84,35 +84,3 @@ def study(name: str, *, version: str = "1.0.0") -> Callable[[T], T]:
 
 def result_schema(name: str) -> Callable[[T], T]:
     return _decorator(EntryKind.RESULT_SCHEMA, name)
-
-
-def data_source(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_SOURCE, name)
-
-
-def data_transform(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_TRANSFORM, name)
-
-
-def data_check(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_CHECK, name)
-
-
-def data_metric(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_METRIC, name)
-
-
-def data_builder(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_BUILDER, name)
-
-
-def dataset_variant(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATASET, name)
-
-
-def data_experiment(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_EXPERIMENT, name)
-
-
-def data_ablation(name: str) -> Callable[[T], T]:
-    return _decorator(EntryKind.DATA_ABLATION, name)

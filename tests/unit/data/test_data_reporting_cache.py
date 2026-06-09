@@ -9,14 +9,15 @@ from rlab.cache.cleanup import clean_cache
 from rlab.cache.manager import CacheManager
 from rlab.cache.paths import CachePaths
 from rlab.data.ablation import DataAblation, DataExperiment
-from rlab.data.check import DataCheckResult
 from rlab.data.compare import compare_profiles
 from rlab.data.diff import diff_records, record_key
+from rlab.data.ids import OutputId
 from rlab.data.io import read_jsonl, write_jsonl
-from rlab.data.pipeline import DataPipeline
 from rlab.data.profile import profile_records
+from rlab.data.recipe import CheckResult
 from rlab.data.report import data_report
 from rlab.data.sample import sample_records
+from rlab.data.sinks import JsonlSink
 from rlab.reporting.export import export_rows
 from rlab.reporting.markdown import markdown_table
 from rlab.reporting.plots import line_plot
@@ -44,8 +45,9 @@ def test_data_io_profile_sample_diff_and_report(tmp_path: Path) -> None:
 
 
 def test_data_models() -> None:
-    assert DataPipeline(sources=("source",)).outputs["data"] == Path("data.jsonl")
-    assert DataCheckResult(success=True).success
+    assert JsonlSink().id == OutputId("data")
+    assert JsonlSink().path == Path("data.jsonl")
+    assert CheckResult(passed=True).passed
     assert len(DataAblation(base="dataset:x", factors={"enabled": [True, False]}).variants()) == 2
     assert DataExperiment(question="q", matrix={"dataset": ["x"]}).question == "q"
 

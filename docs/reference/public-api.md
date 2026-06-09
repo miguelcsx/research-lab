@@ -49,10 +49,17 @@ rlab.EvaluationResult
 ## Data
 
 ```python
-rlab.DataPipeline
-rlab.DataBuildResult
 rlab.DataContext
-rlab.DataCheckResult
+rlab.DataFlow
+rlab.DatasetRecipe
+rlab.DatasetCatalog
+rlab.DataSource
+rlab.DataStage
+rlab.DataCheck
+rlab.DataMetric
+rlab.DataSink
+rlab.CheckResult
+rlab.SinkResult
 rlab.DataAblation
 rlab.DataExperiment
 rlab.DatasetManifest
@@ -136,13 +143,7 @@ rlab.baseline
 rlab.workflow
 rlab.workflow_step
 rlab.result_schema
-rlab.data_source
-rlab.data_transform
-rlab.data_check
-rlab.data_metric
-rlab.dataset_variant
-rlab.data_experiment
-rlab.data_ablation
+rlab.register_datasets
 ```
 
 ## Lower-level imports

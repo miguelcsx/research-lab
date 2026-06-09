@@ -1,10 +1,14 @@
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Mapping, Sequence
+from typing import TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rlab.constants import FailureKind
 from rlab.context.resources import Resources
+from rlab.experiments.matrix import Grid, Sample
+from rlab.typing import JsonValue
+
+ExperimentMatrix: TypeAlias = Mapping[str, Sequence[JsonValue]] | Grid | Sample
 
 
 class RetryPolicy(BaseModel):
@@ -27,7 +31,7 @@ class Experiment(BaseModel):
     references: tuple[str, ...] = ()
 
     # Execution — can be a plain dict, Grid, or Sample
-    matrix: Any = Field(default_factory=dict)
+    matrix: ExperimentMatrix = Field(default_factory=dict)
     run: str | None = None
     workflow: str | None = None
     benchmarks: tuple[str, ...] = ()
@@ -49,7 +53,7 @@ class Experiment(BaseModel):
 
     @field_validator("matrix")
     @classmethod
-    def dimensions_are_non_empty(cls, value: Any) -> Any:
+    def dimensions_are_non_empty(cls, value: ExperimentMatrix) -> ExperimentMatrix:
         if isinstance(value, Mapping):
             empty = [name for name, choices in value.items() if not choices]
             if empty:

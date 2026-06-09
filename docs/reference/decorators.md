@@ -78,34 +78,11 @@ def step(ctx: rlab.WorkflowContext) -> dict[str, float]:
     return {"score": 1.0}
 ```
 
-## `@rlab.dataset_variant(name)`
+## Dataset registration
 
-Registers a dataset pipeline.
-
-```python
-@rlab.dataset_variant("project.clean")
-def clean() -> rlab.DataPipeline:
-    return rlab.DataPipeline(...)
-```
-
-## Data decorators
-
-```python
-@rlab.data_source("project.raw")
-def source(ctx): ...
-
-@rlab.data_transform("project.normalize")
-def transform(records, ctx): ...
-
-@rlab.data_check("project.nonempty")
-def check(records, ctx): ...
-
-@rlab.data_metric("project.record_count")
-def metric(records, ctx): ...
-
-@rlab.data_builder("project.corpus")
-def builder(ctx) -> rlab.DataBuildResult: ...
-```
+Datasets do not use decorators. Compose typed `DatasetRecipe` objects and call
+`rlab.register_datasets(rlab.DatasetCatalog(...))` once in the loaded module.
+See [Data recipes](../guides/data-pipelines.md).
 
 ## `@rlab.baseline(name)`
 

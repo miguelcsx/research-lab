@@ -10,11 +10,6 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 EXPECTED_PARAMETERS = {
     EntryKind.BENCHMARK: 2,
-    EntryKind.DATA_SOURCE: 1,
-    EntryKind.DATA_TRANSFORM: 2,
-    EntryKind.DATA_CHECK: 2,
-    EntryKind.DATA_METRIC: 2,
-    EntryKind.DATA_BUILDER: 1,
 }
 
 

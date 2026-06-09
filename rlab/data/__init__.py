@@ -1,13 +1,56 @@
 from rlab.data.ablation import DataAblation, DataExperiment
-from rlab.data.check import DataCheckResult
+from rlab.data.adapters import HuggingFaceSource, JsonlSource, TextFileSource, materialize
 from rlab.data.context import DataContext
-from rlab.data.pipeline import DataBuildResult, DataPipeline
+from rlab.data.ids import CheckId, DatasetId, MetricId, OutputId, SourceId, StageId
+from rlab.data.recipe import (
+    CheckResult,
+    DataCheck,
+    DataFlow,
+    DataMetric,
+    DatasetCatalog,
+    DatasetRecipe,
+    DataSink,
+    DataSource,
+    DataStage,
+    FunctionCheck,
+    FunctionMetric,
+    FunctionSink,
+    FunctionSource,
+    FunctionStage,
+    SinkResult,
+    register_datasets,
+)
+from rlab.data.sinks import JsonlSink
 
 __all__ = [
+    "CheckId",
+    "CheckResult",
     "DataAblation",
-    "DataBuildResult",
-    "DataCheckResult",
+    "DataCheck",
     "DataContext",
     "DataExperiment",
-    "DataPipeline",
+    "DataFlow",
+    "DataMetric",
+    "DataSink",
+    "DataSource",
+    "DataStage",
+    "DatasetCatalog",
+    "DatasetId",
+    "DatasetRecipe",
+    "FunctionCheck",
+    "FunctionMetric",
+    "FunctionSink",
+    "FunctionSource",
+    "FunctionStage",
+    "HuggingFaceSource",
+    "JsonlSink",
+    "JsonlSource",
+    "MetricId",
+    "OutputId",
+    "SinkResult",
+    "SourceId",
+    "StageId",
+    "TextFileSource",
+    "materialize",
+    "register_datasets",
 ]

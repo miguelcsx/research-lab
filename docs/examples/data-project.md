@@ -1,101 +1,60 @@
-# Example: data project
+# Data project
 
-This example focuses on dataset construction, validation, profiling, and promotion.
-
-## Goal
-
-Build a clean JSONL dataset from raw records, validate that it is non-empty, count records, inspect profile, and promote the dataset artifact.
-
-## Data module
+This project exposes one typed dataset recipe from `ingest/corpus.py`:
 
 ```python
-# ingest/corpus.py
+from collections.abc import Iterable
+
 import rlab
 
-@rlab.data_source("corpus.raw")
-def raw(ctx: rlab.DataContext):
+
+def raw(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
     yield {"id": "1", "text": "  Hello world  ", "source": "web"}
     yield {"id": "2", "text": "Research lab", "source": "book"}
 
-@rlab.data_transform("corpus.strip")
-def strip_text(records, ctx: rlab.DataContext):
-    for row in records:
-        yield {**row, "text": str(row["text"]).strip()}
 
-@rlab.data_transform("corpus.drop_empty")
-def drop_empty(records, ctx: rlab.DataContext):
-    for row in records:
-        if row.get("text"):
-            yield row
+def clean(
+    records: Iterable[dict[str, object]],
+    ctx: rlab.DataContext,
+) -> Iterable[dict[str, object]]:
+    del ctx
+    for record in records:
+        text = str(record["text"]).strip()
+        if text:
+            yield {**record, "text": text}
 
-@rlab.data_check("corpus.nonempty")
-def nonempty(records, ctx: rlab.DataContext):
-    count = sum(1 for _ in records)
-    return rlab.DataCheckResult(
-        success=count > 0,
-        metrics={"records": float(count)},
-        message="dataset must not be empty",
-    )
 
-@rlab.data_metric("corpus.text_chars")
-def text_chars(records, ctx: rlab.DataContext) -> float:
-    return float(sum(len(str(row.get("text", ""))) for row in records))
+flow = rlab.DataFlow.from_source(
+    rlab.FunctionSource(rlab.SourceId("corpus.raw"), raw)
+).then(rlab.FunctionStage(rlab.StageId("corpus.clean"), clean))
 
-@rlab.dataset_variant("corpus.clean_v1")
-def clean_v1() -> rlab.DataPipeline:
-    return rlab.DataPipeline(
-        sources=("corpus.raw",),
-        transforms=("corpus.strip", "corpus.drop_empty"),
-        checks=("corpus.nonempty",),
-        metrics=("corpus.text_chars",),
-    )
+CLEAN = rlab.DatasetRecipe(
+    id=rlab.DatasetId("corpus.clean-v1"),
+    flow=flow,
+    sinks=(rlab.JsonlSink(),),
+    checks=(
+        rlab.FunctionCheck(
+            rlab.CheckId("corpus.nonempty"),
+            lambda rows, _ctx: rlab.CheckResult(bool(rows)),
+        ),
+    ),
+)
+
+rlab.register_datasets(rlab.DatasetCatalog(CLEAN))
 ```
 
-## Config
+Load the module from `lab.toml`:
 
 ```toml
 [modules]
 load = ["ingest.corpus"]
 ```
 
-## Build
+Then build and inspect it:
 
 ```bash
-rlab data build dataset:corpus.clean_v1
-```
-
-## Inspect
-
-```bash
-MANIFEST=runs/<run-id>/artifacts/dataset/manifest.yaml
-
-rlab data profile "$MANIFEST"
-rlab data validate "$MANIFEST"
-rlab data sample "$MANIFEST" --n 5
-```
-
-## Promote
-
-```bash
-rlab data promote "$MANIFEST" --as corpus.clean_v1 --alias candidate
-rlab artifacts pull artifact:dataset/corpus.clean_v1@candidate
-```
-
-## Compare versions
-
-After changing the pipeline and building version 2:
-
-```bash
-rlab data compare manifest_v1.yaml manifest_v2.yaml
-rlab data diff manifest_v1.yaml manifest_v2.yaml
-```
-
-## Record data lineage
-
-```python
-from pathlib import Path
-from rlab.data.genealogy import DataGenealogyGraph
-
-graph = DataGenealogyGraph(Path(".rlab/genealogy.db"))
-graph.add_edge("corpus.clean_v1", "corpus.raw", transform="strip+drop_empty")
+rlab data build dataset:corpus.clean-v1
+rlab data profile runs/<run-id>/artifacts/dataset/manifest.yaml
+rlab data sample runs/<run-id>/artifacts/dataset/manifest.yaml --n 5
 ```

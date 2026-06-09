@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar, cast, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from rlab.project.modules import ModulesConfig
+from rlab.typing import JsonObject
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -64,10 +65,22 @@ class LabConfig(BaseModel):
     reproducibility: ReproducibilityConfig = Field(default_factory=ReproducibilityConfig)
     launcher: LauncherConfig = Field(default_factory=LauncherConfig)
 
-    def section(self, name: str, schema: type[T] | None = None) -> Any:
+    @overload
+    def section(self, name: str) -> JsonObject | None: ...
+
+    @overload
+    def section(self, name: str, schema: type[T]) -> T | None: ...
+
+    def section(
+        self,
+        name: str,
+        schema: type[T] | None = None,
+    ) -> JsonObject | T | None:
         raw = self.model_extra.get(name) if self.model_extra else None
         if raw is None:
             return None
         if schema is not None:
             return schema.model_validate(raw)
-        return raw
+        if not isinstance(raw, dict):
+            raise TypeError(f"config section {name!r} must be a table")
+        return cast(JsonObject, raw)

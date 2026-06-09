@@ -5,7 +5,6 @@ import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
-from typing import Any
 
 from pydantic import JsonValue
 
@@ -55,7 +54,7 @@ class Grid:
 
         self._filters: list[Callable[[dict[str, JsonValue]], bool]] = []
 
-    def where(self, predicate: Callable[[Any], bool]) -> Grid:
+    def where(self, predicate: Callable[[dict[str, JsonValue]], bool]) -> Grid:
         """Filter expanded rows by a predicate function."""
         copy = Grid({})
         copy._params = dict(self._params)
@@ -85,7 +84,7 @@ class _Sampler(ABC):
     """Base class for objects that can be sampled."""
 
     @abstractmethod
-    def sample(self, rng: random.Random | None = None) -> Any: ...
+    def sample(self, rng: random.Random | None = None) -> JsonValue: ...
 
 
 class _LogUniform(_Sampler):
@@ -109,10 +108,10 @@ class _Uniform(_Sampler):
 
 
 class _Choice(_Sampler):
-    def __init__(self, values: Sequence[Any]) -> None:
+    def __init__(self, values: Sequence[JsonValue]) -> None:
         self.values = list(values)
 
-    def sample(self, rng: random.Random | None = None) -> Any:
+    def sample(self, rng: random.Random | None = None) -> JsonValue:
         _rng = rng or random
         return _rng.choice(self.values)
 
@@ -120,10 +119,10 @@ class _Choice(_Sampler):
 class _SequenceSampler(_Sampler):
     """Wraps a sequence as a sampler."""
 
-    def __init__(self, values: Sequence[Any]) -> None:
+    def __init__(self, values: Sequence[JsonValue]) -> None:
         self.values = list(values)
 
-    def sample(self, rng: random.Random | None = None) -> Any:
+    def sample(self, rng: random.Random | None = None) -> JsonValue:
         _rng = rng or random
         return _rng.choice(self.values)
 
@@ -136,7 +135,7 @@ def uniform(low: float, high: float) -> _Uniform:
     return _Uniform(low, high)
 
 
-def choice(values: Sequence[Any]) -> _Choice:
+def choice(values: Sequence[JsonValue]) -> _Choice:
     return _Choice(values)
 
 
@@ -145,7 +144,7 @@ class Sample:
 
     def __init__(
         self,
-        params: dict[str, _LogUniform | _Uniform | _Choice | Sequence[Any]],
+        params: dict[str, _LogUniform | _Uniform | _Choice | Sequence[JsonValue]],
         n: int,
         seed: int | None = None,
     ) -> None:
@@ -155,7 +154,7 @@ class Sample:
 
     @staticmethod
     def _normalize_params(
-        params: dict[str, _LogUniform | _Uniform | _Choice | Sequence[Any]],
+        params: dict[str, _LogUniform | _Uniform | _Choice | Sequence[JsonValue]],
     ) -> dict[str, _Sampler]:
         """Convert all parameter values to samplers."""
         normalized: dict[str, _Sampler] = {}

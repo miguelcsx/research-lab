@@ -1,8 +1,16 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from rlab.results.bundle import ResultBundle
+from rlab.typing import MetricValue
+
+WorkflowStepResult = ResultBundle | Mapping[str, MetricValue] | None
+
+
+WorkflowFn = Callable[..., WorkflowStepResult]
+ExternalParser = Callable[[str], WorkflowStepResult]
 
 
 class WorkflowStep(BaseModel):
@@ -10,7 +18,7 @@ class WorkflowStep(BaseModel):
 
     name: str
     description: str = ""
-    fn: Callable[..., Any] | None = None
+    fn: WorkflowFn | None = None
 
 
 class ExternalStep(BaseModel):
@@ -18,7 +26,7 @@ class ExternalStep(BaseModel):
 
     name: str
     command: tuple[str, ...]
-    parser: Callable[..., Any] | str | None = None
+    parser: ExternalParser | str | None = None
     cwd: Path | str | None = None
     env: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: int | None = None

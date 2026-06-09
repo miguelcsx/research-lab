@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from rlab.context.runtime import RuntimeContext
 from rlab.results.bundle import ResultBundle, empty_bundle
 from rlab.results.metric import Metric
-from rlab.typing import MetricValue, UnitStr
+from rlab.typing import JsonObject, MetricValue, UnitStr
 
 
 class WorkflowContext(BaseModel):
@@ -44,7 +43,7 @@ class WorkflowContext(BaseModel):
 
     # Delegate common context attributes
     @property
-    def params(self) -> dict[str, Any]:
+    def params(self) -> JsonObject:
         return self.runtime.params
 
     @property

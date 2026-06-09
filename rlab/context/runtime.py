@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +15,8 @@ from rlab.typing import JsonValue, MetricValue, UnitStr
 
 if TYPE_CHECKING:
     from rlab.typing import Serializer
+
+T = TypeVar("T")
 
 
 class RuntimeContext(BaseModel):
@@ -127,8 +129,8 @@ class RuntimeContext(BaseModel):
     def save_object(
         self,
         name: str,
-        obj: Any,
-        serializer: Serializer,
+        obj: T,
+        serializer: Serializer[T],
     ) -> RuntimeContext:
         if self.run_dir is None:
             return self

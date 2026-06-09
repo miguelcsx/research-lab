@@ -39,8 +39,6 @@ def _resolve_step(
         if record is None:
             continue
         fn = record.value
-        if not callable(fn):
-            continue  # type: ignore[unreachable]
         return step_ref, WorkflowStep(name=step_ref, fn=fn)
 
     raise WorkflowError(
