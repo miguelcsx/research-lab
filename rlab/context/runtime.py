@@ -64,15 +64,13 @@ class RuntimeContext(BaseModel):
         direction: Direction = Direction.MINIMIZE,
         step: int | None = None,
     ) -> RuntimeContext:
-        from rlab.runs.layout import RunLayout  # noqa: PLC0415
-        from rlab.runs.writer import RunWriter  # noqa: PLC0415
+        from rlab.runs.writer import writer_for  # noqa: PLC0415
 
         if self.run_dir is not None:
-            writer = RunWriter(RunLayout(root=self.run_dir))
             attrs: dict[str, Any] = {"unit": unit, "direction": direction.value}
             if step is not None:
                 attrs["step"] = step
-            writer.metric(name, value, **attrs)
+            writer_for(self.run_dir).metric(name, value, **attrs)
         return self
 
     def save_figure(
@@ -96,12 +94,11 @@ class RuntimeContext(BaseModel):
         *,
         formats: tuple[str, ...] = ("csv",),
     ) -> RuntimeContext:
-        from rlab.runs.layout import RunLayout  # noqa: PLC0415
-        from rlab.runs.writer import RunWriter  # noqa: PLC0415
+        from rlab.runs.writer import writer_for  # noqa: PLC0415
 
         if self.run_dir is None:
             return self
-        writer = RunWriter(RunLayout(root=self.run_dir))
+        writer = writer_for(self.run_dir)
         for fmt in formats:
             writer.table(name, data, fmt=fmt)
         return self
@@ -119,11 +116,10 @@ class RuntimeContext(BaseModel):
         return self
 
     def note(self, text: str, author: str | None = None) -> RuntimeContext:
-        from rlab.runs.layout import RunLayout  # noqa: PLC0415
-        from rlab.runs.writer import RunWriter  # noqa: PLC0415
+        from rlab.runs.writer import writer_for  # noqa: PLC0415
 
         if self.run_dir is not None:
-            RunWriter(RunLayout(root=self.run_dir)).note(text, author)
+            writer_for(self.run_dir).note(text, author)
         return self
 
     def save_object(

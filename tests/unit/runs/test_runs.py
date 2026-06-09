@@ -17,7 +17,7 @@ from rlab.runs.lifecycle import (
     start_run,
 )
 from rlab.runs.reader import RunReader
-from rlab.runs.writer import RunWriter
+from rlab.runs.writer import RunWriter, writer_for
 
 
 def test_layout_paths_and_create(tmp_path: Path) -> None:
@@ -60,6 +60,22 @@ def test_writer_and_reader_round_trip_and_formats(tmp_path: Path) -> None:
     assert reader.results()["final"] == pytest.approx(0.2)
     assert reader.tables()
     assert reader.figures() == ()
+
+
+def test_writer_for_reuses_instance_and_merges_summary(tmp_path: Path) -> None:
+    run_dir = tmp_path / "r"
+
+    # A fresh writer must pick up summary entries written by earlier instances.
+    RunWriter(RunLayout(root=run_dir)).metric("loss", 0.5)
+
+    writer = writer_for(run_dir)
+    assert writer_for(run_dir) is writer
+    writer.metric("accuracy", 0.9)
+    writer.metric("loss", 0.4)
+
+    summary = RunReader(run_dir).metrics_summary()
+    assert summary["loss"] == pytest.approx(0.4)
+    assert summary["accuracy"] == pytest.approx(0.9)
 
 
 def test_reader_missing_files(tmp_path: Path) -> None:

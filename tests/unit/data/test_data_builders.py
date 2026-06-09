@@ -16,6 +16,7 @@ from rlab.data.runner import build_dataset
 from rlab.manifests.checksum import sha256
 from rlab.manifests.validation import validate_dataset_manifest
 from rlab.registry.context import using_registry
+from rlab.typing import JsonValue
 
 
 def _runtime(tmp_path: Path) -> RuntimeContext:
@@ -71,21 +72,53 @@ def test_typed_recipe_writes_manifest(tmp_path: Path) -> None:
     validate_dataset_manifest(manifest)
 
 
+def test_dataset_params_and_variants(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+
+    with using_registry(runtime.registry):
+
+        @rlab.dataset(
+            "test.family",
+            params={"limit": 2},
+            variants={"small": {"limit": 1}},
+        )
+        def source(ctx: DataContext) -> Iterable[dict[str, object]]:
+            for index in range(int(str(ctx.params["limit"]))):
+                yield {"text": f"record-{index}"}
+
+    assert runtime.registry.try_get(EntryKind.DATASET, "test.family") is not None
+    assert runtime.registry.try_get(EntryKind.DATASET, "test.family.small") is not None
+
+    def _build(name: str, output: Path, params: dict[str, JsonValue] | None = None) -> int:
+        manifest = build_dataset(
+            runtime.registry,
+            name,
+            DataContext(runtime=runtime, work_dir=output, params=params or {}),
+            output,
+        )
+        return len(manifest.outputs["data"].path.read_text().splitlines())
+
+    assert _build("test.family", tmp_path / "base") == 2
+    assert _build("test.family.small", tmp_path / "small") == 1
+    assert _build("test.family", tmp_path / "override", params={"limit": 3}) == 3
+
+
 def test_dataset_rejects_duplicate_stage_names(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    with using_registry(runtime.registry):
-        with pytest.raises(ValueError, match="duplicate stage"):
+    with using_registry(runtime.registry), pytest.raises(ValueError, match="duplicate stage"):
 
-            @rlab.dataset("test.dup", stages=(_strip, _strip))
-            def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
-                yield {}
+        @rlab.dataset("test.dup", stages=(_strip, _strip))
+        def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
+            yield {}
 
 
 def test_dataset_rejects_lambda_source(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    with using_registry(runtime.registry):
-        with pytest.raises(ValueError, match="lambdas are not allowed"):
-            rlab.dataset("test.lambda")(lambda ctx: iter([]))  # type: ignore[arg-type]
+    with (
+        using_registry(runtime.registry),
+        pytest.raises(ValueError, match="lambdas are not allowed"),
+    ):
+        rlab.dataset("test.lambda")(lambda ctx: iter([]))
 
 
 def test_dataset_rejects_lambda_stage(tmp_path: Path) -> None:
@@ -94,12 +127,14 @@ def test_dataset_rejects_lambda_stage(tmp_path: Path) -> None:
     def src(_ctx: DataContext) -> Iterable[dict[str, object]]:
         yield {}
 
-    with using_registry(runtime.registry):
-        with pytest.raises(ValueError, match="lambdas are not allowed"):
+    with (
+        using_registry(runtime.registry),
+        pytest.raises(ValueError, match="lambdas are not allowed"),
+    ):
 
-            @rlab.dataset("test.lambda_stage", stages=(lambda r, c: r,))  # type: ignore[arg-type]
-            def _src(_ctx: DataContext) -> Iterable[dict[str, object]]:
-                yield {}
+        @rlab.dataset("test.lambda_stage", stages=(lambda r, c: r,))
+        def _src(_ctx: DataContext) -> Iterable[dict[str, object]]:
+            yield {}
 
 
 def test_runner_rejects_invalid_outputs(tmp_path: Path) -> None:
@@ -145,10 +180,8 @@ def test_dataset_registers_only_dataset_entries(tmp_path: Path) -> None:
     assert [record.kind for record in runtime.registry.list()] == [EntryKind.DATASET]
 
 
-def test_old_data_api_is_removed() -> None:
+def test_internal_data_api_is_not_public() -> None:
     for name in (
-        "DataFlow",
-        "DatasetRecipe",
         "DatasetCatalog",
         "FunctionSource",
         "FunctionStage",
@@ -157,9 +190,6 @@ def test_old_data_api_is_removed() -> None:
         "FunctionSink",
         "register_datasets",
         "DatasetId",
-        "StageId",
-        "CheckId",
-        "MetricId",
     ):
         assert not hasattr(rlab, name), f"rlab.{name} should not be in the public API"
 

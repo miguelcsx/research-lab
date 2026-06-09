@@ -26,6 +26,8 @@ def build_dataset(
         registry.get(EntryKind.DATASET, name).value,
         DatasetRecipe,
     )
+    if recipe.params:
+        ctx = ctx.model_copy(update={"params": {**recipe.params, **ctx.params}})
     records: Iterable[Any] = (
         record for source in recipe.flow.sources for record in source.read(ctx)
     )

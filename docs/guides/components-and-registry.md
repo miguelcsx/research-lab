@@ -52,7 +52,17 @@ def energy_error(target: object, ctx: rlab.BenchmarkContext) -> dict[str, float]
 Internally, the runtime uses:
 
 ```python
-from rlab.components import Tokenizer, build_component
+from typing import Protocol, runtime_checkable
+
+from rlab.components import build_component
+
+
+@runtime_checkable
+class Tokenizer(Protocol):
+    """Contracts are defined by your project — rlab ships no domain protocols."""
+
+    def encode(self, text: str) -> list[int]: ...
+
 
 component = build_component(runtime.registry, "tokenizer:project.byte")
 if not isinstance(component, Tokenizer):

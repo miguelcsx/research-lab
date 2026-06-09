@@ -82,11 +82,19 @@ class ConstantModel:
 """
 
 _BENCHMARK_STUB = """\
+from typing import Protocol
+
 import rlab
 
 
+class Encoder(Protocol):
+    \"\"\"Shape this benchmark expects from its target — defined by the project.\"\"\"
+
+    def encode(self, text: str) -> list[int]: ...
+
+
 @rlab.benchmark("project.tokenizer.length", target="tokenizer")
-def length(target: rlab.Tokenizer, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
+def length(target: Encoder, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
     del ctx
     tokens = target.encode("research")
     return rlab.ResultBundle(
@@ -95,11 +103,13 @@ def length(target: rlab.Tokenizer, ctx: rlab.BenchmarkContext) -> rlab.ResultBun
 """
 
 _SUITE_STUB = """\
+from collections.abc import Callable
+
 import rlab
 
 
 @rlab.evaluation("project.quick", "score")
-def score(model: rlab.Model[object, float], ctx: rlab.RuntimeContext) -> dict[str, float]:
+def score(model: Callable[[object], float], ctx: rlab.RuntimeContext) -> dict[str, float]:
     del ctx
     return {"score": float(model(None))}
 """

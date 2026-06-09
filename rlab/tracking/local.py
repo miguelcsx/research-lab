@@ -2,8 +2,7 @@ from pathlib import Path
 
 from rlab.manifests.run import RunManifest
 from rlab.runs.index import RunIndex
-from rlab.runs.layout import RunLayout
-from rlab.runs.writer import RunWriter
+from rlab.runs.writer import writer_for
 
 
 class LocalTracking:
@@ -15,7 +14,7 @@ class LocalTracking:
         self._upsert(manifest)
 
     def metric(self, run_id: str, name: str, value: float, step: int | None = None) -> None:
-        RunWriter(RunLayout(root=self.runs_dir / run_id)).metric(name, value, step=step)
+        writer_for(self.runs_dir / run_id).metric(name, value, step=step)
 
     def finish(self, manifest: RunManifest) -> None:
         self._upsert(manifest)

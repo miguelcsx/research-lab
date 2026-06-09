@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import pytest
 
 from rlab.benchmarks.context import BenchmarkContext
 from rlab.components.builders import build_component
 from rlab.components.loader import load_component
-from rlab.components.protocols import Tokenizer
 from rlab.components.specs import BuildSpec, ComponentSpec
 from rlab.config.defaults import DEFAULT_CONFIG
 from rlab.context.project import find_project
@@ -17,6 +17,15 @@ from rlab.external.command import ExternalCommand
 from rlab.launchers import DockerLauncher, LocalLauncher, SubprocessLauncher
 from rlab.references.parser import parse_reference
 from rlab.testing import FakeTokenizer, count_tokens
+
+
+@runtime_checkable
+class Tokenizer(Protocol):
+    """Project-defined component contract — rlab does not ship domain protocols."""
+
+    def encode(self, text: str) -> list[int]: ...
+
+    def decode(self, ids: list[int]) -> str: ...
 
 
 def test_context_component_and_testing_helpers(project: Path, runtime: RuntimeContext) -> None:

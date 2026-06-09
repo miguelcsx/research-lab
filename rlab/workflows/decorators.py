@@ -54,8 +54,7 @@ def workflow(  # noqa: PLR0913
 
         existing = resolve_definition(current.value, Workflow)
         if any(
-            isinstance(item, WorkflowStep) and item.name == step_name
-            for item in existing.steps
+            isinstance(item, WorkflowStep) and item.name == step_name for item in existing.steps
         ):
             raise ValueError(f"duplicate workflow step {step!r} in workflow {name!r}")
         merged = existing.model_copy(

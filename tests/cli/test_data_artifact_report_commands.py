@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from rlab.context.factory import build_runtime
@@ -7,6 +8,17 @@ from rlab.data.service import build
 from rlab.evaluations.service import run_evaluation
 from rlab.experiments.service import run_experiment
 from tests.helpers.cli import assert_success, invoke_cli
+
+
+def test_data_build_records_param_overrides(project: Path) -> None:
+    assert_success(
+        invoke_cli(project, "data", "build", "dataset:project.tiny", "--param", "budget=10")
+    )
+
+    run_dirs = sorted((project / "runs").glob("data.build_*"))
+    assert run_dirs, "expected a data build run directory"
+    params = json.loads((run_dirs[-1] / "params.json").read_text())
+    assert params["budget"] == 10
 
 
 def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:

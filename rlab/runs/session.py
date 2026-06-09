@@ -17,7 +17,7 @@ from rlab.reproducibility.capture import capture_reproducibility
 from rlab.runs.index import RunIndex
 from rlab.runs.layout import RunLayout
 from rlab.runs.lifecycle import fail_run, finish_run, start_run
-from rlab.runs.writer import RunWriter
+from rlab.runs.writer import writer_for
 
 if TYPE_CHECKING:
     from rlab.context.runtime import RuntimeContext
@@ -68,7 +68,7 @@ class RunSession:
             parent_run=parent_run,
         )
         self._write_manifest()
-        self._writer = RunWriter(self.layout)
+        self._writer = writer_for(self.layout.root)
         self._writer.params(self.manifest.parameters)
         if notes:
             self._writer.note(notes)

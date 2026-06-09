@@ -1,13 +1,14 @@
 import typer
 
 from rlab.cli.state import CliState
+from rlab.config.overrides import parse_overrides
 from rlab.evaluations.service import run_evaluation
 
 
-def command(
+def command(  # noqa: PLR0913
     ctx: typer.Context,
     suite: str,
-    model: str = typer.Option(..., "--model"),
+    model: str | None = typer.Option(None, "--model"),
     baseline: list[str] | None = typer.Option(None, "--baseline"),
     split: str | None = typer.Option(None),
     limit: int | None = typer.Option(None),
@@ -16,6 +17,9 @@ def command(
     external_runner: str = typer.Option("local", "--external-runner"),
     save_predictions: bool = typer.Option(False, "--save-predictions"),
     upload: bool = typer.Option(False),
+    param: list[str] | None = typer.Option(
+        None, "--param", "-p", help="Extra evaluator parameter (key=value, repeatable)"
+    ),
 ) -> None:
     state: CliState = ctx.obj
     state.console.print(
@@ -31,5 +35,6 @@ def command(
             external_runner=external_runner,
             save_predictions=save_predictions,
             upload=upload,
+            params=parse_overrides(param or ()),
         )
     )

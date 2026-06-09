@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, TypeVar
 
 from rlab.constants import EntryKind
@@ -38,12 +38,20 @@ def dataset(  # noqa: PLR0913
     version: str = "1",
     description: str = "",
     tags: tuple[str, ...] = (),
+    params: Mapping[str, JsonValue] | None = None,
+    variants: Mapping[str, Mapping[str, JsonValue]] | None = None,
 ) -> Callable[[SourceFn], SourceFn]:
     """Declare a dataset recipe and register it from its source function.
 
     The decorated function is the source. Its name becomes the source ID in the
     manifest. Stage, check, and metric IDs are derived from their function names.
     Lambdas are rejected — define named functions so manifests stay readable.
+
+    `params` are default recipe parameters, available as `ctx.params` during the
+    build and overridable per-build (`rlab data build <id> --param key=value`).
+    Each entry in `variants` registers an additional recipe `<name>.<variant>`
+    sharing the same flow with its params merged over the defaults — one
+    function can declare a whole family of recipe configurations.
     """
 
     def decorate(source_fn: SourceFn) -> SourceFn:
@@ -67,18 +75,31 @@ def dataset(  # noqa: PLR0913
             version=version,
             description=description,
             tags=tags,
+            params=dict(params or {}),
         )
 
-        def _provide() -> DatasetRecipe[Any]:
-            return recipe
-
-        _provide.__name__ = name.replace(".", "_").replace("-", "_")
-        _provide.__doc__ = description
-
-        register(current_registry(), EntryKind.DATASET, name, _provide, tags=tags)
+        _register_recipe(recipe)
+        for suffix, overrides in (variants or {}).items():
+            _register_recipe(recipe.variant(suffix, overrides))
         return source_fn
 
     return decorate
+
+
+def _register_recipe(recipe: DatasetRecipe[Any]) -> None:
+    def _provide() -> DatasetRecipe[Any]:
+        return recipe
+
+    _provide.__name__ = str(recipe.id).replace(".", "_").replace("-", "_")
+    _provide.__doc__ = recipe.description
+
+    register(
+        current_registry(),
+        EntryKind.DATASET,
+        str(recipe.id),
+        _provide,
+        tags=recipe.tags,
+    )
 
 
 def _wrap_check(fn: CheckFn) -> FunctionCheck[Any]:

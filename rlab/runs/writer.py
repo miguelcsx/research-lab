@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import threading
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ class RunWriter:
     def __init__(self, layout: RunLayout) -> None:
         self.layout = layout
         self.layout.create()
+        self._summary: dict[str, Any] | None = None
 
     def status(self, status: RunStatus) -> None:
         self.layout.status_file.write_text(status.value + "\n", encoding="utf-8")
@@ -51,10 +53,14 @@ class RunWriter:
         payload.update(attrs)
         _append_jsonl(self.layout.metrics_file, payload)
 
-        summary_path = self.layout.metrics_summary_file
-        summary = _load_json_dict(summary_path)
-        summary[name] = float(value)
-        summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        # Summary is kept in memory after the first call so high-frequency
+        # metric streams (training loops) do not re-read the file every event.
+        if self._summary is None:
+            self._summary = _load_json_dict(self.layout.metrics_summary_file)
+        self._summary[name] = float(value)
+        self.layout.metrics_summary_file.write_text(
+            json.dumps(self._summary, indent=2) + "\n", encoding="utf-8"
+        )
 
     def params(self, mapping: Mapping[str, Any]) -> None:
         existing = _load_json_dict(self.layout.params_file)
@@ -103,6 +109,24 @@ class RunWriter:
     def error(self, message: str) -> None:
         self.layout.logs.mkdir(parents=True, exist_ok=True)
         (self.layout.logs / "error.txt").write_text(message, encoding="utf-8")
+
+
+_WRITER_CACHE: dict[Path, RunWriter] = {}
+_WRITER_LOCK = threading.Lock()
+
+
+def writer_for(run_dir: Path) -> RunWriter:
+    """Process-wide writer per run directory.
+
+    Reusing one writer keeps the metrics summary cached in memory and avoids
+    re-creating the run layout on every metric event.
+    """
+    with _WRITER_LOCK:
+        writer = _WRITER_CACHE.get(run_dir)
+        if writer is None:
+            writer = RunWriter(RunLayout(root=run_dir))
+            _WRITER_CACHE[run_dir] = writer
+        return writer
 
 
 def _to_jsonable(value: Any) -> Any:

@@ -5,18 +5,49 @@ import typer
 
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
+from rlab.config.overrides import parse_overrides
 from rlab.data.ablation import DataAblation
 from rlab.data.compare import compare_profiles
 from rlab.data.service import build, diff, profile, promote, sample, write_sample
 
 _DEFAULT_SAMPLE_COUNT = 100
+_DEFAULT_EXPLORE_COUNT = 20
+_PARAM_HELP = "Recipe parameter override (key=value, repeatable)"
 app = typer.Typer(help="Build, validate, compare, and promote datasets.")
 
 
-@app.command("build")
-def build_command(ctx: typer.Context, dataset: str, version: str = "1") -> None:
+@app.command("explore")
+def explore_command(
+    ctx: typer.Context,
+    dataset: str,
+    n: int = typer.Option(_DEFAULT_EXPLORE_COUNT, "--n", help="Number of sample records to show"),
+    version: str = "1",
+    param: list[str] | None = typer.Option(None, "--param", "-p", help=_PARAM_HELP),
+) -> None:
+    """Build a dataset then immediately show profile stats and sample records."""
     state: CliState = ctx.obj
-    state.console.print(build(state.runtime(), dataset, version))
+    run_root = build(state.runtime(), dataset, version, params=parse_overrides(param or ()))
+    manifest_path = run_root / "artifacts" / "dataset" / "manifest.yaml"
+    prof = profile(manifest_path)
+    samples = sample(manifest_path, n)
+    state.console.rule(f"[bold]{dataset}[/bold] — profile")
+    state.console.print_json(json.dumps(prof, default=str))
+    state.console.rule(f"[bold]{dataset}[/bold] — {n} samples")
+    for i, record in enumerate(samples, 1):
+        state.console.print(f"[dim]{i:>3}.[/dim] {json.dumps(record, ensure_ascii=False)}")
+
+
+@app.command("build")
+def build_command(
+    ctx: typer.Context,
+    dataset: str,
+    version: str = "1",
+    param: list[str] | None = typer.Option(None, "--param", "-p", help=_PARAM_HELP),
+) -> None:
+    state: CliState = ctx.obj
+    state.console.print(
+        build(state.runtime(), dataset, version, params=parse_overrides(param or ()))
+    )
 
 
 @app.command("profile")

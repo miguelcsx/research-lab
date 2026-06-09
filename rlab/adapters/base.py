@@ -46,9 +46,7 @@ class BaseAdapter:
         for source, target in self.external_output_dirs(ctx).items():
             ctx.external_output_dir(source, target)
 
-    def external_output_dirs(
-        self, ctx: AdapterContext
-    ) -> Mapping[str | Path, str | Path]:
+    def external_output_dirs(self, ctx: AdapterContext) -> Mapping[str | Path, str | Path]:
         """Map fixed external-tool output directories into artifact storage."""
         del ctx
         return {}

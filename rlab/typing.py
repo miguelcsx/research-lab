@@ -23,6 +23,7 @@ class Serializer(Protocol[T_contra]):
 class Deserializer(Protocol[T_co]):
     def __call__(self, value: bytes) -> T_co: ...
 
+
 __all__ = [
     "Deserializer",
     "Factory",

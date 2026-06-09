@@ -42,8 +42,7 @@ def build_component(
     built = value(**dict(params or {})) if inspect.isclass(value) else value
     if expected is not None and not isinstance(built, expected):
         raise TypeError(
-            f"Component {reference!r} must be {expected.__name__}, "
-            f"got {type(built).__name__}"
+            f"Component {reference!r} must be {expected.__name__}, got {type(built).__name__}"
         )
     return cast(T, built) if expected is not None else built
 
@@ -82,7 +81,6 @@ def try_build_component(
     built = value(**dict(params or {})) if inspect.isclass(value) else value
     if expected is not None and not isinstance(built, expected):
         raise TypeError(
-            f"Component {reference!r} must be {expected.__name__}, "
-            f"got {type(built).__name__}"
+            f"Component {reference!r} must be {expected.__name__}, got {type(built).__name__}"
         )
     return cast(T, built) if expected is not None else built

@@ -20,7 +20,7 @@ def execute_suite(
 ) -> EvaluationResult:
     record = runtime.registry.get(EntryKind.SUITE, suite_name)
     suite = resolve_definition(record.value, EvaluationSuite)
-    built = try_build_component(runtime.registry, model_ref)
+    built = try_build_component(runtime.registry, model_ref) if model_ref else None
     model = built if built is not None else model_ref
     tasks = tuple(
         TaskResult(

@@ -119,6 +119,7 @@ class DatasetRecipe(Generic[RecordT]):
     version: str = "1"
     description: str = ""
     tags: tuple[str, ...] = ()
+    params: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.sinks:
@@ -140,6 +141,7 @@ class DatasetRecipe(Generic[RecordT]):
         version: str | None = None,
         description: str | None = None,
         tags: tuple[str, ...] | None = None,
+        params: Mapping[str, JsonValue] | None = None,
     ) -> DatasetRecipe[RecordT]:
         return replace(
             self,
@@ -151,6 +153,21 @@ class DatasetRecipe(Generic[RecordT]):
             version=version or self.version,
             description=self.description if description is None else description,
             tags=self.tags if tags is None else tags,
+            params=self.params if params is None else params,
+        )
+
+    def variant(
+        self,
+        suffix: str,
+        params: Mapping[str, JsonValue],
+        *,
+        description: str = "",
+    ) -> DatasetRecipe[RecordT]:
+        """Derive a recipe registered as `<id>.<suffix>` with overridden params."""
+        return self.replace(
+            id=DatasetId(f"{self.id}.{suffix}"),
+            params={**self.params, **params},
+            description=description or self.description,
         )
 
 

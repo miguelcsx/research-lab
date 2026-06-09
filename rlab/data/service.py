@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from rlab.artifacts.service import promote_path
@@ -11,19 +12,26 @@ from rlab.data.runner import build_dataset
 from rlab.data.sample import sample_records
 from rlab.manifests.io import read_dataset_manifest, write_manifest
 from rlab.runs.session import RunSession
-from rlab.typing import Record
+from rlab.typing import JsonValue, Record
 
 
 def _dataset_name(reference: str) -> str:
     return reference.removeprefix("dataset:")
 
 
-def build(runtime: RuntimeContext, reference: str, version: str = "1") -> Path:
+def build(
+    runtime: RuntimeContext,
+    reference: str,
+    version: str = "1",
+    *,
+    params: Mapping[str, JsonValue] | None = None,
+) -> Path:
     name = _dataset_name(reference)
-    session = RunSession(runtime, "data.build", name, {"dataset": reference})
+    overrides = dict(params or {})
+    session = RunSession(runtime, "data.build", name, {"dataset": reference, **overrides})
     with session.running() as active:
         output = session.layout.artifacts / "dataset"
-        context = DataContext(runtime=active, work_dir=output)
+        context = DataContext(runtime=active, work_dir=output, params=overrides)
         manifest = build_dataset(active.registry, name, context, output, version=version)
         write_manifest(output / "manifest.yaml", manifest)
         session.complete(manifest)

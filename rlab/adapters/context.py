@@ -75,9 +75,7 @@ class AdapterContext(BaseModel):
         for relative, target in outputs.items():
             relative_path = Path(relative)
             if relative_path.is_absolute() or ".." in relative_path.parts:
-                raise ValueError(
-                    f"External workspace output must be relative: {relative}"
-                )
+                raise ValueError(f"External workspace output must be relative: {relative}")
             target_path = self.artifact_path(target)
             _seed_output(source_path / relative_path, target_path)
             _replace_with_link(workspace / relative_path, target_path)

@@ -73,9 +73,7 @@ def test_base_adapter_prepares_declared_external_output_dirs(
     runtime: RuntimeContext,
 ) -> None:
     class Adapter(BaseAdapter):
-        def external_output_dirs(
-            self, ctx: AdapterContext
-        ) -> dict[str | Path, str | Path]:
+        def external_output_dirs(self, ctx: AdapterContext) -> dict[str | Path, str | Path]:
             del ctx
             return {"external/tool/results": "eval/results"}
 

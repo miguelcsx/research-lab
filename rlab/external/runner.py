@@ -3,7 +3,6 @@ import importlib.util
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -30,8 +29,7 @@ RunOutput: TypeAlias = tuple[int, str, str]
 RunnerFn: TypeAlias = Callable[[CommandArgs, Path, Environment, int | None], RunOutput]
 
 _HAS_PTY = (
-    importlib.util.find_spec("pty") is not None
-    and importlib.util.find_spec("termios") is not None
+    importlib.util.find_spec("pty") is not None and importlib.util.find_spec("termios") is not None
 )
 
 if _HAS_PTY:
@@ -117,8 +115,7 @@ def _capture_limited(
         args,
         cwd=cwd,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         timeout=timeout,
         check=False,
     )
@@ -153,7 +150,7 @@ def _wait_without_exceptions(
     deadline = _deadline(timeout)
 
     while process.poll() is None:
-        if _timed_out(deadline):
+        if timeout is not None and _timed_out(deadline):
             _terminate_process(process)
             raise subprocess.TimeoutExpired(process.args, timeout)
 
@@ -162,9 +159,7 @@ def _wait_without_exceptions(
     return int(process.returncode)
 
 
-def _join_all(
-    threads: Iterable[threading.Thread], timeout: float | None = None
-) -> None:
+def _join_all(threads: Iterable[threading.Thread], timeout: float | None = None) -> None:
     for thread in threads:
         thread.join(timeout=timeout)
 
@@ -368,9 +363,9 @@ class ShellRunner:
     def run(self, command: ExternalCommand, root: Path) -> CommandResult:
         output = _runner_for(command)(
             command.args,
-            cwd=safe_workdir(root, command.cwd),
-            env=sandbox_environment(command.env),
-            timeout=command.timeout_seconds,
+            safe_workdir(root, command.cwd),
+            sandbox_environment(command.env),
+            command.timeout_seconds,
         )
 
         result = _build_result(command, output)
@@ -439,9 +434,7 @@ class DockerRunner(ShellRunner):
         timeout_seconds: int | None = None,
     ) -> ExternalCommand:
         mount_args = tuple(
-            item
-            for source, target in mounts
-            for item in ("-v", f"{source.resolve()}:{target}")
+            item for source, target in mounts for item in ("-v", f"{source.resolve()}:{target}")
         )
 
         return ExternalCommand(
