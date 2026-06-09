@@ -1,3 +1,4 @@
+from rlab.studies.decorators import study
 from rlab.studies.loader import load_study
 from rlab.studies.model import Study
 from rlab.studies.plan import StudyPlan, plan_study
@@ -8,6 +9,7 @@ __all__ = [
     "Study",
     "StudyPlan",
     "StudyStore",
+    "study",
     "load_study",
     "plan_study",
     "render_study_report",

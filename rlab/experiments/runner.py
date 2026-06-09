@@ -16,7 +16,9 @@ from rlab.experiments.model import Experiment
 from rlab.experiments.plan import ExecutionPlan, ExperimentJob, build_plan
 from rlab.experiments.result import ExperimentResult, ExperimentStep
 from rlab.manifests.resolver import capture_dataset_manifest
+from rlab.registry.resolve import resolve_definition
 from rlab.results.bundle import ResultBundle, empty_bundle
+from rlab.workflows.model import Workflow
 from rlab.workflows.runner import run_workflow
 
 
@@ -137,11 +139,10 @@ def _run_workflow_step(
 ) -> tuple[ResultBundle, dict[str, float]]:
     assert experiment.workflow is not None
     wf_record = ctx.registry.get(EntryKind.WORKFLOW, experiment.workflow)
-    wf = wf_record.value() if callable(wf_record.value) else wf_record.value
-    if hasattr(wf, "steps"):
-        wf_bundle = run_workflow(wf, ctx)
-        bundle = bundle.merge(wf_bundle)
-        metrics = {**metrics, **wf_bundle.as_metrics_dict()}
+    workflow = resolve_definition(wf_record.value, Workflow)
+    wf_bundle = run_workflow(workflow, ctx)
+    bundle = bundle.merge(wf_bundle)
+    metrics = {**metrics, **wf_bundle.as_metrics_dict()}
     return bundle, metrics
 
 
@@ -159,7 +160,7 @@ def _run_callable_step(
             break
     if run_record is None or not callable(run_record.value):
         raise RegistryError(
-            f"Experiment.run={experiment.run!r} must reference a @rlab.workflow_step callable"
+            f"Experiment.run={experiment.run!r} must reference a callable declaration"
         )
     fn = run_record.value
     result = fn(ctx)

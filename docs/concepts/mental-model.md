@@ -27,9 +27,13 @@ class SmallModel:
 def latency(model, ctx):
     ...
 
-@rlab.experiment("sweep")
-def sweep():
-    return rlab.Experiment(...)
+@rlab.experiment(
+    "sweep",
+    question="Which model is fastest?",
+    matrix={"model": ["small", "large"]},
+)
+def sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return run_trial(ctx.params)
 ```
 
 When `rlab` builds a runtime, it loads every module listed in `lab.toml` and fills the registry.

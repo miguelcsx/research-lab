@@ -1,11 +1,11 @@
 import importlib.util
 import sys
 from pathlib import Path
-from typing import cast
 
 from rlab.constants import EntryKind
 from rlab.experiments.model import Experiment
 from rlab.registry.context import using_registry
+from rlab.registry.resolve import resolve_definition
 from rlab.registry.store import Registry
 
 
@@ -31,4 +31,4 @@ def load_experiment(registry: Registry, path: Path) -> tuple[str, Experiment]:
     if len(matches) != 1:
         raise ValueError(f"{path} must register exactly one experiment")
     record = matches[0]
-    return record.name, cast(Experiment, record.value())
+    return record.name, resolve_definition(record.value, Experiment)

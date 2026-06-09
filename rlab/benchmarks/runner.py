@@ -1,5 +1,5 @@
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Callable, Mapping
+from typing import Any, cast
 
 from rlab.benchmarks.context import BenchmarkContext
 from rlab.benchmarks.result import BenchmarkResult
@@ -33,7 +33,8 @@ def execute_benchmark(
         data=data,
         params=params or {},
     )
-    result = record.value(target_value, context)
+    benchmark_fn = cast(Callable[[object, BenchmarkContext], object], record.value)
+    result = benchmark_fn(target_value, context)
 
     if isinstance(result, BenchmarkResult):
         return result

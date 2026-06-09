@@ -38,7 +38,7 @@ requires-python = ">=3.11"
 dependencies = ["{rlab_dependency}"]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "ruff", "mypy", "types-pyyaml"]
 """
 
 _GITIGNORE = ".venv/\n.rlab/\nruns/\nartifacts/\n"
@@ -48,13 +48,14 @@ _SMOKE_EXPERIMENT = """\
 import rlab
 
 
-@rlab.experiment("000_smoke")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="Does the generated project execute?",
-        matrix={"target": ["tokenizer:project.byte"]},
-        benchmarks=("project.tokenizer.length",),
-    )
+@rlab.experiment(
+    "000_smoke",
+    question="Does the generated project execute?",
+    matrix={"target": ["tokenizer:project.byte"]},
+    benchmarks=("project.tokenizer.length",),
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 """
 
 _COMPONENT_STUB = """\
@@ -85,24 +86,22 @@ import rlab
 
 
 @rlab.benchmark("project.tokenizer.length", target="tokenizer")
-def length(target: object, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
+def length(target: rlab.Tokenizer, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
+    del ctx
     tokens = target.encode("research")
-    return rlab.ResultBundle(metrics=[rlab.Metric(name="tokens", value=float(len(tokens)))])
+    return rlab.ResultBundle(
+        metrics=(rlab.Metric(name="tokens", value=float(len(tokens))),),
+    )
 """
 
 _SUITE_STUB = """\
 import rlab
 
 
-def score(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
+@rlab.evaluation("project.quick", "score")
+def score(model: rlab.Model[object, float], ctx: rlab.RuntimeContext) -> dict[str, float]:
+    del ctx
     return {"score": float(model(None))}
-
-
-@rlab.suite("project.quick")
-def quick() -> rlab.EvaluationSuite:
-    return rlab.EvaluationSuite(
-        tasks=(rlab.EvaluationTask(name="score", evaluator=score),),
-    )
 """
 
 _DATA_STUB = """\
@@ -155,12 +154,13 @@ _WORKFLOW_STUB = """\
 import rlab
 
 
-@rlab.workflow("project.main")
-def main() -> rlab.Workflow:
-    return rlab.Workflow(
-        steps=["project.step_one"],
-        description="Main project workflow",
-    )
+@rlab.workflow(
+    "project.main",
+    step="step_one",
+    description="Main project workflow",
+)
+def step_one(ctx: rlab.WorkflowContext) -> None:
+    ctx.note("Implement this workflow step.")
 """
 
 _SOLVER_STUB = """\
@@ -374,15 +374,16 @@ _NEW_EXPERIMENT = """\
 import rlab
 
 
-@rlab.experiment("{name}")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="What is the research question?",
-        hypothesis="What do you expect to find?",
-        matrix={{
-            "param": ["value_a", "value_b"],
-        }},
-    )
+@rlab.experiment(
+    "{name}",
+    question="What is the research question?",
+    hypothesis="What do you expect to find?",
+    matrix={{
+        "param": ["value_a", "value_b"],
+    }},
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 """
 
 _NEW_BENCHMARK = """\
@@ -391,8 +392,9 @@ import rlab
 
 @rlab.benchmark("{name}", target="component_kind")
 def benchmark(target: object, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
+    del target, ctx
     return rlab.ResultBundle(
-        metrics=[rlab.Metric(name="score", value=0.0)],
+        metrics=(rlab.Metric(name="score", value=0.0),),
     )
 """
 
@@ -400,12 +402,13 @@ _NEW_WORKFLOW = """\
 import rlab
 
 
-@rlab.workflow("{name}")
-def workflow() -> rlab.Workflow:
-    return rlab.Workflow(
-        steps=["step_one", "step_two"],
-        description="Describe what this workflow does.",
-    )
+@rlab.workflow(
+    "{name}",
+    step="step_one",
+    description="Describe what this workflow does.",
+)
+def step_one(ctx: rlab.WorkflowContext) -> None:
+    ctx.note("Implement this workflow step.")
 """
 
 _NEW_DATA_PIPELINE = """\
@@ -458,23 +461,24 @@ _NEW_CAUSAL_EXPERIMENT = """\
 import rlab
 
 
-@rlab.experiment("{name}")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="What is the causal effect of X on Y?",
-        hypothesis="X causes Y through mechanism Z.",
-        matrix={{
-            "treatment": ["treated", "control"],
-        }},
-        decision_criteria="Select treatment if effect > threshold with p < 0.05.",
-        assumptions=(
-            "Treatment and control are identical except for the intervention.",
-            "No confounding variables.",
-        ),
-        threats=(
-            "Limited sample size may reduce statistical power.",
-        ),
-    )
+@rlab.experiment(
+    "{name}",
+    question="What is the causal effect of X on Y?",
+    hypothesis="X causes Y through mechanism Z.",
+    matrix={{
+        "treatment": ["treated", "control"],
+    }},
+    decision_criteria="Select treatment if effect > threshold with p < 0.05.",
+    assumptions=(
+        "Treatment and control are identical except for the intervention.",
+        "No confounding variables.",
+    ),
+    threats=(
+        "Limited sample size may reduce statistical power.",
+    ),
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 """
 
 _NEW_TEMPLATES = {

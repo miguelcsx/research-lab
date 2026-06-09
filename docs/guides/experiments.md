@@ -7,20 +7,20 @@ An experiment is a declarative research plan. It describes a question, optional 
 ```python
 import rlab
 
-@rlab.experiment("learning_rate_sweep")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="How does learning rate affect validation loss?",
-        hypothesis="Lower learning rates improve stability but converge slower.",
-        matrix={
-            "lr": [1e-3, 3e-4, 1e-4],
-            "batch_size": [16, 32],
-        },
-        run="train.one",
-        metrics=("val_loss", "train_runtime_seconds"),
-        decision_criteria="Choose the lowest validation loss within 10% of the fastest run.",
-        seeds=(0, 1, 2),
-    )
+@rlab.experiment(
+    "learning_rate_sweep",
+    question="How does learning rate affect validation loss?",
+    hypothesis="Lower learning rates improve stability but converge slower.",
+    matrix={
+        "lr": [1e-3, 3e-4, 1e-4],
+        "batch_size": [16, 32],
+    },
+    metrics=("val_loss", "train_runtime_seconds"),
+    decision_criteria="Choose the lowest loss within 10% of the fastest run.",
+    seeds=(0, 1, 2),
+)
+def experiment(ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return train(ctx.params)
 ```
 
 Run it:
@@ -40,7 +40,6 @@ rlab run experiments/learning_rate_sweep.py
 | `threats` | Threats to validity |
 | `references` | Papers, issues, links, prior runs |
 | `matrix` | Parameter grid, `Grid`, or `Sample` |
-| `run` | Registered workflow step/function to execute per job |
 | `workflow` | Registered workflow to execute per job |
 | `benchmarks` | Benchmarks to run when matrix contains `target` |
 | `evaluations` | Evaluation suites to run when matrix contains `model` |
@@ -132,13 +131,16 @@ matrix={"lr": [1e-3, 1e-4]}
 
 ### Run function
 
-Use `run="name"` when each job calls one registered workflow step.
+The decorated experiment function executes once per matrix row and seed.
 
 ```python
-@rlab.workflow_step("train.one")
-def train(ctx: rlab.WorkflowContext) -> rlab.ResultBundle:
-    lr = ctx.params["lr"]
-    return rlab.bundle_from_metrics({"val_loss": 0.1})
+@rlab.experiment(
+    "train_sweep",
+    question="Which learning rate minimizes validation loss?",
+    matrix={"lr": [1e-3, 1e-4]},
+)
+def train(ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return {"val_loss": train_once(ctx.params)}
 ```
 
 ### Workflow
@@ -146,13 +148,14 @@ def train(ctx: rlab.WorkflowContext) -> rlab.ResultBundle:
 Use `workflow="name"` when each job executes a multi-step workflow.
 
 ```python
-@rlab.experiment("pipeline_sweep")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="Does preprocessing improve score?",
-        matrix={"method": ["raw", "clean"]},
-        workflow="project.pipeline",
-    )
+@rlab.experiment(
+    "pipeline_sweep",
+    question="Does preprocessing improve score?",
+    matrix={"method": ["raw", "clean"]},
+    workflow="project.pipeline",
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ### Benchmarks
@@ -160,11 +163,14 @@ def experiment() -> rlab.Experiment:
 If the matrix contains `target`, every declared benchmark runs against that target.
 
 ```python
-return rlab.Experiment(
+@rlab.experiment(
+    "tokenizer_length",
     question="Which tokenizer is shorter?",
     matrix={"target": ["tokenizer:a", "tokenizer:b"]},
     benchmarks=("project.token_count",),
 )
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ### Evaluations
@@ -172,11 +178,14 @@ return rlab.Experiment(
 If the matrix contains `model`, every declared suite evaluates that model.
 
 ```python
-return rlab.Experiment(
+@rlab.experiment(
+    "model_quality",
     question="Which model performs best?",
     matrix={"model": ["model:small", "model:large"]},
     evaluations=("project.quick",),
 )
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ## Resume

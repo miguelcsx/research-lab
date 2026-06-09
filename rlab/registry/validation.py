@@ -1,7 +1,7 @@
 import inspect
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from rlab.constants import EntryKind
 from rlab.errors import RegistryError
@@ -19,11 +19,12 @@ def validate_version(version: str) -> str:
     return version
 
 
-def validate_signature(kind: EntryKind, value: Callable[..., Any] | type[Any]) -> None:
+def validate_signature(kind: EntryKind, value: object) -> None:
     expected = EXPECTED_PARAMETERS.get(kind)
-    if expected is None or inspect.isclass(value):
+    if expected is None or inspect.isclass(value) or not callable(value):
         return
-    signature = inspect.signature(value)
+    function = cast(Callable[..., Any], value)
+    signature = inspect.signature(function)
     positional = [
         parameter
         for parameter in signature.parameters.values()
@@ -32,5 +33,5 @@ def validate_signature(kind: EntryKind, value: Callable[..., Any] | type[Any]) -
     ]
     if len(positional) < expected:
         raise RegistryError(
-            f"{kind.value} {value.__qualname__!r} requires at least {expected} parameters"
+            f"{kind.value} {function.__qualname__!r} requires at least {expected} parameters"
         )

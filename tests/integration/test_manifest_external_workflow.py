@@ -43,13 +43,11 @@ def test_external_evaluation_suite(project: Path) -> None:
         "from pathlib import Path\n"
         "import rlab\n"
         "root = Path(__file__).parents[1]\n"
-        "@rlab.external_suite('project.external')\n"
-        "def external():\n"
-        "    return rlab.ExternalEvaluation(\n"
-        "        name='project.external', version='1.0.0',\n"
-        "        command=rlab.ExternalCommand(\n"
-        "            args=('python', str(root / 'external_eval.py')), cwd=root),\n"
-        "        parser='json', output=root / 'external.json')\n",
+        "rlab.external_evaluation(\n"
+        "    'project.external', version='1.0.0',\n"
+        "    command=rlab.ExternalCommand(\n"
+        "        args=('python', str(root / 'external_eval.py')), cwd=root),\n"
+        "    parser='json', output=root / 'external.json')\n",
         encoding="utf-8",
     )
 

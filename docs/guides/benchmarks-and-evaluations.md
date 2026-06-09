@@ -71,20 +71,22 @@ return rlab.ResultBundle(
 
 ## Evaluations
 
-Define a task and suite:
+Define tasks directly on their suite:
 
 ```python
+@rlab.evaluation("project.quick", "score")
 def score(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
+    del ctx
     return {"score": float(model(None))}
 
-@rlab.suite("project.quick")
-def quick() -> rlab.EvaluationSuite:
-    return rlab.EvaluationSuite(
-        tasks=(
-            rlab.EvaluationTask(name="score", evaluator=score),
-        ),
-    )
+@rlab.evaluation("project.quick", "confidence")
+def confidence(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
+    del model, ctx
+    return {"confidence": 0.9}
 ```
+
+Tasks with the same suite name are composed in declaration order. No suite
+factory is required.
 
 Run it:
 
@@ -165,18 +167,16 @@ This produces a `LeaderboardResult` with model names mapped to task metrics.
 Use an external suite when evaluation must run through a separate command, repository, or official script.
 
 ```python
-@rlab.external_suite("project.official")
-def official() -> rlab.ExternalEvaluation:
-    return rlab.ExternalEvaluation(
-        name="project.official",
-        command=rlab.ExternalCommand(
-            args=("python", "official_eval.py", "--model", "{model}"),
-            cwd=Path("."),
-            timeout_seconds=600,
-        ),
-        parser="json",
-        output=Path("metrics.json"),
-    )
+rlab.external_evaluation(
+    "project.official",
+    command=rlab.ExternalCommand(
+        args=("python", "official_eval.py", "--model", "{model}"),
+        cwd=Path("."),
+        timeout_seconds=600,
+    ),
+    parser="json",
+    output=Path("metrics.json"),
+)
 ```
 
 Run:

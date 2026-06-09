@@ -136,12 +136,10 @@ rlab.UnitRegistry
 ```python
 rlab.component
 rlab.benchmark
-rlab.suite
-rlab.external_suite
+rlab.evaluation
+rlab.external_evaluation
 rlab.experiment
-rlab.baseline
 rlab.workflow
-rlab.workflow_step
 rlab.result_schema
 rlab.register_datasets
 ```

@@ -8,6 +8,7 @@ from rlab.adapters import (
 from rlab.assumptions import Assumption, Threat
 from rlab.baseline import BaselineEntry, BaselineStore
 from rlab.benchmarks import BenchmarkContext, BenchmarkResult, BenchmarkSpec
+from rlab.components import ArtifactProducer, DatasetSource, Model, Tokenizer, Trainer
 from rlab.context import RuntimeContext
 from rlab.data import (
     CheckId,
@@ -42,7 +43,12 @@ from rlab.data import (
     register_datasets,
 )
 from rlab.errors_analysis import ErrorComparison, compare_runs_errors
-from rlab.evaluations import EvaluationResult, EvaluationSuite, EvaluationTask
+from rlab.evaluations import (
+    EvaluationResult,
+    EvaluationSuite,
+    EvaluationTask,
+    external_evaluation,
+)
 from rlab.experiments import Experiment, ExperimentResult
 from rlab.experiments.matrix import Grid, Sample, choice, factor, grid, log_uniform, uniform
 from rlab.experiments.model import RetryPolicy
@@ -62,11 +68,18 @@ from rlab.results import (
 from rlab.stats import MetricComparison, compare_metric_arrays, compare_runs
 from rlab.studies import Study, StudyPlan
 from rlab.units import Unit, UnitRegistry
-from rlab.workflows import ExternalStep, Workflow, WorkflowStep
+from rlab.workflows import (
+    ExternalStep,
+    Workflow,
+    WorkflowContext,
+    WorkflowStep,
+    define_workflow,
+)
 
 __all__ = [
     "Assumption",
     "ArtifactManifest",
+    "ArtifactProducer",
     "BaselineEntry",
     "BaselineStore",
     "BenchmarkContext",
@@ -88,6 +101,7 @@ __all__ = [
     "DatasetId",
     "DatasetManifest",
     "DatasetRecipe",
+    "DatasetSource",
     "ErrorComparison",
     "EvaluationResult",
     "EvaluationSuite",
@@ -118,6 +132,7 @@ __all__ = [
     "LogArtifact",
     "Metric",
     "MetricId",
+    "Model",
     "ModelManifest",
     "OutputId",
     "ResultBundle",
@@ -133,18 +148,23 @@ __all__ = [
     "StudyPlan",
     "TableArtifact",
     "TextFileSource",
+    "Tokenizer",
     "Threat",
+    "Trainer",
     "Unit",
     "UnitRegistry",
     "Workflow",
+    "WorkflowContext",
     "WorkflowStep",
     "bundle_from_metrics",
     "choice",
     "compare_metric_arrays",
     "compare_runs",
     "compare_runs_errors",
+    "define_workflow",
     "estimate_budget",
     "estimate_required_repetitions",
+    "external_evaluation",
     "factor",
     "grid",
     "log_uniform",

@@ -2,50 +2,40 @@
 
 Workflows compose multiple steps into one execution. Steps can be Python functions or external commands.
 
-## Define a Python workflow step
+## Define a Python workflow
 
 ```python
 import rlab
 
-@rlab.workflow_step("project.prepare")
+@rlab.workflow(
+    "project.pipeline",
+    step="prepare",
+    description="Prepare data, train model, evaluate model.",
+)
 def prepare(ctx: rlab.WorkflowContext) -> None:
     ctx.note("Preparing inputs")
     ctx.log_metric("prepared", 1.0)
+
+
+@rlab.workflow("project.pipeline", step="train")
+def train(ctx: rlab.WorkflowContext) -> dict[str, float]:
+    return {"loss": 0.2}
 ```
 
-A workflow step may return:
+Functions with the same workflow name are composed in declaration order. A
+step may return `None`, `dict[str, float]`, or `rlab.ResultBundle`.
+
+Run it through an experiment:
 
 ```python
-None
-dict[str, float]
-rlab.ResultBundle
-```
-
-## Define a workflow
-
-```python
-@rlab.workflow("project.pipeline")
-def pipeline() -> rlab.Workflow:
-    return rlab.Workflow(
-        steps=(
-            "project.prepare",
-            "project.train",
-            "project.evaluate",
-        ),
-        description="Prepare data, train model, evaluate model.",
-    )
-```
-
-Run through an experiment:
-
-```python
-@rlab.experiment("pipeline_sweep")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="Which preprocessing method works best?",
-        matrix={"method": ["raw", "clean"]},
-        workflow="project.pipeline",
-    )
+@rlab.experiment(
+    "pipeline_sweep",
+    question="Which preprocessing method works best?",
+    matrix={"method": ["raw", "clean"]},
+    workflow="project.pipeline",
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ## WorkflowContext
@@ -78,7 +68,8 @@ You can build a workflow from objects:
 def train(ctx: rlab.WorkflowContext) -> dict[str, float]:
     return {"loss": 0.2}
 
-workflow = rlab.Workflow(
+workflow = rlab.define_workflow(
+    "project.small",
     steps=(
         rlab.WorkflowStep(name="train", fn=train),
     )
@@ -92,7 +83,8 @@ This is useful in tests or small scripts.
 Use `ExternalStep` when a step is a command-line program.
 
 ```python
-workflow = rlab.Workflow(
+workflow = rlab.define_workflow(
+    "project.external",
     steps=(
         rlab.ExternalStep(
             name="compile",

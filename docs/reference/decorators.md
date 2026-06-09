@@ -1,10 +1,10 @@
-# Decorators reference
+# Declaration reference
 
-Decorators register project objects into the active registry when a module is imported.
+`rlab` declarations register typed project objects when their module is
+imported. Decorators bind metadata to code that executes. Immutable definitions
+without Python execution use direct functional declarations.
 
 ## `@rlab.component(kind, name)`
-
-Registers a reusable component.
 
 ```python
 @rlab.component("model", "project.small")
@@ -12,15 +12,7 @@ class SmallModel:
     ...
 ```
 
-Reference:
-
-```text
-model:project.small
-```
-
 ## `@rlab.benchmark(name, target=kind)`
-
-Registers a benchmark for a component kind.
 
 ```python
 @rlab.benchmark("project.latency", target="model")
@@ -28,108 +20,97 @@ def latency(model: object, ctx: rlab.BenchmarkContext) -> dict[str, float]:
     return {"latency_ms": 10.0}
 ```
 
-## `@rlab.suite(name)`
+## `@rlab.evaluation(suite, task)`
 
-Registers an in-process evaluation suite.
-
-```python
-@rlab.suite("project.quick")
-def quick() -> rlab.EvaluationSuite:
-    return rlab.EvaluationSuite(tasks=(... ,))
-```
-
-## `@rlab.external_suite(name)`
-
-Registers an external command evaluation suite.
+Tasks sharing a suite name are composed in declaration order.
 
 ```python
-@rlab.external_suite("project.official")
-def official() -> rlab.ExternalEvaluation:
-    return rlab.ExternalEvaluation(...)
+@rlab.evaluation("project.quick", "accuracy")
+def accuracy(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return {"accuracy": evaluate(model, ctx)}
 ```
 
-## `@rlab.experiment(name)`
+## `@rlab.experiment(name, question=..., ...)`
 
-Registers an experiment definition.
+The decorated function is the per-job execution function. The decorator stores
+the immutable `Experiment` definition directly, so no provider function is
+needed.
 
 ```python
-@rlab.experiment("sweep")
-def sweep() -> rlab.Experiment:
-    return rlab.Experiment(question="...", matrix={...})
+@rlab.experiment(
+    "sweep",
+    question="Which learning rate is best?",
+    matrix={"lr": [1e-3, 1e-4]},
+    metrics=("loss",),
+)
+def sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return {"loss": train(lr=float(ctx.params["lr"]))}
 ```
 
-## `@rlab.workflow(name)`
+## `@rlab.workflow(name, step=...)`
 
-Registers a workflow.
+Steps sharing a workflow name are composed in declaration order.
 
 ```python
-@rlab.workflow("project.pipeline")
-def pipeline() -> rlab.Workflow:
-    return rlab.Workflow(steps=("project.step",))
+@rlab.workflow("project.pipeline", step="prepare")
+def prepare(ctx: rlab.WorkflowContext) -> None:
+    ctx.note("prepared")
+
+
+@rlab.workflow("project.pipeline", step="train")
+def train(ctx: rlab.WorkflowContext) -> dict[str, float]:
+    return {"loss": 0.1}
 ```
 
-## `@rlab.workflow_step(name)`
-
-Registers a workflow step.
+Use `rlab.define_workflow(...)` for explicit or external steps:
 
 ```python
-@rlab.workflow_step("project.step")
-def step(ctx: rlab.WorkflowContext) -> dict[str, float]:
-    return {"score": 1.0}
+rlab.define_workflow(
+    "project.external",
+    steps=(
+        rlab.ExternalStep(name="build", command=("make",)),
+        rlab.ExternalStep(name="run", command=("./benchmark",)),
+    ),
+)
 ```
+
+## `@rlab.study(name, question=..., ...)`
+
+Attach a study plan to an experiment declaration:
+
+```python
+@rlab.study(
+    "project.optimizers",
+    question="Which optimizer generalizes best?",
+    experiments=("optimizer_sweep",),
+    outcomes=("validation_loss",),
+)
+@rlab.experiment(
+    "optimizer_sweep",
+    question="How does optimizer choice affect validation loss?",
+    matrix={"optimizer": ["adam", "sgd"]},
+)
+def optimizer_sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
+    return run_optimizer(ctx.params)
+```
+
+## Other decorators
+
+- `@rlab.adapter(name)` registers an external adapter class.
+- `rlab.external_evaluation(...)` registers immutable external command config.
+- `@rlab.result_schema(name)` registers a result schema class.
 
 ## Dataset registration
 
-Datasets do not use decorators. Compose typed `DatasetRecipe` objects and call
-`rlab.register_datasets(rlab.DatasetCatalog(...))` once in the loaded module.
-See [Data recipes](../guides/data-pipelines.md).
+Datasets compose typed `DatasetRecipe` objects and register one
+`DatasetCatalog`. See [Data recipes](../guides/data-pipelines.md).
 
-## `@rlab.baseline(name)`
+## Versions
 
-Registers a baseline definition. The current CLI baseline store is SQLite-backed and can also be managed without decorators.
-
-```python
-@rlab.baseline("project.baseline")
-def baseline():
-    return ...
-```
-
-## `@rlab.result_schema(name)`
-
-Registers a custom result schema.
-
-```python
-@rlab.result_schema("project.training")
-class TrainingResult(rlab.ResultSchema):
-    ...
-```
-
-## Signature expectations
-
-Some registry kinds have minimum positional parameter counts:
-
-| Kind | Expected parameters |
-|---|---:|
-| benchmark | 2: target, context |
-| data source | 1: context |
-| data transform | 2: records, context |
-| data check | 2: records, context |
-| data metric | 2: records, context |
-
-## Version format
-
-Decorator versions must be semantic versions:
+Declaration versions use semantic versioning:
 
 ```python
 @rlab.benchmark("project.latency", target="model", version="1.0.0")
-def latency(...):
+def latency(model: object, ctx: rlab.BenchmarkContext) -> dict[str, float]:
     ...
-```
-
-Invalid:
-
-```text
-v1
-1
-latest
 ```

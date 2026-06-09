@@ -63,14 +63,10 @@ def length(target: object, ctx: rlab.BenchmarkContext) -> dict[str, float]:
 # evaluations/quick.py
 import rlab
 
+@rlab.evaluation("project.quick", "score")
 def score(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
+    del ctx
     return {"score": float(model(None))}
-
-@rlab.suite("project.quick")
-def quick() -> rlab.EvaluationSuite:
-    return rlab.EvaluationSuite(
-        tasks=(rlab.EvaluationTask(name="score", evaluator=score),),
-    )
 ```
 
 ## Data pipeline
@@ -114,18 +110,19 @@ rlab.register_datasets(rlab.DatasetCatalog(TINY))
 # experiments/smoke.py
 import rlab
 
-@rlab.experiment("ai_smoke")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="Does the generated AI project execute end to end?",
-        matrix={
-            "target": ["tokenizer:project.byte"],
-            "model": ["model:project.constant"],
-        },
-        benchmarks=("project.tokenizer.length",),
-        evaluations=("project.quick",),
-        metrics=("project.tokenizer.length.tokens", "project.quick.score.score"),
-    )
+@rlab.experiment(
+    "ai_smoke",
+    question="Does the generated AI project execute end to end?",
+    matrix={
+        "target": ["tokenizer:project.byte"],
+        "model": ["model:project.constant"],
+    },
+    benchmarks=("project.tokenizer.length",),
+    evaluations=("project.quick",),
+    metrics=("project.tokenizer.length.tokens", "project.quick.score.score"),
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ## Commands

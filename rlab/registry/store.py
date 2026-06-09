@@ -52,6 +52,13 @@ class Registry:
         with self._lock:
             return self._records.get(RegistryKey(kind=kind, name=name))
 
+    def replace(self, record: RegistryRecord) -> None:
+        key = RegistryKey(kind=record.kind, name=record.name)
+        with self._lock:
+            if key not in self._records:
+                raise RegistryError(f"Cannot replace missing registry entry {key}")
+            self._records[key] = record
+
     def list(self, kind: EntryKind | None = None) -> tuple[RegistryRecord, ...]:
         with self._lock:
             records: Iterable[RegistryRecord] = self._records.values()

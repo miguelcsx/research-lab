@@ -43,19 +43,20 @@ def solver_error(target: object, ctx: rlab.BenchmarkContext) -> dict[str, float]
 # experiments/solver_sweep.py
 import rlab
 
-@rlab.experiment("solver_sweep")
-def experiment() -> rlab.Experiment:
-    return rlab.Experiment(
-        question="Which solver gives the best error/runtime tradeoff?",
-        hypothesis="The spectral solver has lower error but higher runtime.",
-        matrix={
-            "target": ["solver:project.fdtd", "solver:project.spectral"],
-            "nx": [64, 128, 256],
-        },
-        benchmarks=("project.solver_error",),
-        metrics=("project.solver_error.l2_error", "project.solver_error.runtime_seconds"),
-        decision_criteria="Select the solver with lowest error under the runtime budget.",
-    )
+@rlab.experiment(
+    "solver_sweep",
+    question="Which solver gives the best error/runtime tradeoff?",
+    hypothesis="The spectral solver has lower error but higher runtime.",
+    matrix={
+        "target": ["solver:project.fdtd", "solver:project.spectral"],
+        "nx": [64, 128, 256],
+    },
+    benchmarks=("project.solver_error",),
+    metrics=("project.solver_error.l2_error", "project.solver_error.runtime_seconds"),
+    decision_criteria="Select the solver with lowest error under the runtime budget.",
+)
+def experiment(ctx: rlab.RuntimeContext) -> None:
+    del ctx
 ```
 
 ## Commands
@@ -83,21 +84,20 @@ rlab plan cost experiments/solver_sweep.py --seconds-per-job 60 --storage-gb-per
 ```python
 import rlab
 
-@rlab.workflow("compiler.benchmark")
-def compiler_benchmark() -> rlab.Workflow:
-    return rlab.Workflow(
-        steps=(
-            rlab.ExternalStep(
-                name="compile",
-                command=("clang", "-O3", "main.c", "-o", "main"),
-                timeout_seconds=60,
-            ),
-            rlab.ExternalStep(
-                name="run",
-                command=("./main",),
-                parser="project.parsers:parse_runtime",
-                timeout_seconds=60,
-            ),
-        )
+COMPILER_BENCHMARK = rlab.define_workflow(
+    "compiler.benchmark",
+    steps=(
+        rlab.ExternalStep(
+            name="compile",
+            command=("clang", "-O3", "main.c", "-o", "main"),
+            timeout_seconds=60,
+        ),
+        rlab.ExternalStep(
+            name="run",
+            command=("./main",),
+            parser="project.parsers:parse_runtime",
+            timeout_seconds=60,
+        ),
     )
+)
 ```

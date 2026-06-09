@@ -1,6 +1,4 @@
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,7 +10,7 @@ class RegistryRecord(BaseModel):
 
     kind: EntryKind
     name: str
-    value: Callable[..., Any] | type[Any]
+    value: object
     version: str = "1.0.0"
     target_kind: str | None = None
     module: str

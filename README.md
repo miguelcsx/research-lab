@@ -194,18 +194,17 @@ All code is strictly typed, comprehensively tested, and linted.
 
 ## 🎓 How It Works
 
-Projects register components, benchmarks, suites, and experiments through
-decorators. Datasets use typed recipe catalogs:
+Projects declare components, benchmarks, evaluations, experiments, and
+workflows next to the code that executes them. Datasets use typed recipe
+catalogs:
 
 ```python
 @rlab.component("kind", "name")           # reusable model/tool component
 @rlab.benchmark("name", target="kind")    # atomic performance measurement
-@rlab.suite("suite_name")                 # Python evaluation suite
-@rlab.external_suite("suite_name")        # external command evaluation
-@rlab.experiment("name")                  # declarative experiment definition
-@rlab.workflow("name")                    # composed pipeline
-@rlab.workflow_step("name")               # individual workflow step
-@rlab.baseline("name")                    # baseline definition
+@rlab.evaluation("suite_name", "task")    # composed evaluation task
+rlab.external_evaluation(...)             # external command evaluation
+@rlab.experiment("name", question="...")  # experiment metadata + execution
+@rlab.workflow("name", step="prepare")    # composed workflow step
 @rlab.result_schema("name")               # typed result schema
 
 rlab.register_datasets(rlab.DatasetCatalog(RECIPE))

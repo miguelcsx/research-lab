@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import cast
 
 from rlab.constants import EntryKind
 from rlab.context.runtime import RuntimeContext
@@ -8,7 +9,7 @@ from rlab.errors import WorkflowError
 from rlab.results.bundle import ResultBundle, bundle_from_metrics, empty_bundle
 from rlab.workflows.context import WorkflowContext
 from rlab.workflows.external import run_external_step
-from rlab.workflows.model import ExternalStep, Workflow, WorkflowStep
+from rlab.workflows.model import ExternalStep, Workflow, WorkflowFn, WorkflowStep
 
 
 def run_workflow(workflow: Workflow, ctx: RuntimeContext) -> ResultBundle:
@@ -38,12 +39,12 @@ def _resolve_step(
         record = ctx.registry.try_get(kind, step_ref)
         if record is None:
             continue
-        fn = record.value
+        fn = cast(WorkflowFn, record.value)
         return step_ref, WorkflowStep(name=step_ref, fn=fn)
 
     raise WorkflowError(
         f"Workflow step {step_ref!r} not found in registry. "
-        "Register it with @rlab.workflow_step or pass a WorkflowStep directly."
+        "Declare it with @rlab.workflow or pass a WorkflowStep directly."
     )
 
 
