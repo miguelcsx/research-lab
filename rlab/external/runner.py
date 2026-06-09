@@ -1,5 +1,7 @@
 import subprocess
+import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Protocol
 
@@ -62,9 +64,60 @@ def _capture_limited(
         return returncode, stdout, stderr
 
 
+def _stream_and_capture(
+    args: tuple[str, ...],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int | None,
+) -> tuple[int, str, str]:
+    """Run a subprocess, streaming stdout/stderr to the terminal while capturing both."""
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    stdout_bytes = 0
+    stderr_bytes = 0
+
+    def _reader(src, chunks: list[str], byte_counter: list[int], sink):
+        for line in src:
+            if byte_counter[0] < _MAX_OUTPUT_BYTES:
+                chunks.append(line)
+                byte_counter[0] += len(line)
+            sink.write(line)
+            sink.flush()
+
+    process = subprocess.Popen(
+        args,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout_counter = [0]
+    stderr_counter = [0]
+    out_thread = threading.Thread(
+        target=_reader, args=(process.stdout, stdout_chunks, stdout_counter, sys.stdout), daemon=True
+    )
+    err_thread = threading.Thread(
+        target=_reader, args=(process.stderr, stderr_chunks, stderr_counter, sys.stderr), daemon=True
+    )
+    out_thread.start()
+    err_thread.start()
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise
+    finally:
+        out_thread.join()
+        err_thread.join()
+    return returncode, "".join(stdout_chunks), "".join(stderr_chunks)
+
+
 class ShellRunner:
     def run(self, command: ExternalCommand, root: Path) -> CommandResult:
-        returncode, stdout, stderr = _capture_limited(
+        runner = _stream_and_capture if command.stream else _capture_limited
+        returncode, stdout, stderr = runner(
             command.args,
             cwd=safe_workdir(root, command.cwd),
             env=sandbox_environment(command.env),

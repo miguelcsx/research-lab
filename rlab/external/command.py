@@ -11,6 +11,7 @@ class ExternalCommand(BaseModel):
     cwd: Path | None = None
     env: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: int | None = None
+    stream: bool = False
 
     @field_validator("args", mode="before")
     @classmethod
