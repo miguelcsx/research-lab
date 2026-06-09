@@ -10,6 +10,8 @@ from rlab.constants import EntryKind
 from rlab.context.factory import build_runtime
 from rlab.context.runtime import RuntimeContext
 from rlab.data.context import DataContext
+from rlab.data.ids import OutputId
+from rlab.data.recipe import FunctionSink
 from rlab.data.runner import build_dataset
 from rlab.manifests.checksum import sha256
 from rlab.manifests.validation import validate_dataset_manifest
@@ -21,10 +23,6 @@ def _runtime(tmp_path: Path) -> RuntimeContext:
     return build_runtime(tmp_path)
 
 
-def _source(_ctx: DataContext) -> Iterable[dict[str, object]]:
-    yield {"text": " hello "}
-
-
 def _strip(
     records: Iterable[dict[str, object]],
     _ctx: DataContext,
@@ -33,35 +31,30 @@ def _strip(
         yield {**record, "text": str(record["text"]).strip()}
 
 
-def _recipe(output: Path = Path("data.jsonl")) -> rlab.DatasetRecipe[dict[str, object]]:
-    flow = rlab.DataFlow.from_source(
-        rlab.FunctionSource(rlab.SourceId("test.raw"), _source)
-    ).then(rlab.FunctionStage(rlab.StageId("test.strip"), _strip))
-    return rlab.DatasetRecipe(
-        id=rlab.DatasetId("test.dataset"),
-        flow=flow,
-        sinks=(rlab.JsonlSink(path=output),),
-        checks=(
-            rlab.FunctionCheck(
-                rlab.CheckId("test.nonempty"),
-                lambda rows, _ctx: rlab.CheckResult(bool(rows)),
-            ),
-        ),
-        metrics=(
-            rlab.FunctionMetric(
-                rlab.MetricId("test.records"),
-                lambda rows, _ctx: len(rows),
-            ),
-        ),
-        version="2",
-    )
+def _nonempty(rows: Sequence[dict[str, object]], _ctx: DataContext) -> rlab.CheckResult:
+    return rlab.CheckResult(bool(rows))
+
+
+def _record_count(rows: Sequence[dict[str, object]], _ctx: DataContext) -> int:
+    return len(rows)
 
 
 def test_typed_recipe_writes_manifest(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    with using_registry(runtime.registry):
-        rlab.register_datasets(rlab.DatasetCatalog(_recipe()))
     output = tmp_path / "run"
+
+    with using_registry(runtime.registry):
+
+        @rlab.dataset(
+            "test.dataset",
+            stages=(_strip,),
+            checks=(_nonempty,),
+            metrics=(_record_count,),
+            version="2",
+        )
+        def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
+            yield {"text": " hello "}
+
     manifest = build_dataset(
         runtime.registry,
         "test.dataset",
@@ -70,44 +63,68 @@ def test_typed_recipe_writes_manifest(tmp_path: Path) -> None:
         version="2",
     )
 
-    assert manifest.inputs == ("test.raw",)
-    assert manifest.stages == ("test.strip",)
-    assert manifest.stats == {"records": 1, "test.records": 1}
-    assert manifest.checks == {"test.nonempty": "passed"}
+    assert manifest.inputs == ("source",)
+    assert manifest.stages == ("_strip",)
+    assert manifest.stats == {"records": 1, "_record_count": 1}
+    assert manifest.checks == {"_nonempty": "passed"}
     assert manifest.outputs["data"].path.read_text() == '{"text": "hello"}\n'
     validate_dataset_manifest(manifest)
 
 
-def test_recipe_rejects_duplicate_ids() -> None:
-    source = rlab.FunctionSource(rlab.SourceId("same"), _source)
-    with pytest.raises(ValueError, match="duplicate source"):
-        rlab.DataFlow.from_sources(source, source)
+def test_dataset_rejects_duplicate_stage_names(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    with using_registry(runtime.registry):
+        with pytest.raises(ValueError, match="duplicate stage"):
+
+            @rlab.dataset("test.dup", stages=(_strip, _strip))
+            def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
+                yield {}
+
+
+def test_dataset_rejects_lambda_source(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    with using_registry(runtime.registry):
+        with pytest.raises(ValueError, match="lambdas are not allowed"):
+            rlab.dataset("test.lambda")(lambda ctx: iter([]))  # type: ignore[arg-type]
+
+
+def test_dataset_rejects_lambda_stage(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+
+    def src(_ctx: DataContext) -> Iterable[dict[str, object]]:
+        yield {}
+
+    with using_registry(runtime.registry):
+        with pytest.raises(ValueError, match="lambdas are not allowed"):
+
+            @rlab.dataset("test.lambda_stage", stages=(lambda r, c: r,))  # type: ignore[arg-type]
+            def _src(_ctx: DataContext) -> Iterable[dict[str, object]]:
+                yield {}
 
 
 def test_runner_rejects_invalid_outputs(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     output = tmp_path / "run"
+
     for path, error in (
         (Path("missing/data.jsonl"), FileNotFoundError),
         (Path("../outside.jsonl"), ValueError),
     ):
+
         def invalid_output(
             _rows: Sequence[dict[str, object]],
-            ctx: rlab.DataContext,
+            ctx: DataContext,
             value: Path = path,
         ) -> rlab.SinkResult:
-            return rlab.SinkResult(
-                outputs={rlab.OutputId("data"): ctx.work_dir / value}
-            )
+            return rlab.SinkResult(outputs={OutputId("data"): ctx.work_dir / value})
 
-        sink = rlab.FunctionSink[dict[str, object]](
-            rlab.OutputId("data"),
-            invalid_output,
-        )
-        recipe = _recipe().replace(sinks=(sink,))
         runtime.registry.clear()
         with using_registry(runtime.registry):
-            rlab.register_datasets(rlab.DatasetCatalog(recipe))
+
+            @rlab.dataset("test.dataset", sinks=(FunctionSink(OutputId("data"), invalid_output),))
+            def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
+                yield {}
+
         with pytest.raises(error):
             build_dataset(
                 runtime.registry,
@@ -117,22 +134,34 @@ def test_runner_rejects_invalid_outputs(tmp_path: Path) -> None:
             )
 
 
-def test_catalog_registers_only_dataset_entries(tmp_path: Path) -> None:
+def test_dataset_registers_only_dataset_entries(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     with using_registry(runtime.registry):
-        rlab.register_datasets(rlab.DatasetCatalog(_recipe()))
+
+        @rlab.dataset("test.only")
+        def source(_ctx: DataContext) -> Iterable[dict[str, object]]:
+            yield {}
+
     assert [record.kind for record in runtime.registry.list()] == [EntryKind.DATASET]
 
 
-def test_legacy_data_api_is_removed() -> None:
+def test_old_data_api_is_removed() -> None:
     for name in (
-        "DataPipeline",
-        "data_source",
-        "data_transform",
-        "data_builder",
-        "dataset_variant",
+        "DataFlow",
+        "DatasetRecipe",
+        "DatasetCatalog",
+        "FunctionSource",
+        "FunctionStage",
+        "FunctionCheck",
+        "FunctionMetric",
+        "FunctionSink",
+        "register_datasets",
+        "DatasetId",
+        "StageId",
+        "CheckId",
+        "MetricId",
     ):
-        assert not hasattr(rlab, name)
+        assert not hasattr(rlab, name), f"rlab.{name} should not be in the public API"
 
 
 def test_directory_checksum_includes_relative_paths(tmp_path: Path) -> None:

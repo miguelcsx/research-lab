@@ -161,6 +161,48 @@ repo = checkout_repository(
 )
 ```
 
+When official scripts write to fixed directories inside the checkout, declare
+where those directories should live in rlab artifact storage:
+
+```python
+@rlab.adapter("project.official")
+class OfficialAdapter(rlab.BaseAdapter):
+    def external_output_dirs(
+        self, ctx: rlab.AdapterContext
+    ) -> dict[str | Path, str | Path]:
+        return {
+            "external/official-eval/results": "official-eval/results",
+        }
+
+    def command(self, ctx: rlab.AdapterContext) -> rlab.ExternalCommand:
+        return rlab.ExternalCommand(
+            args=("bash", "scripts/evaluate.sh"),
+            cwd=ctx.project_path("external/official-eval"),
+        )
+```
+
+`BaseAdapter.prepare()` creates the artifact directory, migrates existing
+files, and links the external tool's fixed output path to it. Use
+`ctx.project_path(...)` and `ctx.artifact_path(...)` whenever adapter inputs
+contain project-relative paths.
+
+For version-controlled external repositories, keep the checkout immutable by
+using a per-run workspace:
+
+```python
+workspace = ctx.external_workspace(
+    "external/official-eval",
+    outputs={
+        "results": "official-eval/results",
+        "models": "official-eval/models",
+    },
+)
+```
+
+The workspace copies the checkout into the adapter sandbox, seeds existing
+output files into artifact storage once, and redirects all subsequent writes
+there. Use paths below `workspace` as the command `cwd` and repository root.
+
 ## When to use workflows
 
 Use workflows when an experiment job has ordered phases:

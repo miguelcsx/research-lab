@@ -50,9 +50,6 @@ rlab.EvaluationResult
 
 ```python
 rlab.DataContext
-rlab.DataFlow
-rlab.DatasetRecipe
-rlab.DatasetCatalog
 rlab.DataSource
 rlab.DataStage
 rlab.DataCheck
@@ -63,6 +60,11 @@ rlab.SinkResult
 rlab.DataAblation
 rlab.DataExperiment
 rlab.DatasetManifest
+rlab.JsonlSink
+rlab.JsonlSource
+rlab.TextFileSource
+rlab.HuggingFaceSource
+rlab.materialize
 ```
 
 ## Workflows
@@ -136,12 +138,13 @@ rlab.UnitRegistry
 ```python
 rlab.component
 rlab.benchmark
+rlab.dataset
 rlab.evaluation
-rlab.external_evaluation
 rlab.experiment
+rlab.external_evaluation
+rlab.study
 rlab.workflow
 rlab.result_schema
-rlab.register_datasets
 ```
 
 ## Lower-level imports

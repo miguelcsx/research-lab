@@ -110,12 +110,6 @@ from collections.abc import Iterable
 import rlab
 
 
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"text": "research"}
-    yield {"text": "lab"}
-
-
 def uppercase(
     records: Iterable[dict[str, object]],
     ctx: rlab.DataContext,
@@ -125,29 +119,11 @@ def uppercase(
         yield {**record, "text": str(record["text"]).upper()}
 
 
-flow = rlab.DataFlow.from_source(
-    rlab.FunctionSource(rlab.SourceId("project.tiny-source"), source)
-).then(rlab.FunctionStage(rlab.StageId("project.uppercase"), uppercase))
-
-TINY = rlab.DatasetRecipe(
-    id=rlab.DatasetId("project.tiny"),
-    flow=flow,
-    sinks=(rlab.JsonlSink(),),
-    checks=(
-        rlab.FunctionCheck(
-            rlab.CheckId("project.nonempty"),
-            lambda rows, _ctx: rlab.CheckResult(bool(rows)),
-        ),
-    ),
-    metrics=(
-        rlab.FunctionMetric(
-            rlab.MetricId("project.record-count"),
-            lambda rows, _ctx: len(rows),
-        ),
-    ),
-)
-
-rlab.register_datasets(rlab.DatasetCatalog(TINY))
+@rlab.dataset("project.tiny", stages=(uppercase,))
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
+    yield {"text": "research"}
+    yield {"text": "lab"}
 """
 
 _WORKFLOW_STUB = """\
@@ -417,20 +393,10 @@ from collections.abc import Iterable
 import rlab
 
 
+@rlab.dataset("{name}")
 def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
     del ctx
     yield {{"text": "example"}}
-
-
-RECIPE = rlab.DatasetRecipe(
-    id=rlab.DatasetId("{name}"),
-    flow=rlab.DataFlow.from_source(
-        rlab.FunctionSource(rlab.SourceId("{name}.raw"), source)
-    ),
-    sinks=(rlab.JsonlSink(),),
-)
-
-rlab.register_datasets(rlab.DatasetCatalog(RECIPE))
 """
 
 _NEW_REPORT = """\

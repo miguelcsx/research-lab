@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from rlab.constants import EntryKind
+from rlab.data.decorators import dataset
 from rlab.evaluations.decorators import evaluation
 from rlab.experiments.decorators import experiment
 from rlab.registry.context import current_registry
@@ -68,6 +69,7 @@ __all__ = [
     "adapter",
     "benchmark",
     "component",
+    "dataset",
     "evaluation",
     "experiment",
     "result_schema",

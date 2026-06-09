@@ -8,12 +8,6 @@ from collections.abc import Iterable
 import rlab
 
 
-def raw(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"id": "1", "text": "  Hello world  ", "source": "web"}
-    yield {"id": "2", "text": "Research lab", "source": "book"}
-
-
 def clean(
     records: Iterable[dict[str, object]],
     ctx: rlab.DataContext,
@@ -25,23 +19,16 @@ def clean(
             yield {**record, "text": text}
 
 
-flow = rlab.DataFlow.from_source(
-    rlab.FunctionSource(rlab.SourceId("corpus.raw"), raw)
-).then(rlab.FunctionStage(rlab.StageId("corpus.clean"), clean))
+def nonempty(rows: list[dict[str, object]], ctx: rlab.DataContext) -> rlab.CheckResult:
+    del ctx
+    return rlab.CheckResult(bool(rows))
 
-CLEAN = rlab.DatasetRecipe(
-    id=rlab.DatasetId("corpus.clean-v1"),
-    flow=flow,
-    sinks=(rlab.JsonlSink(),),
-    checks=(
-        rlab.FunctionCheck(
-            rlab.CheckId("corpus.nonempty"),
-            lambda rows, _ctx: rlab.CheckResult(bool(rows)),
-        ),
-    ),
-)
 
-rlab.register_datasets(rlab.DatasetCatalog(CLEAN))
+@rlab.dataset("corpus.clean-v1", stages=(clean,), checks=(nonempty,))
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    del ctx
+    yield {"id": "1", "text": "  Hello world  ", "source": "web"}
+    yield {"id": "2", "text": "Research lab", "source": "book"}
 ```
 
 Load the module from `lab.toml`:

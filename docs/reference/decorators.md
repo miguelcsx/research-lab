@@ -100,10 +100,23 @@ def optimizer_sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
 - `rlab.external_evaluation(...)` registers immutable external command config.
 - `@rlab.result_schema(name)` registers a result schema class.
 
-## Dataset registration
+## `@rlab.dataset(name, stages=..., checks=..., metrics=...)`
 
-Datasets compose typed `DatasetRecipe` objects and register one
-`DatasetCatalog`. See [Data recipes](../guides/data-pipelines.md).
+The decorated function is the source. Stages, checks, and metrics are plain
+functions; their names become the manifest IDs. Defaults to `JsonlSink()`.
+
+```python
+@rlab.dataset(
+    "project.clean",
+    stages=(strip,),
+    checks=(nonempty,),
+    metrics=(record_count,),
+)
+def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+    yield {"text": "  research  "}
+```
+
+See [Data pipelines](../guides/data-pipelines.md).
 
 ## Versions
 
