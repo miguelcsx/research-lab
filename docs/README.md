@@ -1,82 +1,51 @@
 # rlab documentation
 
-`rlab` is a local-first research runtime. It helps a researcher or research team define experiments, benchmarks, evaluations, data pipelines, workflows, artifacts, and reproducibility metadata using ordinary Python code.
+`rlab` is a local-first research runtime. It lets a team declare research objects in ordinary Python, execute them through a Rust-owned runtime, and keep durable run records that can be inspected, compared, reproduced, frozen, and handed off.
 
-This documentation is written for someone who wants to use the library, not just read the source. Start with the quickstart, then read the domain guides that match your project.
+The most important rule is:
 
-## What rlab is
+> Rust owns the product runtime. Python hosts user code.
 
-`rlab` is a Python library and CLI for reproducible research operations:
+This means users get Python-native decorators and callable execution, while the CLI, state machine, validation, artifacts, manifests, reproducibility, migrations, and stable JSON output are Rust-owned.
 
-- define reusable components with decorators;
-- define experiments as typed Python objects;
-- run benchmarks and evaluation suites;
-- build and validate datasets;
-- record metrics, parameters, notes, logs, figures, tables, artifacts, and reports;
-- capture environment and Git metadata;
-- compare, freeze, reproduce, and hand off runs.
+## Start here
 
-The core idea is simple: your research code remains normal Python, while `rlab` provides the runtime conventions around it.
+1. [Install rlab](installation.md)
+2. [Quickstart](quickstart.md)
+3. [Core concepts](concepts.md)
+4. [Configuration](configuration.md)
+5. [CLI reference](cli.md)
+6. [Python API](python-api.md)
 
-## What rlab is not
+## Topic guides
 
-`rlab` is not an AI agent, orchestration agent, notebook manager, cloud platform, training framework, or model-serving system. It does not decide what to run. A human, CLI, shell script, CI workflow, or external agent can call `rlab`, but `rlab` itself stays deterministic and local-first.
+- [Project layout and zero-config behavior](project-layout.md)
+- [Declarations and registry](registry.md)
+- [Experiments](experiments.md)
+- [Workflows](workflows.md)
+- [Benchmarks](benchmarks.md)
+- [Evaluations](evaluations.md)
+- [Data pipelines](data.md)
+- [Runs and runtime context](runs.md)
+- [Artifacts and lineage](artifacts.md)
+- [Reproducibility](reproducibility.md)
+- [Journal, notes, baselines, and search](journal-search-baselines.md)
+- [Strict production mode](strict-mode.md)
+- [Architecture](architecture.md)
+- [Python runner protocol](runner-protocol.md)
+- [Packaging and distribution](packaging.md)
+- [Troubleshooting](troubleshooting.md)
 
-## Recommended reading order
+## Guarantees
 
-1. [Getting started](getting-started/quickstart.md)
-2. [Core mental model](concepts/mental-model.md)
-3. [Project structure](getting-started/project-structure.md)
-4. [Configuration](reference/configuration.md)
-5. [Components and registry](guides/components-and-registry.md)
-6. [Experiments](guides/experiments.md)
-7. [Runs and results](guides/runs-and-results.md)
-8. [Data pipelines](guides/data-pipelines.md)
-9. [Benchmarks and evaluations](guides/benchmarks-and-evaluations.md)
-10. [Reproducibility](guides/reproducibility.md)
-11. [CLI reference](reference/cli.md)
+`rlab` is designed around these guarantees:
 
-## Documentation map
-
-| Area | Documents |
-|---|---|
-| Getting started | `getting-started/quickstart.md`, `getting-started/project-structure.md`, `getting-started/templates.md` |
-| Core concepts | `concepts/mental-model.md`, `concepts/references.md`, `concepts/runs-artifacts-lineage.md` |
-| Guides | Components, experiments, data, benchmarks, evaluations, workflows, external commands, reproducibility, governance |
-| Reference | CLI, configuration, decorators, public API, generated file layout |
-| Operations | CI, reports, freezing, handoff, troubleshooting |
-| Examples | AI project, data project, simulation/systems project |
-
-## Minimal example
-
-```python
-import rlab
-
-@rlab.component("tokenizer", "demo.byte")
-class ByteTokenizer:
-    def encode(self, text: str) -> list[int]:
-        return list(text.encode())
-
-    def decode(self, ids: list[int]) -> str:
-        return bytes(ids).decode()
-
-@rlab.benchmark("demo.token_count", target="tokenizer")
-def token_count(target: object, ctx: rlab.BenchmarkContext) -> dict[str, float]:
-    return {"tokens": float(len(target.encode("research")))}
-```
-
-Run it:
-
-```bash
-rlab bench tokenizer:demo.byte demo.token_count
-```
-
-## Design principles
-
-`rlab` is built around five constraints:
-
-1. **Local-first:** no cloud service is required.
-2. **Declarative user code:** researchers declare what exists; commands execute it.
-3. **Typed records:** configuration, manifests, results, and run metadata are Pydantic models.
-4. **Reproducible outputs:** every run produces a structured directory.
-5. **Extensible by normal Python:** projects extend `rlab` through modules and decorators, not through a plugin marketplace.
+- local-first operation;
+- zero-config first use;
+- stable machine-readable CLI output with `--json`;
+- schema versions in durable files;
+- append-only event logs where appropriate;
+- atomic writes for manifests and summaries;
+- explicit run state transitions;
+- no durable registry state based on process-local Python callable IDs;
+- strict production mode for reproducible research and CI.

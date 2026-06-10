@@ -1,42 +1,27 @@
-# Documentation index
+# Documentation summary
 
-This folder contains the complete user documentation for `rlab`.
-
-## Getting started
-- [Quickstart](getting-started/quickstart.md)
-- [Project structure](getting-started/project-structure.md)
-- [Templates](getting-started/templates.md)
-
-## Concepts
-- [Mental model](concepts/mental-model.md)
-- [References](concepts/references.md)
-- [Runs, artifacts, and lineage](concepts/runs-artifacts-lineage.md)
-
-## Guides
-- [Components and registry](guides/components-and-registry.md)
-- [Experiments](guides/experiments.md)
-- [Runs and results](guides/runs-and-results.md)
-- [Data pipelines](guides/data-pipelines.md)
-- [Benchmarks and evaluations](guides/benchmarks-and-evaluations.md)
-- [Workflows and external commands](guides/workflows-and-external.md)
-- [Reproducibility](guides/reproducibility.md)
-- [Artifacts, lineage, and invalidation](guides/artifacts-lineage-invalidation.md)
-- [Governance](guides/governance.md)
-- [Journal, search, and baselines](guides/journal-search-baselines.md)
-
-## Reference
-- [Configuration](reference/configuration.md)
-- [Decorators](reference/decorators.md)
-- [CLI](reference/cli.md)
-- [Public API](reference/public-api.md)
-- [Generated file layouts](reference/file-layouts.md)
-
-## Operations
-- [CI and quality](operations/ci-and-quality.md)
-- [Reports, freezing, and handoff](operations/reports-freezing-handoff.md)
-- [Troubleshooting](operations/troubleshooting.md)
-
-## Examples
-- [AI project](examples/ai-project.md)
-- [Data project](examples/data-project.md)
-- [Systems or simulation project](examples/systems-simulation-project.md)
+- [README](README.md)
+- [Installation](installation.md)
+- [Quickstart](quickstart.md)
+- [Core concepts](concepts.md)
+- [Project layout](project-layout.md)
+- [Configuration](configuration.md)
+- [CLI reference](cli.md)
+- [Python API](python-api.md)
+- [API reference](api-reference.md)
+- [Registry](registry.md)
+- [Experiments](experiments.md)
+- [Workflows](workflows.md)
+- [Benchmarks](benchmarks.md)
+- [Evaluations](evaluations.md)
+- [Data pipelines](data.md)
+- [Runs](runs.md)
+- [Artifacts and lineage](artifacts.md)
+- [Reproducibility](reproducibility.md)
+- [Journal, search, baselines](journal-search-baselines.md)
+- [Governance](governance.md)
+- [Strict mode](strict-mode.md)
+- [Runner protocol](runner-protocol.md)
+- [Architecture](architecture.md)
+- [Packaging](packaging.md)
+- [Troubleshooting](troubleshooting.md)
