@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import signal
 import threading
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -163,7 +165,7 @@ def _run_callable_step(
             f"Experiment.run={experiment.run!r} must reference a callable declaration"
         )
     fn = run_record.value
-    result = fn(ctx)
+    result = fn(ctx) if _fn_wants_ctx(fn) else fn()
     if isinstance(result, ResultBundle):
         bundle = bundle.merge(result)
         metrics = {**metrics, **result.as_metrics_dict()}
@@ -226,6 +228,12 @@ def _classify_exception(exc: Exception) -> FailureKind:
     if isinstance(exc, (FloatingPointError, OverflowError, ArithmeticError)):
         return FailureKind.NUMERICAL_INSTABILITY
     return FailureKind.CODE_ERROR
+
+
+@lru_cache(maxsize=128)
+def _fn_wants_ctx(fn: object) -> bool:
+    params = list(inspect.signature(fn).parameters)  # type: ignore[arg-type]
+    return len(params) > 0
 
 
 def _classify_error(message: str | None) -> FailureKind:

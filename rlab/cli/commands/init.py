@@ -48,7 +48,8 @@ def new(
     if kind not in _NEW_KINDS:
         raise typer.BadParameter(f"Unknown kind {kind!r}; available: {', '.join(_NEW_KINDS)}")
     state: CliState = ctx.obj
-    path = write_skeleton(state.root, kind, name)
+    project_module = state.root.name
+    path = write_skeleton(state.root, kind, name, project_module=project_module)
     state.console.print(f"[green]Created:[/green] {path}")
 
 

@@ -18,7 +18,7 @@ OutputT_co = TypeVar("OutputT_co", covariant=True)
 RecordT_contra = TypeVar("RecordT_contra", contravariant=True)
 
 
-class DataAction(StrEnum):
+class Action(StrEnum):
     KEEP = "keep"
     UPDATE = "update"
     DROP = "drop"
@@ -26,59 +26,65 @@ class DataAction(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class DataBoundary:
+class Boundary:
     reason: str
     metrics: Mapping[str, JsonValue] = field(default_factory=dict)
 
 
-DataItem: TypeAlias = RecordT | DataBoundary
+Item: TypeAlias = RecordT | Boundary
 
 
 @dataclass(frozen=True, slots=True)
-class DataDecision(Generic[RecordT_co]):
-    action: DataAction
+class Decision(Generic[RecordT_co]):
+    action: Action
     reason: str
     record: RecordT_co | None = None
     metrics: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        requires_record = self.action in (DataAction.KEEP, DataAction.UPDATE)
+        requires_record = self.action in (Action.KEEP, Action.UPDATE)
         if requires_record != (self.record is not None):
             raise ValueError(f"{self.action.value} decisions require record={requires_record}")
 
 
-def data_keep(
+def keep(
     record: RecordT,
     *,
     reason: str = "kept",
     metrics: Mapping[str, JsonValue] | None = None,
-) -> DataDecision[RecordT]:
-    return DataDecision(DataAction.KEEP, reason, record, metrics or {})
+) -> Decision[RecordT]:
+    return Decision(Action.KEEP, reason, record, metrics or {})
 
 
-def data_update(
+def update(
     record: RecordT,
     *,
     reason: str = "updated",
     metrics: Mapping[str, JsonValue] | None = None,
-) -> DataDecision[RecordT]:
-    return DataDecision(DataAction.UPDATE, reason, record, metrics or {})
+) -> Decision[RecordT]:
+    return Decision(Action.UPDATE, reason, record, metrics or {})
 
 
-def data_drop(
+def drop(
     reason: str,
     *,
     metrics: Mapping[str, JsonValue] | None = None,
-) -> DataDecision[object]:
-    return DataDecision(DataAction.DROP, reason, metrics=metrics or {})
+) -> Decision[object]:
+    return Decision(Action.DROP, reason, metrics=metrics or {})
 
 
-def data_boundary(
+def boundary(
     reason: str,
     *,
     metrics: Mapping[str, JsonValue] | None = None,
-) -> DataDecision[object]:
-    return DataDecision(DataAction.BOUNDARY, reason, metrics=metrics or {})
+) -> Decision[object]:
+    return Decision(Action.BOUNDARY, reason, metrics=metrics or {})
+
+
+@dataclass(slots=True)
+class ComponentMeta:
+    kind: str
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +93,7 @@ class ComponentUse:
     configuration: Mapping[str, JsonValue] = field(default_factory=dict)
 
 
-def use(reference: str, **configuration: JsonValue) -> ComponentUse:
-    return ComponentUse(reference, configuration)
-
-
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class PipelineSpec:
     name: str
     version: str
@@ -154,15 +156,15 @@ class RecordStage(Protocol[InputT_contra, OutputT_co]):
         self,
         record: InputT_contra,
         ctx: DataContext,
-    ) -> DataDecision[OutputT_co]: ...
+    ) -> Decision[OutputT_co]: ...
 
 
 class BatchStage(Protocol[InputT_contra, OutputT_co]):
     def apply(
         self,
-        records: Iterable[DataItem[InputT_contra]],
+        records: Iterable[Item[InputT_contra]],
         ctx: DataContext,
-    ) -> Iterable[DataItem[OutputT_co]]: ...
+    ) -> Iterable[Item[OutputT_co]]: ...
 
 
 class DataCheck(Protocol[RecordT_contra]):

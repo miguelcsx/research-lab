@@ -56,8 +56,7 @@ class HuggingFaceSource:
     mapper: RowMapper | None = None
     max_records: int | None = None
 
-    def read(self, ctx: DataContext) -> Iterator[Record]:
-        del ctx
+    def read(self) -> Iterator[Record]:
         try:
             load_dataset = import_module("datasets").load_dataset
         except ImportError as exc:

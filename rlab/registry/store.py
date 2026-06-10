@@ -52,6 +52,12 @@ class Registry:
         with self._lock:
             return self._records.get(RegistryKey(kind=kind, name=name))
 
+    def remove(self, kind: EntryKind, name: str) -> None:
+        """Remove a record by kind+name. No-op if absent."""
+        key = RegistryKey(kind=kind, name=name)
+        with self._lock:
+            self._records.pop(key, None)
+
     def replace(self, record: RegistryRecord) -> None:
         key = RegistryKey(kind=record.kind, name=record.name)
         with self._lock:

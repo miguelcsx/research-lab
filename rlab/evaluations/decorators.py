@@ -7,9 +7,9 @@ from rlab.constants import EntryKind
 from rlab.context.runtime import RuntimeContext
 from rlab.evaluations.suite import EvaluationSuite
 from rlab.evaluations.task import EvaluationTask
-from rlab.registry.context import current_registry
 from rlab.registry.decorators import register
 from rlab.registry.resolve import resolve_definition
+from rlab.registry.store import Registry
 from rlab.typing import Metrics
 
 EvaluationFn = TypeVar(
@@ -24,11 +24,14 @@ def evaluation(
     *,
     baselines: tuple[str, ...] = (),
     version: str = "1.0.0",
+    registry: Registry,
 ) -> Callable[[EvaluationFn], EvaluationFn]:
-    """Declare an evaluation task and compose its suite automatically."""
+    """Declare an evaluation task and compose its suite automatically.
+
+    ``registry`` is required — pass the ``Project.registry`` to register into.
+    """
 
     def decorate(evaluator: EvaluationFn) -> EvaluationFn:
-        registry = current_registry()
         definition = EvaluationTask(name=task, evaluator=evaluator)
         current = registry.try_get(EntryKind.SUITE, suite)
         if current is None:
@@ -43,14 +46,7 @@ def evaluation(
             return evaluator
 
         existing = resolve_definition(current.value, EvaluationSuite)
-        if any(item.name == task for item in existing.tasks):
-            raise ValueError(f"duplicate evaluation task {task!r} in suite {suite!r}")
-        merged = existing.model_copy(
-            update={
-                "tasks": (*existing.tasks, definition),
-                "baselines": tuple(dict.fromkeys((*existing.baselines, *baselines))),
-            }
-        )
+        merged = existing.add(definition, baselines=baselines)
         registry.replace(current.model_copy(update={"value": merged}))
         return evaluator
 

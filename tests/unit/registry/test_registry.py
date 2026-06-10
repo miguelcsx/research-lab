@@ -49,11 +49,16 @@ def test_registry_keys_names_versions_and_signature_validation() -> None:
     with pytest.raises(RegistryError):
         validate_version("v1")
 
-    def bad_benchmark(target: object) -> None:
-        del target
+    def bad_benchmark() -> None:
+        pass
 
     with pytest.raises(RegistryError):
         validate_signature(EntryKind.BENCHMARK, bad_benchmark)
+
+    def good_benchmark(target: object) -> None:
+        del target
+
+    validate_signature(EntryKind.BENCHMARK, good_benchmark)
 
 
 def test_registry_context_restores_previous_registry() -> None:

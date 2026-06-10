@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
@@ -15,11 +17,11 @@ from rlab.data.components import (
 from rlab.data.context import DataContext
 from rlab.data.manifest import dataset_manifest
 from rlab.data.model import (
+    Action,
+    Boundary,
     ComponentUse,
-    DataAction,
-    DataBoundary,
-    DataDecision,
     DatasetSpec,
+    Decision,
     PipelineSpec,
 )
 from rlab.manifests.dataset import DatasetManifest
@@ -30,6 +32,15 @@ from rlab.typing import JsonValue
 
 RECORD_STAGE_KINDS = (EntryKind.TRANSFORM, EntryKind.FILTER)
 BATCH_STAGE_KINDS = (EntryKind.GROUP, EntryKind.DEDUP)
+
+
+@lru_cache(maxsize=256)
+def _method_arity(cls: type, method_name: str) -> int:
+    method = getattr(cls, method_name, None)
+    if method is None:
+        return 0
+    params = [p for p in inspect.signature(method).parameters if p != "self"]
+    return len(params)
 
 
 @dataclass(slots=True)
@@ -140,7 +151,9 @@ def _read_source(
     )
     source_id = canonical_component(source_record)
     execution.metadata.track(source_id, source_use)
-    source_values = list(source.read(execution.data))
+    source_values = list(
+        source.read(execution.data) if _method_arity(type(source), "read") > 0 else source.read()
+    )
     execution.audit.record_source(
         source_id,
         read=len(source_values),
@@ -174,12 +187,15 @@ def _execute_pipeline(
             )
             items = _apply_record_stage(items, stage, stage_ctx)
         else:
-            items = list(stage.apply(items, execution.data))
+            items = list(
+                stage.apply(items, execution.data) if _method_arity(type(stage), "apply") > 1
+                else stage.apply(items)
+            )
         execution.audit.record_stage(stage_id, received=received, emitted=len(items))
 
-    boundaries = [item for item in items if isinstance(item, DataBoundary)]
+    boundaries = [item for item in items if isinstance(item, Boundary)]
     if boundaries:
-        reasons = ", ".join(sorted({boundary.reason for boundary in boundaries}))
+        reasons = ", ".join(sorted({b.reason for b in boundaries}))
         raise ValueError(f"pipeline left {len(boundaries)} unconsumed boundaries: {reasons}")
     return tuple(items)
 
@@ -198,7 +214,10 @@ def _write_sinks(
         )
         sink_id = canonical_component(sink_record)
         execution.metadata.track(sink_id, sink_use)
-        sink_result = sink.write(data, execution.data)
+        sink_result = (
+            sink.write(data, execution.data) if _method_arity(type(sink), "write") > 1
+            else sink.write(data)
+        )
         for output_id, path in sink_result.outputs.items():
             key = str(output_id)
             if key in results.outputs:
@@ -224,7 +243,10 @@ def _evaluate_checks(
         )
         check_id = canonical_component(check_record)
         execution.metadata.track(check_id, check_use)
-        result = check.evaluate(data, execution.data)
+        result = (
+            check.evaluate(data, execution.data) if _method_arity(type(check), "evaluate") > 1
+            else check.evaluate(data)
+        )
         results.checks[check_id] = result.manifest_status
         for key, value in result.metrics.items():
             results.stats[f"{check_id}.{key}"] = value
@@ -244,7 +266,10 @@ def _measure_metrics(
         )
         metric_id = canonical_component(metric_record)
         execution.metadata.track(metric_id, metric_use)
-        results.stats[metric_id] = metric.measure(data, execution.data)
+        results.stats[metric_id] = (
+            metric.measure(data, execution.data) if _method_arity(type(metric), "measure") > 1
+            else metric.measure(data)
+        )
 
 
 def _apply_record_stage(
@@ -254,12 +279,15 @@ def _apply_record_stage(
 ) -> list[object]:
     output: list[object] = []
     for position, item in enumerate(items):
-        if isinstance(item, DataBoundary):
+        if isinstance(item, Boundary):
             output.append(item)
             continue
-        decision = stage.apply(item, stage_ctx.data)
-        if not isinstance(decision, DataDecision):
-            raise TypeError(f"{stage_ctx.stage_id} must return DataDecision")
+        decision = (
+            stage.apply(item, stage_ctx.data) if _method_arity(type(stage), "apply") > 1
+            else stage.apply(item)
+        )
+        if not isinstance(decision, Decision):
+            raise TypeError(f"{stage_ctx.stage_id} must return Decision")
         stage_ctx.audit.record_decision(
             stage=stage_ctx.stage_id,
             source=stage_ctx.source_id,
@@ -267,10 +295,10 @@ def _apply_record_stage(
             decision=decision,
             input_record=item,
         )
-        if decision.action in (DataAction.KEEP, DataAction.UPDATE):
+        if decision.action in (Action.KEEP, Action.UPDATE):
             output.append(decision.record)
-        elif decision.action is DataAction.BOUNDARY:
-            output.append(DataBoundary(decision.reason, decision.metrics))
+        elif decision.action is Action.BOUNDARY:
+            output.append(Boundary(decision.reason, decision.metrics))
     return output
 
 

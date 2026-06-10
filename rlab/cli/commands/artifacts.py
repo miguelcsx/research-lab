@@ -71,8 +71,7 @@ def pull(
 
 
 @app.command("push")
-def push(ctx: typer.Context) -> None:
-    del ctx
+def push(_ctx: typer.Context) -> None:
     raise typer.BadParameter("Remote artifact push requires an installed backend adapter")
 
 

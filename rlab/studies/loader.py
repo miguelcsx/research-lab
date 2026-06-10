@@ -4,8 +4,6 @@ from pathlib import Path
 
 from rlab.constants import EntryKind
 from rlab.errors import RegistryError
-from rlab.experiments.loader import load_file
-from rlab.registry.context import using_registry
 from rlab.registry.resolve import resolve_definition
 from rlab.registry.store import Registry
 from rlab.studies.model import Study
@@ -13,8 +11,13 @@ from rlab.studies.model import Study
 
 def load_study(registry: Registry, path: Path) -> tuple[str, Study]:
     resolved = path.resolve()
-    with using_registry(registry):
-        load_file(resolved)
+    import rlab
+
+    project = rlab.Project(f"_study_loader_{id(registry)}", registry=registry)
+    from rlab.experiments.loader import _purge_records_from_source, _run_module_with_lab
+
+    _purge_records_from_source(registry, resolved)
+    _run_module_with_lab(resolved, project)
     matches = [
         record
         for record in registry.list(EntryKind.STUDY)

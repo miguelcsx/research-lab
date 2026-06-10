@@ -1,4 +1,6 @@
+import inspect
 from collections.abc import Callable, Mapping
+from functools import lru_cache
 from typing import Any, cast
 
 from rlab.benchmarks.context import BenchmarkContext
@@ -8,6 +10,11 @@ from rlab.constants import EntryKind
 from rlab.context.runtime import RuntimeContext
 from rlab.errors import RegistryError
 from rlab.references.parser import parse_reference
+
+
+@lru_cache(maxsize=128)
+def _benchmark_arity(fn: object) -> int:
+    return len(list(inspect.signature(fn).parameters))  # type: ignore[arg-type]
 
 
 def execute_benchmark(
@@ -33,8 +40,8 @@ def execute_benchmark(
         data=data,
         params=params or {},
     )
-    benchmark_fn = cast(Callable[[object, BenchmarkContext], object], record.value)
-    result = benchmark_fn(target_value, context)
+    benchmark_fn = cast(Callable[..., object], record.value)
+    result = benchmark_fn(target_value, context) if _benchmark_arity(benchmark_fn) > 1 else benchmark_fn(target_value)
 
     if isinstance(result, BenchmarkResult):
         return result

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,23 @@ from rlab.external.runner import ShellRunner
 
 
 class AdapterValidationError(RlabError):
-    """Raised when an adapter rejects its inputs."""
+    pass
+
+
+@lru_cache(maxsize=128)
+def _wants_ctx(cls: type, method_name: str) -> bool:
+    method = getattr(cls, method_name, None)
+    if method is None:
+        return False
+    params = [p for p in inspect.signature(method).parameters if p != "self"]
+    return len(params) > 0
+
+
+def _call(adapter: object, method_name: str, ctx: AdapterContext) -> Any:
+    method = getattr(adapter, method_name)
+    if _wants_ctx(type(adapter), method_name):
+        return method(ctx)
+    return method()
 
 
 def _resolve_adapter(runtime: RuntimeContext, adapter_name: str) -> ExternalAdapter:
@@ -43,13 +61,6 @@ def run_adapter(
     inputs: dict[str, Any] | None = None,
     work_dir: Path | None = None,
 ) -> AdapterResult:
-    """Execute an adapter end-to-end and return its result.
-
-    The lifecycle: prepare → validate_inputs → command → execute →
-    collect_outputs → parse_metrics → register_artifacts → cleanup.
-    Any validation error is raised as `AdapterValidationError`; command failures
-    propagate as `ExternalRunError` from the runner.
-    """
     adapter = _resolve_adapter(runtime, adapter_name)
     sandbox = work_dir or _default_work_dir(runtime, adapter_name)
     sandbox.mkdir(parents=True, exist_ok=True)
@@ -60,22 +71,22 @@ def run_adapter(
         inputs=dict(inputs or {}),
     )
 
-    adapter.prepare(ctx)
-    violations = adapter.validate_inputs(ctx)
+    _call(adapter, "prepare", ctx)
+    violations = _call(adapter, "validate_inputs", ctx)
     if violations:
         raise AdapterValidationError(
             f"Adapter {adapter_name!r} input validation failed: {', '.join(violations)}"
         )
 
-    command = adapter.command(ctx)
+    command = _call(adapter, "command", ctx)
     start = time.perf_counter()
     completed = ShellRunner().run(command, runtime.paths.root)
     elapsed = time.perf_counter() - start
 
-    outputs = dict(adapter.collect_outputs(ctx))
-    metrics = {str(name): float(value) for name, value in adapter.parse_metrics(ctx).items()}
-    artifacts = dict(adapter.register_artifacts(ctx.with_artifacts(outputs)))
-    adapter.cleanup(ctx)
+    outputs = dict(_call(adapter, "collect_outputs", ctx))
+    metrics = {str(name): float(value) for name, value in _call(adapter, "parse_metrics", ctx).items()}
+    artifacts = dict(_call(adapter, "register_artifacts", ctx.with_artifacts(outputs)))
+    _call(adapter, "cleanup", ctx)
 
     return AdapterResult(
         adapter=adapter_name,

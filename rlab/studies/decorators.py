@@ -1,52 +1,60 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import TypeVar
 
 from rlab.constants import EntryKind
-from rlab.registry.context import current_registry
 from rlab.registry.decorators import register
+from rlab.registry.store import Registry
 from rlab.studies.model import Study
-from rlab.typing import JsonValue
 
 Declaration = TypeVar("Declaration", bound=Callable[..., object])
 
 
-def study(  # noqa: PLR0913
-    name: str,
-    *,
-    question: str,
-    hypotheses: tuple[str, ...] = (),
-    domain: str = "general",
-    variables: Mapping[str, tuple[JsonValue, ...]] | None = None,
-    outcomes: tuple[str, ...] = (),
-    decision_rule: str = "",
-    experiments: tuple[str, ...] = (),
-    references: tuple[str, ...] = (),
-    requires: tuple[str, ...] = (),
-    version: str = "1.0.0",
-) -> Callable[[Declaration], Declaration]:
-    """Attach a study plan to an experiment or other declaration function."""
+class _StudyDecorator:
+    """Two clean entry points: plain kwargs (common) or a pre-built spec (advanced).
 
-    def decorate(declaration: Declaration) -> Declaration:
-        register(
-            current_registry(),
-            EntryKind.STUDY,
-            name,
-            Study(
-                question=question,
-                hypotheses=hypotheses,
-                domain=domain,
-                variables=variables or {},
-                outcomes=outcomes,
-                decision_rule=decision_rule,
-                experiments=experiments,
-                references=references,
-                requires=requires,
-            ),
-            version=version,
-            declared_by=declaration,
-        )
-        return declaration
+    ``registry`` is required — pass the ``Project.registry`` to register into.
+    """
 
-    return decorate
+    def __call__(
+        self,
+        name: str,
+        question: str,
+        *,
+        registry: Registry,
+        **fields: object,
+    ) -> Callable[[Declaration], Declaration]:
+        spec = Study(question=question, **fields)
+
+        def decorate(declaration: Declaration) -> Declaration:
+            self._register(registry, name, declaration, spec)
+            return declaration
+
+        return decorate
+
+    @classmethod
+    def from_spec(
+        cls,
+        name: str,
+        spec: Study,
+        *,
+        registry: Registry,
+    ) -> Callable[[Declaration], Declaration]:
+        def decorate(declaration: Declaration) -> Declaration:
+            cls()._register(registry, name, declaration, spec)
+            return declaration
+
+        return decorate
+
+    def _register(
+        self,
+        registry: Registry,
+        name: str,
+        declaration: Declaration,
+        spec: Study,
+    ) -> None:
+        register(registry, EntryKind.STUDY, name, spec, declared_by=declaration)
+
+
+study: _StudyDecorator = _StudyDecorator()

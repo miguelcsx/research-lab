@@ -5,8 +5,8 @@ from pathlib import Path
 from rlab.constants import EntryKind
 from rlab.external.command import ExternalCommand
 from rlab.external.model import ExternalEvaluation
-from rlab.registry.context import current_registry
 from rlab.registry.decorators import register
+from rlab.registry.store import Registry
 
 
 def external_evaluation(  # noqa: PLR0913
@@ -18,9 +18,12 @@ def external_evaluation(  # noqa: PLR0913
     repository: str | None = None,
     revision: str | None = None,
     version: str = "1.0.0",
+    registry: Registry,
 ) -> ExternalEvaluation:
-    """Register an immutable external evaluation without a provider function."""
+    """Register an immutable external evaluation without a provider function.
 
+    ``registry`` is required — pass the ``Project.registry`` to register into.
+    """
     resolved_command = (
         command if isinstance(command, ExternalCommand) else ExternalCommand(args=command)
     )
@@ -34,7 +37,7 @@ def external_evaluation(  # noqa: PLR0913
         revision=revision,
     )
     return register(
-        current_registry(),
+        registry,
         EntryKind.EXTERNAL_SUITE,
         name,
         definition,

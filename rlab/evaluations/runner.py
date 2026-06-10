@@ -1,4 +1,6 @@
+import inspect
 import shutil
+from functools import lru_cache
 
 import yaml
 
@@ -25,7 +27,7 @@ def execute_suite(
     tasks = tuple(
         TaskResult(
             task=task.name,
-            metrics={name: float(value) for name, value in task.evaluator(model, runtime).items()},
+            metrics={name: float(value) for name, value in _call_evaluator(task.evaluator, model, runtime).items()},
         )
         for task in suite.tasks
     )
@@ -84,3 +86,14 @@ def execute_external(
         model=model_ref,
         tasks=(TaskResult(task=suite_name, metrics=metrics),),
     )
+
+
+@lru_cache(maxsize=128)
+def _evaluator_arity(fn: object) -> int:
+    return len(list(inspect.signature(fn).parameters))  # type: ignore[arg-type]
+
+
+def _call_evaluator(evaluator: object, model: object, runtime: object) -> dict[str, float]:
+    if _evaluator_arity(evaluator) > 1:
+        return evaluator(model, runtime)  # type: ignore[operator]
+    return evaluator(model)  # type: ignore[operator]

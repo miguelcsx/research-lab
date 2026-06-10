@@ -43,5 +43,8 @@ def test_power_and_budget_estimates() -> None:
 
 def test_public_api_exports() -> None:
     assert rlab.Experiment is Experiment
-    assert callable(rlab.component)
-    assert callable(rlab.dataset)
+    # The Project form is the only entry point. Its bound methods cover
+    # the decorator surface (component, dataset, etc.).
+    lab = rlab.Project("public-api-test")
+    assert callable(lab.component)
+    assert callable(lab.dataset)

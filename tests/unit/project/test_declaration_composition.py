@@ -9,7 +9,6 @@ from rlab.evaluations.suite import EvaluationSuite
 from rlab.experiments.model import Experiment
 from rlab.experiments.plan import build_plan
 from rlab.experiments.runner import execute_experiment
-from rlab.registry.context import using_registry
 from rlab.studies.model import Study
 from rlab.workflows.model import Workflow
 from rlab.workflows.runner import run_workflow
@@ -18,18 +17,19 @@ from rlab.workflows.runner import run_workflow
 def test_experiment_decorator_registers_definition_and_run(
     runtime: RuntimeContext,
 ) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("experiment-decorator", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.experiment(
-            "test.sweep",
-            question="Which value is best?",
-            matrix={"value": [1, 2]},
-            metrics=("score",),
-        )
-        def sweep(ctx: RuntimeContext) -> dict[str, float]:
-            value = ctx.params["value"]
-            assert isinstance(value, int)
-            return {"score": float(value)}
+    @lab.experiment(
+        "test.sweep",
+        question="Which value is best?",
+        matrix={"value": [1, 2]},
+        metrics=("score",),
+    )
+    def sweep(ctx: RuntimeContext) -> dict[str, float]:
+        value = ctx.params["value"]
+        assert isinstance(value, int)
+        return {"score": float(value)}
 
     definition = runtime.registry.get(EntryKind.EXPERIMENT, "test.sweep").value
     assert isinstance(definition, Experiment)
@@ -38,15 +38,16 @@ def test_experiment_decorator_registers_definition_and_run(
 
 
 def test_evaluation_decorators_compose_one_suite(runtime: RuntimeContext) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("evaluation-decorators", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.evaluation("test.quick", "accuracy", baselines=("model:baseline",))
-        def accuracy(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
-            return {"accuracy": 1.0}
+    @lab.evaluation("test.quick", "accuracy", baselines=("model:baseline",))
+    def accuracy(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
+        return {"accuracy": 1.0}
 
-        @rlab.evaluation("test.quick", "loss")
-        def loss(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
-            return {"loss": 0.0}
+    @lab.evaluation("test.quick", "loss")
+    def loss(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
+        return {"loss": 0.0}
 
     definition = runtime.registry.get(EntryKind.SUITE, "test.quick").value
     assert isinstance(definition, EvaluationSuite)
@@ -55,15 +56,16 @@ def test_evaluation_decorators_compose_one_suite(runtime: RuntimeContext) -> Non
 
 
 def test_workflow_decorators_compose_steps_in_order(runtime: RuntimeContext) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("workflow-decorators", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.workflow("test.pipeline", step="prepare")
-        def prepare(_ctx: rlab.WorkflowContext) -> dict[str, float]:
-            return {"prepared": 1.0}
+    @lab.workflow("test.pipeline", step="prepare")
+    def prepare(_ctx: rlab.WorkflowContext) -> dict[str, float]:
+        return {"prepared": 1.0}
 
-        @rlab.workflow("test.pipeline", step="train")
-        def train(_ctx: rlab.WorkflowContext) -> dict[str, float]:
-            return {"trained": 1.0}
+    @lab.workflow("test.pipeline", step="train")
+    def train(_ctx: rlab.WorkflowContext) -> dict[str, float]:
+        return {"trained": 1.0}
 
     definition = runtime.registry.get(EntryKind.WORKFLOW, "test.pipeline").value
     assert isinstance(definition, Workflow)
@@ -78,52 +80,76 @@ def test_workflow_decorators_compose_steps_in_order(runtime: RuntimeContext) -> 
 
 
 def test_composed_declarations_reject_duplicate_names(runtime: RuntimeContext) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("duplicate-task", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.evaluation("test.duplicate", "score")
-        def first(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
-            return {"score": 1.0}
+    @lab.evaluation("test.duplicate", "score")
+    def first(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
+        return {"score": 1.0}
 
-        with pytest.raises(ValueError, match="duplicate evaluation task"):
+    with pytest.raises(ValueError, match="duplicate task"):
 
-            @rlab.evaluation("test.duplicate", "score")
-            def second(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
-                return {"score": 2.0}
+        @lab.evaluation("test.duplicate", "score")
+        def second(_model: object, _ctx: RuntimeContext) -> dict[str, float]:
+            return {"score": 2.0}
 
 
 def test_study_attaches_to_experiment_declaration(runtime: RuntimeContext) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("study-attaches", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.study(
-            "test.study",
-            question="Which value is best?",
-            experiments=("test.study.sweep",),
-            outcomes=("score",),
-        )
-        @rlab.experiment(
-            "test.study.sweep",
-            question="How does value affect score?",
-            matrix={"value": [1]},
-        )
-        def sweep(_ctx: RuntimeContext) -> dict[str, float]:
-            return {"score": 1.0}
+    @lab.study(
+        "test.study",
+        question="Which value is best?",
+        experiments=("test.study.sweep",),
+        outcomes=("score",),
+    )
+    @lab.experiment(
+        "test.study.sweep",
+        question="How does value affect score?",
+        matrix={"value": [1]},
+    )
+    def sweep(_ctx: RuntimeContext) -> dict[str, float]:
+        return {"score": 1.0}
 
     definition = runtime.registry.get(EntryKind.STUDY, "test.study").value
     assert isinstance(definition, Study)
     assert definition.experiments == ("test.study.sweep",)
 
 
+def test_experiment_from_spec_shares_a_pre_built_spec(
+    runtime: RuntimeContext,
+) -> None:
+    lab = rlab.Project("experiment-from-spec", root=runtime.paths.root)
+    runtime.registry = lab.registry
+    shared = rlab.Experiment(
+        question="Which value is best?",
+        matrix={"value": [1]},
+        metrics=("score",),
+    )
+
+    @lab.experiment_from_spec("test.shared", shared)
+    def sweep(_ctx: RuntimeContext) -> dict[str, float]:
+        return {"score": 1.0}
+
+    definition = runtime.registry.get(EntryKind.EXPERIMENT, "test.shared").value
+    assert isinstance(definition, Experiment)
+    assert definition.question == "Which value is best?"
+    assert definition.run == "test.shared"
+
+
 def test_define_workflow_registers_explicit_steps(runtime: RuntimeContext) -> None:
-    with using_registry(runtime.registry):
-        definition = rlab.define_workflow(
-            "test.explicit",
-            steps=(
-                rlab.WorkflowStep(
-                    name="score",
-                    fn=lambda: {"score": 1.0},
-                ),
+    lab = rlab.Project("define-workflow", root=runtime.paths.root)
+    runtime.registry = lab.registry
+    definition = lab.define_workflow(
+        "test.explicit",
+        steps=(
+            rlab.WorkflowStep(
+                name="score",
+                fn=lambda: {"score": 1.0},
             ),
-        )
+        ),
+    )
 
     assert runtime.registry.get(EntryKind.WORKFLOW, "test.explicit").value is definition
     assert run_workflow(definition, runtime).metric("score") is not None

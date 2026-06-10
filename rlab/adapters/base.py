@@ -16,10 +16,6 @@ class ExternalAdapter(Protocol):
     parse its output, and surface the produced files as artifacts. The runner
     calls each hook in the documented order; every hook is optional except
     `command`, which must return the actual `ExternalCommand` to execute.
-
-    Methods receive an `AdapterContext` snapshot — adapters should not mutate
-    global state. Return values are merged back into the context for later
-    hooks.
     """
 
     name: str
@@ -48,27 +44,22 @@ class BaseAdapter:
 
     def external_output_dirs(self, ctx: AdapterContext) -> Mapping[str | Path, str | Path]:
         """Map fixed external-tool output directories into artifact storage."""
-        del ctx
         return {}
 
-    def validate_inputs(self, ctx: AdapterContext) -> tuple[str, ...]:
-        del ctx
+    def validate_inputs(self) -> tuple[str, ...]:
         return ()
 
     def command(self, ctx: AdapterContext) -> ExternalCommand:
         raise NotImplementedError("ExternalAdapter subclasses must implement .command()")
 
-    def collect_outputs(self, ctx: AdapterContext) -> Mapping[str, Path]:
-        del ctx
+    def collect_outputs(self) -> Mapping[str, Path]:
         return {}
 
-    def parse_metrics(self, ctx: AdapterContext) -> Mapping[str, float]:
-        del ctx
+    def parse_metrics(self) -> Mapping[str, float]:
         return {}
 
-    def register_artifacts(self, ctx: AdapterContext) -> Mapping[str, Path]:
-        del ctx
+    def register_artifacts(self) -> Mapping[str, Path]:
         return {}
 
-    def cleanup(self, ctx: AdapterContext) -> None:
-        del ctx
+    def cleanup(self) -> None:
+        pass

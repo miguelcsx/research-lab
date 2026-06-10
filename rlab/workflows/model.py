@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -39,3 +41,25 @@ class Workflow(BaseModel):
     steps: tuple[str | WorkflowStep | ExternalStep, ...]
     description: str = ""
     cache_steps: bool = False
+
+    def add(
+        self,
+        step: "str | WorkflowStep | ExternalStep",
+        *,
+        description: str = "",
+        cache_steps: bool = False,
+    ) -> "Workflow":
+        """Return a new workflow with `step` appended; merge description/cache_steps once."""
+        if isinstance(step, WorkflowStep):
+            if any(
+                isinstance(existing, WorkflowStep) and existing.name == step.name
+                for existing in self.steps
+            ):
+                raise ValueError(f"duplicate workflow step {step.name!r}")
+        return self.model_copy(
+            update={
+                "steps": (*self.steps, step),
+                "description": self.description or description,
+                "cache_steps": self.cache_steps or cache_steps,
+            }
+        )

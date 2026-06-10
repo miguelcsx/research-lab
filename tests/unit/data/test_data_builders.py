@@ -12,8 +12,8 @@ from rlab.context.factory import build_runtime
 from rlab.context.runtime import RuntimeContext
 from rlab.data.context import DataContext
 from rlab.data.runner import build_dataset
+from rlab.data.sinks import register_builtin_sinks
 from rlab.manifests.validation import validate_dataset_manifest
-from rlab.registry.context import using_registry
 from rlab.typing import JsonValue
 
 Record = dict[str, JsonValue]
@@ -25,57 +25,59 @@ def _runtime(tmp_path: Path) -> RuntimeContext:
 
 
 def _declare_pipeline(runtime: RuntimeContext, *, audit: rlab.AuditPolicy | None = None) -> None:
-    with using_registry(runtime.registry):
+    lab = rlab.Project("data-builders-test", root=runtime.paths.root)
+    # Point the runtime at the project's registry so downstream lookups work.
+    runtime.registry = lab.registry
+    # The built-in sinks live in the registry that ``build_runtime`` set up.
+    # Re-register them on the new (Project) registry so dataset runs can find
+    # e.g. ``sink:rlab.jsonl``.
+    register_builtin_sinks(runtime.registry)
 
-        @rlab.source("test.source", version="1.1.0")
-        @dataclass(frozen=True, slots=True)
-        class Source:
-            limit: int = 2
+    @lab.source("test.source", version="1.1.0")
+    @dataclass(frozen=True, slots=True)
+    class Source:
+        limit: int = 2
 
-            def read(self, _ctx: DataContext) -> Iterable[Record]:
-                yield from ({"text": " hello "}, {"text": ""})[: self.limit]
+        def read(self, _ctx: DataContext) -> Iterable[Record]:
+            yield from ({"text": " hello "}, {"text": ""})[: self.limit]
 
-        @rlab.transform("test.strip", version="2.0.0")
-        @dataclass(frozen=True, slots=True)
-        class Strip:
-            def apply(self, record: Record, _ctx: DataContext) -> rlab.DataDecision[Record]:
-                text = str(record["text"]).strip()
-                if not text:
-                    return rlab.data_drop("empty")
-                return rlab.data_update({**record, "text": text}, reason="stripped")
+    @lab.transform("test.strip", version="2.0.0")
+    @dataclass(frozen=True, slots=True)
+    class Strip:
+        def apply(self, record: Record, _ctx: DataContext) -> rlab.Decision[Record]:
+            text = str(record["text"]).strip()
+            if not text:
+                return rlab.drop("empty")
+            return rlab.update({**record, "text": text}, reason="stripped")
 
-        @rlab.check("test.nonempty")
-        @dataclass(frozen=True, slots=True)
-        class Nonempty:
-            def evaluate(self, records: Sequence[Record], _ctx: DataContext) -> rlab.CheckResult:
-                return rlab.CheckResult(bool(records))
+    @lab.check("test.nonempty")
+    @dataclass(frozen=True, slots=True)
+    class Nonempty:
+        def evaluate(self, records: Sequence[Record], _ctx: DataContext) -> rlab.CheckResult:
+            return rlab.CheckResult(bool(records))
 
-        @rlab.metric("test.record_count")
-        @dataclass(frozen=True, slots=True)
-        class RecordCount:
-            def measure(self, records: Sequence[Record], _ctx: DataContext) -> JsonValue:
-                return len(records)
+    @lab.metric("test.record_count")
+    @dataclass(frozen=True, slots=True)
+    class RecordCount:
+        def measure(self, records: Sequence[Record], _ctx: DataContext) -> JsonValue:
+            return len(records)
 
-        @rlab.pipeline(
-            "test.pipeline",
-            stages=(rlab.use("transform:test.strip"),),
-            version="3.0.0",
-        )
-        class Pipeline:
-            pass
+    test_pipeline = lab.pipeline(
+        "test.pipeline",
+        rlab.ComponentUse("transform:test.strip"),
+        version="3.0.0",
+    )
 
-        @rlab.dataset(
-            "test.dataset",
-            source=rlab.use("source:test.source"),
-            pipeline="pipeline:test.pipeline",
-            sinks=(rlab.use("sink:rlab.jsonl"),),
-            checks=(rlab.use("check:test.nonempty"),),
-            metrics=(rlab.use("metric:test.record_count"),),
-            audit=audit,
-            version="4.0.0",
-        )
-        class Dataset:
-            pass
+    lab.dataset(
+        "test.dataset",
+        source=rlab.ComponentUse("source:test.source"),
+        pipeline=test_pipeline,
+        sinks=(rlab.ComponentUse("sink:rlab.jsonl"),),
+        checks=(rlab.ComponentUse("check:test.nonempty"),),
+        metrics=(rlab.ComponentUse("metric:test.record_count"),),
+        audit=audit,
+        version="4.0.0",
+    )
 
 
 def test_declarative_dataset_writes_versioned_manifest_and_audit(tmp_path: Path) -> None:
@@ -135,47 +137,42 @@ def test_typed_source_override_is_validated(tmp_path: Path) -> None:
 
 def test_boundaries_bypass_record_stages_and_must_be_consumed(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    with using_registry(runtime.registry):
+    lab = rlab.Project("boundaries", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.source("test.boundaries")
-        @dataclass(frozen=True, slots=True)
-        class Source:
-            def read(self, _ctx: DataContext) -> Iterable[Record]:
-                yield {"text": "break"}
-                yield {"text": "value"}
+    @lab.source("test.boundaries")
+    @dataclass(frozen=True, slots=True)
+    class Source:
+        def read(self, _ctx: DataContext) -> Iterable[Record]:
+            yield {"text": "break"}
+            yield {"text": "value"}
 
-        @rlab.transform("test.boundary")
-        @dataclass(frozen=True, slots=True)
-        class Boundary:
-            def apply(self, record: Record, _ctx: DataContext) -> rlab.DataDecision[Record]:
-                if record["text"] == "break":
-                    return rlab.data_boundary("document")
-                return rlab.data_keep(record)
+    @lab.transform("test.boundary")
+    @dataclass(frozen=True, slots=True)
+    class BoundaryTransform:
+        def apply(self, record: Record, _ctx: DataContext) -> rlab.Decision[Record]:
+            if record["text"] == "break":
+                return rlab.boundary("document")
+            return rlab.keep(record)
 
-        @rlab.filter("test.must_not_see_boundary")
-        @dataclass(frozen=True, slots=True)
-        class Filter:
-            def apply(self, record: Record, _ctx: DataContext) -> rlab.DataDecision[Record]:
-                return rlab.data_keep(record)
+    @lab.filter("test.must_not_see_boundary")
+    @dataclass(frozen=True, slots=True)
+    class Filter:
+        def apply(self, record: Record, _ctx: DataContext) -> rlab.Decision[Record]:
+            return rlab.keep(record)
 
-        @rlab.pipeline(
-            "test.boundary_pipeline",
-            stages=(
-                rlab.use("transform:test.boundary"),
-                rlab.use("filter:test.must_not_see_boundary"),
-            ),
-        )
-        class Pipeline:
-            pass
+    boundary_pipeline = lab.pipeline(
+        "test.boundary_pipeline",
+        rlab.ComponentUse("transform:test.boundary"),
+        rlab.ComponentUse("filter:test.must_not_see_boundary"),
+    )
 
-        @rlab.dataset(
-            "test.boundary_dataset",
-            source=rlab.use("source:test.boundaries"),
-            pipeline="pipeline:test.boundary_pipeline",
-            sinks=(rlab.use("sink:rlab.jsonl"),),
-        )
-        class Dataset:
-            pass
+    lab.dataset(
+        "test.boundary_dataset",
+        source=rlab.ComponentUse("source:test.boundaries"),
+        pipeline=boundary_pipeline,
+        sinks=(rlab.ComponentUse("sink:rlab.jsonl"),),
+    )
 
     with pytest.raises(ValueError, match="unconsumed boundaries"):
         build_dataset(
@@ -188,17 +185,17 @@ def test_boundaries_bypass_record_stages_and_must_be_consumed(tmp_path: Path) ->
 
 def test_declarations_require_dataclasses_and_semver(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    with using_registry(runtime.registry), pytest.raises(TypeError, match="requires a dataclass"):
+    lab = rlab.Project("semver", root=runtime.paths.root)
+    runtime.registry = lab.registry
 
-        @rlab.source("test.invalid")
+    with pytest.raises(TypeError, match="requires a dataclass"):
+
+        @lab.source("test.invalid")
         class Invalid:
             pass
 
-    with using_registry(runtime.registry), pytest.raises(Exception, match="semantic version"):
-
-        @rlab.pipeline("test.invalid", stages=(), version="1")
-        class InvalidVersion:
-            pass
+    with pytest.raises(Exception, match="semantic version"):
+        lab.pipeline("test.invalid", version="1")
 
 
 def test_dataset_registers_semantic_entries(tmp_path: Path) -> None:
@@ -209,8 +206,3 @@ def test_dataset_registers_semantic_entries(tmp_path: Path) -> None:
     assert EntryKind.PIPELINE in kinds
     assert EntryKind.SOURCE in kinds
     assert EntryKind.TRANSFORM in kinds
-
-
-def test_legacy_dataset_api_is_removed() -> None:
-    for name in ("DataFlow", "DataStage"):
-        assert not hasattr(rlab, name)

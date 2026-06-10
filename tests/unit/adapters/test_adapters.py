@@ -11,13 +11,12 @@ from rlab.context.runtime import RuntimeContext
 
 def test_base_adapter_noops() -> None:
     adapter = BaseAdapter()
-    ctx = object()
-    adapter.prepare(ctx)  # type: ignore[arg-type]
-    assert adapter.validate_inputs(ctx) == ()  # type: ignore[arg-type]
-    assert adapter.collect_outputs(ctx) == {}  # type: ignore[arg-type]
-    assert adapter.parse_metrics(ctx) == {}  # type: ignore[arg-type]
-    assert adapter.register_artifacts(ctx) == {}  # type: ignore[arg-type]
-    adapter.cleanup(ctx)  # type: ignore[arg-type]
+    adapter.prepare(object())  # type: ignore[arg-type]
+    assert adapter.validate_inputs() == ()
+    assert adapter.collect_outputs() == {}
+    assert adapter.parse_metrics() == {}
+    assert adapter.register_artifacts() == {}
+    adapter.cleanup()
 
 
 def test_base_adapter_command_raises() -> None:
@@ -74,7 +73,6 @@ def test_base_adapter_prepares_declared_external_output_dirs(
 ) -> None:
     class Adapter(BaseAdapter):
         def external_output_dirs(self, ctx: AdapterContext) -> dict[str | Path, str | Path]:
-            del ctx
             return {"external/tool/results": "eval/results"}
 
     ctx = AdapterContext(runtime=runtime, adapter="example", work_dir=runtime.paths.cache)

@@ -47,22 +47,27 @@ _GITIGNORE = ".venv/\n.rlab/\nruns/\nartifacts/\n"
 _SMOKE_EXPERIMENT = """\
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.experiment(
+
+@lab.experiment(
     "000_smoke",
     question="Does the generated project execute?",
-    matrix={"target": ["tokenizer:project.byte"]},
+    matrix={{"target": ["tokenizer:project.byte"]}},
     benchmarks=("project.tokenizer.length",),
 )
-def experiment(ctx: rlab.RuntimeContext) -> None:
-    del ctx
+def experiment() -> None:
+    pass
 """
+
 
 _COMPONENT_STUB = """\
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.component("tokenizer", "project.byte")
+
+@lab.component("tokenizer", "project.byte")
 class ByteTokenizer:
     def encode(self, text: str) -> list[int]:
         return list(text.encode())
@@ -71,20 +76,26 @@ class ByteTokenizer:
         return bytes(ids).decode()
 """
 
+
 _MODEL_STUB = """\
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.component("model", "project.constant")
+
+@lab.component("model", "project.constant")
 class ConstantModel:
     def __call__(self, inputs: object) -> float:
         return 1.0
 """
 
+
 _BENCHMARK_STUB = """\
 from typing import Protocol
 
 import rlab
+
+lab = rlab.Project("{name}")
 
 
 class Encoder(Protocol):
@@ -93,26 +104,28 @@ class Encoder(Protocol):
     def encode(self, text: str) -> list[int]: ...
 
 
-@rlab.benchmark("project.tokenizer.length", target="tokenizer")
-def length(target: Encoder, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
-    del ctx
+@lab.benchmark("project.tokenizer.length", target="tokenizer")
+def length(target: Encoder) -> rlab.ResultBundle:
     tokens = target.encode("research")
     return rlab.ResultBundle(
         metrics=(rlab.Metric(name="tokens", value=float(len(tokens))),),
     )
 """
 
+
 _SUITE_STUB = """\
 from collections.abc import Callable
 
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.evaluation("project.quick", "score")
-def score(model: Callable[[object], float], ctx: rlab.RuntimeContext) -> dict[str, float]:
-    del ctx
+
+@lab.evaluation("project.quick", "score")
+def score(model: Callable[[object], float]) -> dict[str, float]:
     return {"score": float(model(None))}
 """
+
 
 _DATA_STUB = """\
 from collections.abc import Iterable
@@ -120,53 +133,46 @@ from dataclasses import dataclass
 
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.source("project.tiny")
+
+@lab.source("project.tiny")
 @dataclass(frozen=True, slots=True)
 class TinySource:
     limit: int = 2
 
-    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-        del ctx
+    def read(self) -> Iterable[dict[str, object]]:
         records = ({"text": "research"}, {"text": "lab"})
         yield from records[: self.limit]
 
 
-@rlab.transform("project.uppercase")
+@lab.transform("project.uppercase")
 @dataclass(frozen=True, slots=True)
 class Uppercase:
-    def apply(
-        self,
-        record: dict[str, object],
-        ctx: rlab.DataContext,
-    ) -> rlab.DataDecision[dict[str, object]]:
-        del ctx
-        return rlab.data_update({**record, "text": str(record["text"]).upper()})
+    def apply(self, record: dict[str, object]) -> rlab.Decision[dict[str, object]]:
+        return rlab.update({**record, "text": str(record["text"]).upper()})
 
 
-@rlab.pipeline(
-    "project.tiny",
-    stages=(rlab.use("transform:project.uppercase"),),
+tiny_pipeline = lab.pipeline(
+    "project.tiny", rlab.ComponentUse("transform:project.uppercase")
 )
-class TinyPipeline:
-    pass
 
-
-@rlab.dataset(
+lab.dataset(
     "project.tiny",
-    source=rlab.use("source:project.tiny"),
-    pipeline="pipeline:project.tiny",
-    sinks=(rlab.use("sink:rlab.jsonl"),),
+    source=rlab.ComponentUse("source:project.tiny"),
+    pipeline=tiny_pipeline,
+    sinks=(rlab.ComponentUse("sink:rlab.jsonl"),),
 )
-class TinyDataset:
-    pass
 """
+
 
 _WORKFLOW_STUB = """\
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.workflow(
+
+@lab.workflow(
     "project.main",
     step="step_one",
     description="Main project workflow",
@@ -175,14 +181,24 @@ def step_one(ctx: rlab.WorkflowContext) -> None:
     ctx.note("Implement this workflow step.")
 """
 
+
 _SOLVER_STUB = """\
 import rlab
 
+lab = rlab.Project("{name}")
 
-@rlab.component("solver", "project.basic")
+
+@lab.component("solver", "project.basic")
 class BasicSolver:
     def solve(self, inputs: object) -> dict[str, float]:
         return {"result": 1.0}
+"""
+
+
+_PROJECT_PY = """\
+import rlab
+
+lab = rlab.Project("{name}")
 """
 
 
@@ -385,8 +401,10 @@ _TEMPLATES: dict[str, ProjectTemplate] = {
 _NEW_EXPERIMENT = """\
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.experiment(
+
+@lab.experiment(
     "{name}",
     question="What is the research question?",
     hypothesis="What do you expect to find?",
@@ -394,17 +412,18 @@ import rlab
         "param": ["value_a", "value_b"],
     }},
 )
-def experiment(ctx: rlab.RuntimeContext) -> None:
-    del ctx
+def experiment() -> None:
+    pass
 """
 
 _NEW_BENCHMARK = """\
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.benchmark("{name}", target="component_kind")
-def benchmark(target: object, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
-    del target, ctx
+
+@lab.benchmark("{name}", target="component_kind")
+def benchmark(target: object) -> rlab.ResultBundle:
     return rlab.ResultBundle(
         metrics=(rlab.Metric(name="score", value=0.0),),
     )
@@ -413,8 +432,10 @@ def benchmark(target: object, ctx: rlab.BenchmarkContext) -> rlab.ResultBundle:
 _NEW_WORKFLOW = """\
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.workflow(
+
+@lab.workflow(
     "{name}",
     step="step_one",
     description="Describe what this workflow does.",
@@ -429,28 +450,24 @@ from dataclasses import dataclass
 
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.source("{name}")
+
+@lab.source("{name}")
 @dataclass(frozen=True, slots=True)
 class Source:
-    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-        del ctx
+    def read(self) -> Iterable[dict[str, object]]:
         yield {{"text": "example"}}
 
 
-@rlab.pipeline("{name}", stages=())
-class Pipeline:
-    pass
+data_pipeline = lab.pipeline("{name}")
 
-
-@rlab.dataset(
+lab.dataset(
     "{name}",
-    source=rlab.use("source:{name}"),
-    pipeline="pipeline:{name}",
-    sinks=(rlab.use("sink:rlab.jsonl"),),
+    source=rlab.ComponentUse("source:{name}"),
+    pipeline=data_pipeline,
+    sinks=(rlab.ComponentUse("sink:rlab.jsonl"),),
 )
-class Dataset:
-    pass
 """
 
 _NEW_REPORT = """\
@@ -458,6 +475,8 @@ _NEW_REPORT = """\
 # Auto-generated by rlab new report {name}
 
 import rlab
+
+from {project_module}.project import lab
 
 
 def generate(run_dir, ctx):
@@ -468,8 +487,10 @@ def generate(run_dir, ctx):
 _NEW_ADAPTER = """\
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.adapter("{name}")
+
+@lab.adapter("{name}")
 class MyAdapter(rlab.BaseAdapter):
     def command(self, ctx: rlab.AdapterContext) -> rlab.ExternalCommand:
         return rlab.ExternalCommand(
@@ -480,8 +501,10 @@ class MyAdapter(rlab.BaseAdapter):
 _NEW_CAUSAL_EXPERIMENT = """\
 import rlab
 
+from {project_module}.project import lab
 
-@rlab.experiment(
+
+@lab.experiment(
     "{name}",
     question="What is the causal effect of X on Y?",
     hypothesis="X causes Y through mechanism Z.",
@@ -497,8 +520,8 @@ import rlab
         "Limited sample size may reduce statistical power.",
     ),
 )
-def experiment(ctx: rlab.RuntimeContext) -> None:
-    del ctx
+def experiment() -> None:
+    pass
 """
 
 _NEW_TEMPLATES = {
@@ -529,6 +552,8 @@ def write_project(root: Path, name: str, template: str = "ai") -> Path:
         pkg.mkdir(parents=True, exist_ok=True)
         (pkg / "__init__.py").write_text("")
 
+    (project / "project.py").write_text(_PROJECT_PY.format(name=name))
+
     (project / "lab.toml").write_text(
         _LAB_TOML_BASE.format(name=name, module_lines="\n".join(module_lines) + "\n")
     )
@@ -544,7 +569,16 @@ def write_project(root: Path, name: str, template: str = "ai") -> Path:
     for rel, content in files.items():
         path = project / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        # Templates use ``{{`` and ``}}`` to denote literal Python braces
+        # (dict literals, f-string syntax in user code, etc.) and ``{name}``
+        # / ``{project_module}`` for substitutions. First substitute the
+        # named tokens, then unescape the doubled braces.
+        path.write_text(
+            content.replace("{project_module}", name)
+            .replace("{name}", name)
+            .replace("{{", "{")
+            .replace("}}", "}")
+        )
 
     (project / "manifests" / "README.md").write_text("# Manifests\n")
     (project / ".gitignore").write_text(_GITIGNORE)
@@ -552,12 +586,16 @@ def write_project(root: Path, name: str, template: str = "ai") -> Path:
     return project
 
 
-def write_skeleton(root: Path, kind: str, name: str) -> Path:
-    """Generate an annotated skeleton file for `rlab new <kind> <name>`."""
+def write_skeleton(root: Path, kind: str, name: str, project_module: str) -> Path:
+    """Generate an annotated skeleton file for `rlab new <kind> <name>`.
+
+    The skeleton imports :data:`lab` from the project's ``project.py`` so it
+    shares the same Project/Registry as the rest of the project.
+    """
     template = _NEW_TEMPLATES.get(kind)
     if template is None:
         raise ValueError(f"Unknown skeleton kind {kind!r}; available: {', '.join(_NEW_TEMPLATES)}")
-    content = template.format(name=name)
+    content = template.format(name=name, project_module=project_module)
     # Derive a sensible output path: kind determines directory
     dir_map = {
         "experiment": "experiments",

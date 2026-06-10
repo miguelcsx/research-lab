@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from rlab.data.model import AuditPolicy, DataAction, DataDecision
+from rlab.data.model import Action, AuditPolicy, Decision
 from rlab.typing import JsonValue
 
 SUMMARY_FILE = "summary.json"
@@ -55,13 +55,13 @@ class AuditRecorder:
         stage: str,
         source: str,
         position: int,
-        decision: DataDecision[Any],
+        decision: Decision[Any],
         input_record: object,
     ) -> None:
         action = decision.action.value
         self.actions[action] += 1
         self.stage_actions[stage][action] += 1
-        if decision.action is DataAction.DROP:
+        if decision.action is Action.DROP:
             self.drop_reasons[decision.reason] += 1
         row: dict[str, JsonValue] = {
             "stage": stage,
@@ -108,12 +108,12 @@ class AuditRecorder:
         )
         _write_csv(
             stage_summary,
-            ("stage", "received", "emitted", *tuple(action.value for action in DataAction)),
+            ("stage", "received", "emitted", *tuple(action.value for action in Action)),
             (
                 {
                     "stage": stage,
                     **{key: counts.get(key, 0) for key in ("received", "emitted")},
-                    **{action.value: counts.get(action.value, 0) for action in DataAction},
+                    **{action.value: counts.get(action.value, 0) for action in Action},
                 }
                 for stage, counts in self.stage_actions.items()
             ),

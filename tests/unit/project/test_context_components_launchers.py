@@ -5,7 +5,6 @@ from typing import Protocol, runtime_checkable
 
 import pytest
 
-from rlab.benchmarks.context import BenchmarkContext
 from rlab.components.builders import build_component
 from rlab.components.loader import load_component
 from rlab.components.specs import BuildSpec, ComponentSpec
@@ -50,8 +49,7 @@ def test_context_component_and_testing_helpers(project: Path, runtime: RuntimeCo
 
     fake = FakeTokenizer()
     assert fake.decode(fake.encode("ab")) == "xx"
-    context = BenchmarkContext(runtime=runtime, benchmark="fake", target="tokenizer:fake")
-    assert count_tokens(fake, context) == {"tokens": 4.0}
+    assert count_tokens(fake) == {"tokens": 4.0}
     with pytest.raises(RuntimeError):
         runtime.artifact_path("x")
 

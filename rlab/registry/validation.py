@@ -8,8 +8,9 @@ from rlab.errors import RegistryError
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
-EXPECTED_PARAMETERS = {
-    EntryKind.BENCHMARK: 2,
+# Callables may receive (target) or (target, ctx) — ctx is optional.
+MIN_PARAMETERS = {
+    EntryKind.BENCHMARK: 1,
 }
 
 
@@ -20,8 +21,8 @@ def validate_version(version: str) -> str:
 
 
 def validate_signature(kind: EntryKind, value: object) -> None:
-    expected = EXPECTED_PARAMETERS.get(kind)
-    if expected is None or inspect.isclass(value) or not callable(value):
+    minimum = MIN_PARAMETERS.get(kind)
+    if minimum is None or inspect.isclass(value) or not callable(value):
         return
     function = cast(Callable[..., Any], value)
     signature = inspect.signature(function)
@@ -31,7 +32,7 @@ def validate_signature(kind: EntryKind, value: object) -> None:
         if parameter.kind
         in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
-    if len(positional) < expected:
+    if len(positional) < minimum:
         raise RegistryError(
-            f"{kind.value} {function.__qualname__!r} requires at least {expected} parameters"
+            f"{kind.value} {function.__qualname__!r} requires at least {minimum} parameter(s)"
         )

@@ -42,8 +42,9 @@ def test_external_evaluation_suite(project: Path) -> None:
     suite.write_text(
         "from pathlib import Path\n"
         "import rlab\n"
+        "lab = rlab.Project('project')\n"
         "root = Path(__file__).parents[1]\n"
-        "rlab.external_evaluation(\n"
+        "lab.external_evaluation(\n"
         "    'project.external', version='1.0.0',\n"
         "    command=rlab.ExternalCommand(\n"
         "        args=('python', str(root / 'external_eval.py')), cwd=root),\n"
@@ -54,6 +55,13 @@ def test_external_evaluation_suite(project: Path) -> None:
     runtime = build_runtime(project)
     with using_registry(runtime.registry):
         load_modules(project, ("suites.external",))
+        # Pull the new records into runtime.registry (the loader's project
+        # merge copies only the names that the test cares about).
+        import sys
+        module = sys.modules.get("suites.external")
+        if module is not None and hasattr(module, "lab"):
+            for record in module.lab.registry.list():
+                runtime.registry.add(record)
 
     run = run_evaluation(runtime, "project.external", "hf:test/model")
     assert (run / "external" / "project.external" / "external_eval.yaml").exists()

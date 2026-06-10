@@ -10,7 +10,8 @@ from rlab.constants import EntryKind
 from rlab.data.components import instantiate_component
 from rlab.data.context import DataContext
 from rlab.data.decorators import filter, transform
-from rlab.data.model import DataDecision, data_drop, data_keep, data_update, use
+from rlab.data.model import ComponentUse, Decision, drop, keep, update
+from rlab.registry.store import Registry
 from rlab.typing import JsonValue
 
 RecordT = TypeVar("RecordT")
@@ -49,6 +50,7 @@ def substitute(
     substitutions: tuple[RegexSubstitution, ...],
     patterns: str | None = None,
     version: str = "1.0.0",
+    registry: Registry,
 ) -> Callable[[type[Any]], type[Any]]:
     def decorate(marker: type[Any]) -> type[Any]:
         @dataclass(frozen=True, slots=True)
@@ -57,7 +59,7 @@ def substitute(
                 self,
                 record: Mapping[str, JsonValue],
                 _ctx: DataContext,
-            ) -> DataDecision[dict[str, JsonValue]]:
+            ) -> Decision[dict[str, JsonValue]]:
                 value = record.get(field)
                 if not isinstance(value, str):
                     raise TypeError(f"{field!r} must contain a string")
@@ -68,11 +70,11 @@ def substitute(
                     updated = re.sub(pattern, substitution.replacement, updated)
                 result = dict(record)
                 result[field] = updated
-                return data_update(result, reason="regex_substitution")
+                return update(result, reason="regex_substitution")
 
         RegexTransform.__name__ = marker.__name__
         RegexTransform.__qualname__ = marker.__qualname__
-        transform(name, version=version)(RegexTransform)
+        transform(name, version=version, registry=registry)(RegexTransform)
         return marker
 
     return decorate
@@ -87,6 +89,7 @@ def classify(  # noqa: PLR0913
     fallback: str,
     patterns: str | None = None,
     version: str = "1.0.0",
+    registry: Registry,
 ) -> Callable[[type[Any]], type[Any]]:
     def decorate(marker: type[Any]) -> type[Any]:
         @dataclass(frozen=True, slots=True)
@@ -95,7 +98,7 @@ def classify(  # noqa: PLR0913
                 self,
                 record: Mapping[str, JsonValue],
                 _ctx: DataContext,
-            ) -> DataDecision[dict[str, JsonValue]]:
+            ) -> Decision[dict[str, JsonValue]]:
                 value = record.get(field)
                 if not isinstance(value, str):
                     raise TypeError(f"{field!r} must contain a string")
@@ -109,11 +112,11 @@ def classify(  # noqa: PLR0913
                         break
                 result = dict(record)
                 result[output_field] = label
-                return data_update(result, reason=f"classified:{label}")
+                return update(result, reason=f"classified:{label}")
 
         RegexClassifier.__name__ = marker.__name__
         RegexClassifier.__qualname__ = marker.__qualname__
-        transform(name, version=version)(RegexClassifier)
+        transform(name, version=version, registry=registry)(RegexClassifier)
         return marker
 
     return decorate
@@ -125,20 +128,21 @@ def predicate(
     predicate: Callable[[RecordT], bool],
     reason: str,
     version: str = "1.0.0",
+    registry: Registry,
 ) -> Callable[[type[Any]], type[Any]]:
     _require_named(predicate)
 
     def decorate(marker: type[Any]) -> type[Any]:
         @dataclass(frozen=True, slots=True)
         class PredicateFilter:
-            def apply(self, record: RecordT, _ctx: DataContext) -> DataDecision[RecordT]:
+            def apply(self, record: RecordT, _ctx: DataContext) -> Decision[RecordT]:
                 if predicate(record):
-                    return cast(DataDecision[RecordT], data_drop(reason))
-                return data_keep(record)
+                    return cast(Decision[RecordT], drop(reason))
+                return keep(record)
 
         PredicateFilter.__name__ = marker.__name__
         PredicateFilter.__qualname__ = marker.__qualname__
-        filter(name, version=version)(PredicateFilter)
+        filter(name, version=version, registry=registry)(PredicateFilter)
         return marker
 
     return decorate
@@ -153,22 +157,23 @@ def threshold(  # noqa: PLR0913
     threshold: float,
     reason: str,
     version: str = "1.0.0",
+    registry: Registry,
 ) -> Callable[[type[Any]], type[Any]]:
     _require_named(metric)
 
     def decorate(marker: type[Any]) -> type[Any]:
         @dataclass(frozen=True, slots=True)
         class MetricFilter:
-            def apply(self, record: RecordT, _ctx: DataContext) -> DataDecision[RecordT]:
+            def apply(self, record: RecordT, _ctx: DataContext) -> Decision[RecordT]:
                 value = metric(record)
                 metrics = {metric_name: value}
                 if _compare(value, operator, threshold):
-                    return cast(DataDecision[RecordT], data_drop(reason, metrics=metrics))
-                return data_keep(record, metrics=metrics)
+                    return cast(Decision[RecordT], drop(reason, metrics=metrics))
+                return keep(record, metrics=metrics)
 
         MetricFilter.__name__ = marker.__name__
         MetricFilter.__qualname__ = marker.__qualname__
-        filter(name, version=version)(MetricFilter)
+        filter(name, version=version, registry=registry)(MetricFilter)
         return marker
 
     return decorate
@@ -177,7 +182,7 @@ def threshold(  # noqa: PLR0913
 def resolve_patterns(reference: str, ctx: DataContext) -> Mapping[str, str]:
     _, instance = instantiate_component(
         ctx.runtime.registry,
-        use(reference),
+        ComponentUse(reference),
         expected=(EntryKind.PATTERNS,),
     )
     values = {
