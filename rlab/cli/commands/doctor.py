@@ -57,12 +57,10 @@ def command(ctx: typer.Context) -> None:  # noqa: PLR0915
     # Module loading
     if runtime is not None:
         from rlab.project.loader import load_modules
-        from rlab.registry.context import using_registry
         from rlab.registry.store import Registry
 
         registry = Registry()
-        with using_registry(registry):
-            results = load_modules(state.root, runtime.config.modules.load)
+        results = load_modules(state.root, runtime.config.modules.load, registry=registry)
         failed = [r for r in results if not r.loaded]
         check(
             "modules",

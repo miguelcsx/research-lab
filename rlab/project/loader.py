@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict
 
 from rlab.constants import EntryKind
 from rlab.project.project import _pin_lab_name, _unpin_lab_name
-from rlab.registry.context import current_registry
 from rlab.registry.store import Registry
 
 
@@ -19,17 +18,20 @@ class ModuleLoadResult(BaseModel):
     registered_kinds: tuple[str, ...] = ()
 
 
-def load_modules(root: Path, names: tuple[str, ...]) -> tuple[ModuleLoadResult, ...]:
-    """Import each module name under project root; capture errors per-module."""
+def load_modules(
+    root: Path, names: tuple[str, ...], *, registry: Registry
+) -> tuple[ModuleLoadResult, ...]:
+    """Import each module name under project root; capture errors per-module.
+
+    ``registry`` is the registry the imported modules' decorators should
+    register into. Each template emits ``lab = rlab.Project(name)`` and the
+    loader pins a loader-owned Project for the duration of the import so the
+    rebind lands in ``registry`` rather than the Project singleton.
+    """
     root_str = str(root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
 
-    registry = current_registry()
-    # Pin a fresh, loader-owned Project for the duration of the import so the
-    # template's ``lab = rlab.Project("{name}")`` rebinds to a registry the
-    # loader controls. Unpinned, the Project singleton (keyed by name) would
-    # hand back a Project from an earlier session whose registry is stale.
     import rlab
 
     loader_project = rlab.Project(f"_loader_{id(registry)}", registry=registry)

@@ -7,7 +7,6 @@ from rlab.project.loader import load_modules
 from rlab.project.modules import ModulesConfig
 from rlab.project.root import find_project_root
 from rlab.project.templates import write_project
-from rlab.registry.context import using_registry
 from rlab.registry.store import Registry
 from tests.helpers.files import write_module
 
@@ -26,9 +25,8 @@ def test_find_project_root(tmp_path: Path) -> None:
 def test_load_modules_success_and_failure(tmp_path: Path) -> None:
     write_module(tmp_path, "my_module", "# empty module\n")
     registry = Registry()
-    with using_registry(registry):
-        success = load_modules(tmp_path, ("my_module",))
-        failure = load_modules(tmp_path, ("nonexistent_xyz_module",))
+    success = load_modules(tmp_path, ("my_module",), registry=registry)
+    failure = load_modules(tmp_path, ("nonexistent_xyz_module",), registry=registry)
 
     assert success[0].loaded
     assert not failure[0].loaded

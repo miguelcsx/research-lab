@@ -193,9 +193,9 @@ def _load_experiment_definition(reader: Any) -> dict[str, Any] | None:
 def _cached_experiment_dump(exp_path: Path) -> dict[str, Any] | None:
     try:
         from rlab.experiments.loader import load_experiment  # noqa: PLC0415
-        from rlab.registry.context import current_registry  # noqa: PLC0415
+        from rlab.registry.store import Registry  # noqa: PLC0415
 
-        registry = current_registry()
+        registry = Registry()
         _name, experiment = load_experiment(registry, exp_path)
         return experiment.model_dump(mode="json")
     except (ImportError, SyntaxError, ValueError, TypeError, OSError, RuntimeError):

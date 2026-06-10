@@ -20,10 +20,9 @@ def test_project_registers_into_owned_registry() -> None:
         return {"score": float(ctx.params["value"])}
 
     assert "baseline" in {r.name for r in lab.registry.list(EntryKind.EXPERIMENT)}
-    # Top-level decorator must not have leaked into a global module.
-    import rlab.registry.context as _ctx
-
-    assert _ctx.current_registry().list(EntryKind.EXPERIMENT) == ()
+    # A second project with a different name must not see the registration.
+    other = rlab.Project("team-b")
+    assert "baseline" not in {r.name for r in other.registry.list(EntryKind.EXPERIMENT)}
 
 
 def test_two_projects_do_not_share_state() -> None:

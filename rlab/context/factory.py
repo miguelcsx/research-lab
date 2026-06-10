@@ -6,7 +6,6 @@ from rlab.context.runtime import RuntimeContext
 from rlab.data.sinks import register_builtin_sinks
 from rlab.errors import ModuleLoadError
 from rlab.project.loader import load_modules
-from rlab.registry.context import using_registry
 from rlab.registry.store import Registry
 
 
@@ -17,9 +16,8 @@ def build_runtime(
     paths = ProjectPaths.from_config(root, config.paths)
     paths.ensure_runtime_dirs()
     registry = Registry()
-    with using_registry(registry):
-        register_builtin_sinks(registry)
-        results = load_modules(root, config.modules.load)
+    register_builtin_sinks(registry)
+    results = load_modules(root, config.modules.load, registry=registry)
     if strict:
         failures = [r for r in results if not r.loaded]
         if failures:

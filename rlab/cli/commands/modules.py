@@ -3,7 +3,6 @@ import typer
 from rlab.cli.render.tables import table
 from rlab.cli.state import CliState
 from rlab.project.loader import load_modules
-from rlab.registry.context import using_registry
 from rlab.registry.store import Registry
 
 app = typer.Typer(help="Inspect and manage project module loading.")
@@ -15,8 +14,7 @@ def list_modules(ctx: typer.Context) -> None:
     state: CliState = ctx.obj
     config = state.runtime().config
     registry = Registry()
-    with using_registry(registry):
-        results = load_modules(state.root, config.modules.load)
+    results = load_modules(state.root, config.modules.load, registry=registry)
     rows = [
         {
             "module": r.name,
@@ -35,8 +33,7 @@ def doctor(ctx: typer.Context) -> None:
     state: CliState = ctx.obj
     config = state.runtime().config
     registry = Registry()
-    with using_registry(registry):
-        results = load_modules(state.root, config.modules.load)
+    results = load_modules(state.root, config.modules.load, registry=registry)
     failed = [r for r in results if not r.loaded]
     rows = [{"module": r.name, "ok": r.loaded, "error": r.error or ""} for r in results]
     state.console.print(table("Module Health", rows))
@@ -56,6 +53,5 @@ def reload_modules(ctx: typer.Context) -> None:
     for name in config.modules.load:
         sys.modules.pop(name, None)
     registry = Registry()
-    with using_registry(registry):
-        results = load_modules(state.root, config.modules.load)
+    results = load_modules(state.root, config.modules.load, registry=registry)
     state.console.print(f"Reloaded {sum(r.loaded for r in results)}/{len(results)} modules.")

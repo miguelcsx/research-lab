@@ -9,7 +9,6 @@ from rlab.errors import RegistryConflictError, RegistryError
 from rlab.project.loader import ModuleLoadResult, load_modules
 from rlab.project.modules import failed_modules, loaded_modules
 from rlab.project.validation import validate_project
-from rlab.registry.context import current_registry, using_registry
 from rlab.registry.decorators import register
 from rlab.registry.keys import ComponentKey, RegistryKey
 from rlab.registry.namespaces import qualified_name, validate_name
@@ -61,14 +60,6 @@ def test_registry_keys_names_versions_and_signature_validation() -> None:
     validate_signature(EntryKind.BENCHMARK, good_benchmark)
 
 
-def test_registry_context_restores_previous_registry() -> None:
-    custom = Registry()
-    original = current_registry()
-    with using_registry(custom):
-        assert current_registry() is custom
-    assert current_registry() is original
-
-
 def test_module_load_results_and_filters(tmp_path: Path) -> None:
     ok = ModuleLoadResult(name="components.models", loaded=True, registered_kinds=("component",))
     failed = ModuleLoadResult(name="bad.module", loaded=False, error="ImportError")
@@ -78,8 +69,7 @@ def test_module_load_results_and_filters(tmp_path: Path) -> None:
     assert loaded_modules((ok, failed)) == (ok,)
 
     registry = Registry()
-    with using_registry(registry):
-        results = load_modules(tmp_path, ("nonexistent_module_xyz",))
+    results = load_modules(tmp_path, ("nonexistent_module_xyz",), registry=registry)
     assert not results[0].loaded
 
 

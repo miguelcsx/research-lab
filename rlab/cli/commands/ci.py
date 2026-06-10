@@ -7,7 +7,6 @@ import typer
 
 from rlab.cli.state import CliState
 from rlab.project.loader import load_modules
-from rlab.registry.context import using_registry
 from rlab.registry.store import Registry
 from rlab.runs.reader import RunReader
 
@@ -32,8 +31,7 @@ def smoke(ctx: typer.Context) -> None:
 
     # Modules load
     registry = Registry()
-    with using_registry(registry):
-        results = load_modules(state.root, runtime.config.modules.load)
+    results = load_modules(state.root, runtime.config.modules.load, registry=registry)
     failed_mods = [r for r in results if not r.loaded]
     if failed_mods:
         for r in failed_mods:

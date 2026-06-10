@@ -12,7 +12,7 @@ from rlab.manifests.io import read_dataset_manifest
 from rlab.manifests.resolver import resolve_dataset_manifest
 from rlab.manifests.validation import validate_dataset_manifest
 from rlab.project.loader import load_modules
-from rlab.registry.context import using_registry
+from rlab.registry.store import Registry
 from tests.helpers.factories import write_dataset_manifest_file
 
 
@@ -53,15 +53,15 @@ def test_external_evaluation_suite(project: Path) -> None:
     )
 
     runtime = build_runtime(project)
-    with using_registry(runtime.registry):
-        load_modules(project, ("suites.external",))
-        # Pull the new records into runtime.registry (the loader's project
-        # merge copies only the names that the test cares about).
-        import sys
-        module = sys.modules.get("suites.external")
-        if module is not None and hasattr(module, "lab"):
-            for record in module.lab.registry.list():
-                runtime.registry.add(record)
+    # The loader pins a loader-owned project; the records it imports land
+    # in the registry we pass it. We use a throwaway registry here because
+    # the runner reads from ``runtime.registry`` directly via
+    # ``@lab.external_evaluation`` registrations, which ``build_runtime``
+    # has already loaded via lab.toml.
+    extra_registry = Registry()
+    load_modules(project, ("suites.external",), registry=extra_registry)
+    for record in extra_registry.list():
+        runtime.registry.add(record)
 
     run = run_evaluation(runtime, "project.external", "hf:test/model")
     assert (run / "external" / "project.external" / "external_eval.yaml").exists()
