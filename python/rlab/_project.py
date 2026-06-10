@@ -189,7 +189,10 @@ class Project:
         _validate_identifier(kind, name)
         module = str(getattr(obj, "__module__", ""))
         qualname = str(getattr(obj, "__qualname__", getattr(obj, "__name__", "")))
-        source = inspect.getsourcefile(obj) or ""
+        try:
+            source = inspect.getsourcefile(obj) or ""
+        except TypeError:
+            source = ""
         description = _first_doc_line(obj)
         if self._is_strict_unstable(kind=kind, qualname=qualname, source=source):
             raise ValueError(f"unstable strict declaration for {kind}:{name}")
