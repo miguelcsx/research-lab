@@ -100,21 +100,47 @@ def optimizer_sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
 - `rlab.external_evaluation(...)` registers immutable external command config.
 - `@rlab.result_schema(name)` registers a result schema class.
 
-## `@rlab.dataset(name, stages=..., checks=..., metrics=...)`
+## Data declarations
 
-The decorated function is the source. Stages, checks, and metrics are plain
-functions; their names become the manifest IDs. Defaults to `JsonlSink()`.
+Data components are frozen dataclasses registered with semantic decorators:
 
 ```python
+@rlab.source("project.raw")
+@dataclass(frozen=True, slots=True)
+class RawSource:
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        yield {"text": "  research  "}
+
+
+@rlab.transform("text.strip")
+@dataclass(frozen=True, slots=True)
+class Strip:
+    def apply(self, record, ctx):
+        return rlab.data_update({**record, "text": str(record["text"]).strip()})
+
+
+@rlab.pipeline(
+    "project.clean",
+    stages=(rlab.use("transform:text.strip"),),
+)
+class CleanPipeline:
+    pass
+
+
 @rlab.dataset(
     "project.clean",
-    stages=(strip,),
-    checks=(nonempty,),
-    metrics=(record_count,),
+    source=rlab.use("source:project.raw"),
+    pipeline="pipeline:project.clean",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
 )
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    yield {"text": "  research  "}
+class CleanDataset:
+    pass
 ```
+
+Other component decorators are `filter`, `group`, `dedup`,
+`sink`, `check`, and `metric`. Declarative utilities include
+`patterns`, `substitute`, `classify`, `predicate`, and
+`threshold`.
 
 See [Data pipelines](../guides/data-pipelines.md).
 

@@ -13,8 +13,8 @@ from rlab.data.compare import compare_profiles
 from rlab.data.diff import diff_records, record_key
 from rlab.data.ids import OutputId
 from rlab.data.io import read_jsonl, write_jsonl
+from rlab.data.model import CheckResult
 from rlab.data.profile import profile_records
-from rlab.data.recipe import CheckResult
 from rlab.data.report import data_report
 from rlab.data.sample import sample_records
 from rlab.data.sinks import JsonlSink

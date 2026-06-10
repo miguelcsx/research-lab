@@ -116,24 +116,50 @@ def score(model: Callable[[object], float], ctx: rlab.RuntimeContext) -> dict[st
 
 _DATA_STUB = """\
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import rlab
 
 
-def uppercase(
-    records: Iterable[dict[str, object]],
-    ctx: rlab.DataContext,
-) -> Iterable[dict[str, object]]:
-    del ctx
-    for record in records:
-        yield {**record, "text": str(record["text"]).upper()}
+@rlab.source("project.tiny")
+@dataclass(frozen=True, slots=True)
+class TinySource:
+    limit: int = 2
+
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        del ctx
+        records = ({"text": "research"}, {"text": "lab"})
+        yield from records[: self.limit]
 
 
-@rlab.dataset("project.tiny", stages=(uppercase,))
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"text": "research"}
-    yield {"text": "lab"}
+@rlab.transform("project.uppercase")
+@dataclass(frozen=True, slots=True)
+class Uppercase:
+    def apply(
+        self,
+        record: dict[str, object],
+        ctx: rlab.DataContext,
+    ) -> rlab.DataDecision[dict[str, object]]:
+        del ctx
+        return rlab.data_update({**record, "text": str(record["text"]).upper()})
+
+
+@rlab.pipeline(
+    "project.tiny",
+    stages=(rlab.use("transform:project.uppercase"),),
+)
+class TinyPipeline:
+    pass
+
+
+@rlab.dataset(
+    "project.tiny",
+    source=rlab.use("source:project.tiny"),
+    pipeline="pipeline:project.tiny",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+)
+class TinyDataset:
+    pass
 """
 
 _WORKFLOW_STUB = """\
@@ -399,14 +425,32 @@ def step_one(ctx: rlab.WorkflowContext) -> None:
 
 _NEW_DATA_PIPELINE = """\
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import rlab
 
 
-@rlab.dataset("{name}")
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {{"text": "example"}}
+@rlab.source("{name}")
+@dataclass(frozen=True, slots=True)
+class Source:
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        del ctx
+        yield {{"text": "example"}}
+
+
+@rlab.pipeline("{name}", stages=())
+class Pipeline:
+    pass
+
+
+@rlab.dataset(
+    "{name}",
+    source=rlab.use("source:{name}"),
+    pipeline="pipeline:{name}",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+)
+class Dataset:
+    pass
 """
 
 _NEW_REPORT = """\

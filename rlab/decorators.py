@@ -2,7 +2,19 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from rlab.constants import EntryKind
-from rlab.data.decorators import dataset
+from rlab.data.decorators import (
+    check,
+    dataset,
+    dedup,
+    filter,
+    group,
+    metric,
+    patterns,
+    pipeline,
+    sink,
+    source,
+    transform,
+)
 from rlab.evaluations.decorators import evaluation
 from rlab.experiments.decorators import experiment
 from rlab.registry.context import current_registry
@@ -69,10 +81,20 @@ __all__ = [
     "adapter",
     "benchmark",
     "component",
+    "check",
+    "dedup",
+    "filter",
+    "group",
+    "metric",
+    "pipeline",
     "dataset",
+    "sink",
+    "source",
+    "transform",
     "evaluation",
     "experiment",
     "result_schema",
     "study",
+    "patterns",
     "workflow",
 ]

@@ -6,9 +6,12 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar, cast
 
+from rlab.constants import EntryKind
 from rlab.data.context import DataContext
 from rlab.data.ids import OutputId
-from rlab.data.recipe import SinkResult
+from rlab.data.model import SinkResult
+from rlab.registry.decorators import register
+from rlab.registry.store import Registry
 from rlab.typing import JsonValue
 
 RecordT = TypeVar("RecordT")
@@ -52,3 +55,15 @@ class JsonlSink(Generic[RecordT]):
             if isinstance(value, Mapping):
                 return value
         raise TypeError(f"JsonlSink cannot serialize {type(record).__name__}")
+
+
+def register_builtin_sinks(registry: Registry) -> None:
+    register(
+        registry,
+        EntryKind.SINK,
+        "rlab.jsonl",
+        JsonlSink,
+        version="1.0.0",
+        package="rlab",
+        declared_by=JsonlSink,
+    )

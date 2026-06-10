@@ -1,17 +1,70 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from rlab.constants import EntryKind
+from rlab.data.audit import AuditRecorder
+from rlab.data.components import (
+    apply_dataset_overrides,
+    canonical_component,
+    component_configuration,
+    instantiate_component,
+)
 from rlab.data.context import DataContext
 from rlab.data.manifest import dataset_manifest
-from rlab.data.recipe import DatasetRecipe
+from rlab.data.model import (
+    ComponentUse,
+    DataAction,
+    DataBoundary,
+    DataDecision,
+    DatasetSpec,
+    PipelineSpec,
+)
 from rlab.manifests.dataset import DatasetManifest
-from rlab.registry.resolve import resolve_definition
+from rlab.references import parse_reference
+from rlab.references.refs import ReferenceKind
 from rlab.registry.store import Registry
 from rlab.typing import JsonValue
+
+RECORD_STAGE_KINDS = (EntryKind.TRANSFORM, EntryKind.FILTER)
+BATCH_STAGE_KINDS = (EntryKind.GROUP, EntryKind.DEDUP)
+
+
+@dataclass(slots=True)
+class BuildMetadata:
+    component_ids: list[str] = field(default_factory=list)
+    configuration: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
+
+    def track(self, component_id: str, component: ComponentUse) -> None:
+        self.component_ids.append(component_id)
+        self.configuration[component_id] = component_configuration(component)
+
+
+@dataclass(slots=True)
+class BuildResults:
+    outputs: dict[str, Path] = field(default_factory=dict)
+    stats: dict[str, JsonValue] = field(default_factory=dict)
+    checks: dict[str, str] = field(default_factory=dict)
+    licenses: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordStageContext:
+    stage_id: str
+    source_id: str
+    data: DataContext
+    audit: AuditRecorder
+
+
+@dataclass(slots=True)
+class DatasetExecution:
+    registry: Registry
+    data: DataContext
+    output_root: Path
+    audit: AuditRecorder
+    metadata: BuildMetadata = field(default_factory=BuildMetadata)
 
 
 def build_dataset(
@@ -20,55 +73,209 @@ def build_dataset(
     ctx: DataContext,
     output_root: Path,
     *,
-    version: str = "1",
+    overrides: dict[str, JsonValue] | None = None,
 ) -> DatasetManifest:
-    recipe: DatasetRecipe[Any] = resolve_definition(
-        registry.get(EntryKind.DATASET, name).value,
-        DatasetRecipe,
+    dataset, pipeline = _resolve_dataset(registry, name, overrides or {})
+    execution = DatasetExecution(
+        registry=registry,
+        data=ctx,
+        output_root=output_root,
+        audit=AuditRecorder(output_root / "audit", dataset.audit),
     )
-    if recipe.params:
-        ctx = ctx.model_copy(update={"params": {**recipe.params, **ctx.params}})
-    records: Iterable[Any] = (
-        record for source in recipe.flow.sources for record in source.read(ctx)
+    source_id, items = _read_source(execution, dataset.source)
+    data = _execute_pipeline(execution, pipeline, items, source_id)
+    results = _write_sinks(execution, dataset, data)
+    _evaluate_checks(execution, dataset, data, results)
+    _measure_metrics(execution, dataset, data, results)
+    if not results.outputs:
+        raise ValueError("dataset must produce at least one output")
+
+    audit_paths = execution.audit.write()
+    stage_prefixes = tuple(
+        f"{kind.value}:" for kind in (*RECORD_STAGE_KINDS, *BATCH_STAGE_KINDS)
     )
-    for stage in recipe.flow.stages:
-        records = stage.apply(records, ctx)
-    data = tuple(records)
-
-    outputs: dict[str, Path] = {}
-    stats: dict[str, JsonValue] = {}
-    checks: dict[str, str] = {}
-    licenses: list[str] = []
-    for sink in recipe.sinks:
-        sink_result = sink.write(data, ctx)
-        for output_id, path in sink_result.outputs.items():
-            key = str(output_id)
-            if key in outputs:
-                raise ValueError(f"duplicate dataset output: {key}")
-            outputs[key] = _validated_output(output_root, path)
-        stats.update(sink_result.stats)
-        checks.update(sink_result.checks)
-        licenses.extend(sink_result.licenses)
-    for check in recipe.checks:
-        check_result = check.evaluate(data, ctx)
-        checks[str(check.id)] = check_result.manifest_status
-        for key, value in check_result.metrics.items():
-            stats[f"{check.id}.{key}"] = value
-    for metric in recipe.metrics:
-        stats[str(metric.id)] = metric.measure(data, ctx)
-    if not outputs:
-        raise ValueError("dataset recipe must produce at least one output")
-
     manifest = dataset_manifest(
         name,
-        version or recipe.version,
-        outputs,
-        inputs=tuple(str(source.id) for source in recipe.flow.sources),
-        stages=tuple(str(stage.id) for stage in recipe.flow.stages),
-        stats=stats,
-        checks=checks,
+        dataset.version,
+        results.outputs,
+        inputs=(source_id,),
+        stages=tuple(
+            component_id
+            for component_id in execution.metadata.component_ids
+            if component_id.startswith(stage_prefixes)
+        ),
+        stats=results.stats,
+        checks=results.checks,
+        declaration=f"dataset:{dataset.name}@{dataset.version}",
+        pipeline=f"pipeline:{pipeline.name}@{pipeline.version}",
+        components=tuple(execution.metadata.component_ids),
+        configuration=execution.metadata.configuration,
+        audit=audit_paths,
     )
-    return manifest.model_copy(update={"licenses": tuple(dict.fromkeys(licenses))})
+    return manifest.model_copy(
+        update={"licenses": tuple(dict.fromkeys(results.licenses))}
+    )
+
+
+def _resolve_dataset(
+    registry: Registry,
+    name: str,
+    overrides: dict[str, JsonValue],
+) -> tuple[DatasetSpec, PipelineSpec]:
+    dataset = cast(DatasetSpec, registry.get(EntryKind.DATASET, name).value)
+    pipeline_reference = parse_reference(dataset.pipeline)
+    if pipeline_reference.kind is not ReferenceKind.PIPELINE:
+        raise TypeError(f"{dataset.pipeline!r} is not a pipeline reference")
+    pipeline = cast(
+        PipelineSpec,
+        registry.get(EntryKind.PIPELINE, pipeline_reference.value).value,
+    )
+    return apply_dataset_overrides(dataset, pipeline, overrides)
+
+
+def _read_source(
+    execution: DatasetExecution,
+    source_use: ComponentUse,
+) -> tuple[str, list[object]]:
+    source_record, source = instantiate_component(
+        execution.registry,
+        source_use,
+        expected=(EntryKind.SOURCE,),
+    )
+    source_id = canonical_component(source_record)
+    execution.metadata.track(source_id, source_use)
+    source_values = list(source.read(execution.data))
+    execution.audit.record_source(
+        source_id,
+        read=len(source_values),
+        emitted=len(source_values),
+    )
+    return source_id, list(source_values)
+
+
+def _execute_pipeline(
+    execution: DatasetExecution,
+    pipeline: PipelineSpec,
+    initial_items: list[object],
+    source_id: str,
+) -> tuple[object, ...]:
+    items = initial_items
+    for stage_use in pipeline.stages:
+        stage_record, stage = instantiate_component(
+            execution.registry,
+            stage_use,
+            expected=(*RECORD_STAGE_KINDS, *BATCH_STAGE_KINDS),
+        )
+        stage_id = canonical_component(stage_record)
+        execution.metadata.track(stage_id, stage_use)
+        received = len(items)
+        if stage_record.kind in RECORD_STAGE_KINDS:
+            stage_ctx = RecordStageContext(
+                stage_id,
+                source_id,
+                execution.data,
+                execution.audit,
+            )
+            items = _apply_record_stage(items, stage, stage_ctx)
+        else:
+            items = list(stage.apply(items, execution.data))
+        execution.audit.record_stage(stage_id, received=received, emitted=len(items))
+
+    boundaries = [item for item in items if isinstance(item, DataBoundary)]
+    if boundaries:
+        reasons = ", ".join(sorted({boundary.reason for boundary in boundaries}))
+        raise ValueError(f"pipeline left {len(boundaries)} unconsumed boundaries: {reasons}")
+    return tuple(items)
+
+
+def _write_sinks(
+    execution: DatasetExecution,
+    dataset: DatasetSpec,
+    data: tuple[object, ...],
+) -> BuildResults:
+    results = BuildResults()
+    for sink_use in dataset.sinks:
+        sink_record, sink = instantiate_component(
+            execution.registry,
+            sink_use,
+            expected=(EntryKind.SINK,),
+        )
+        sink_id = canonical_component(sink_record)
+        execution.metadata.track(sink_id, sink_use)
+        sink_result = sink.write(data, execution.data)
+        for output_id, path in sink_result.outputs.items():
+            key = str(output_id)
+            if key in results.outputs:
+                raise ValueError(f"duplicate dataset output: {key}")
+            results.outputs[key] = _validated_output(execution.output_root, path)
+        results.stats.update(sink_result.stats)
+        results.checks.update(sink_result.checks)
+        results.licenses.extend(sink_result.licenses)
+    return results
+
+
+def _evaluate_checks(
+    execution: DatasetExecution,
+    dataset: DatasetSpec,
+    data: tuple[object, ...],
+    results: BuildResults,
+) -> None:
+    for check_use in dataset.checks:
+        check_record, check = instantiate_component(
+            execution.registry,
+            check_use,
+            expected=(EntryKind.CHECK,),
+        )
+        check_id = canonical_component(check_record)
+        execution.metadata.track(check_id, check_use)
+        result = check.evaluate(data, execution.data)
+        results.checks[check_id] = result.manifest_status
+        for key, value in result.metrics.items():
+            results.stats[f"{check_id}.{key}"] = value
+
+
+def _measure_metrics(
+    execution: DatasetExecution,
+    dataset: DatasetSpec,
+    data: tuple[object, ...],
+    results: BuildResults,
+) -> None:
+    for metric_use in dataset.metrics:
+        metric_record, metric = instantiate_component(
+            execution.registry,
+            metric_use,
+            expected=(EntryKind.METRIC,),
+        )
+        metric_id = canonical_component(metric_record)
+        execution.metadata.track(metric_id, metric_use)
+        results.stats[metric_id] = metric.measure(data, execution.data)
+
+
+def _apply_record_stage(
+    items: list[object],
+    stage: Any,
+    stage_ctx: RecordStageContext,
+) -> list[object]:
+    output: list[object] = []
+    for position, item in enumerate(items):
+        if isinstance(item, DataBoundary):
+            output.append(item)
+            continue
+        decision = stage.apply(item, stage_ctx.data)
+        if not isinstance(decision, DataDecision):
+            raise TypeError(f"{stage_ctx.stage_id} must return DataDecision")
+        stage_ctx.audit.record_decision(
+            stage=stage_ctx.stage_id,
+            source=stage_ctx.source_id,
+            position=position,
+            decision=decision,
+            input_record=item,
+        )
+        if decision.action in (DataAction.KEEP, DataAction.UPDATE):
+            output.append(decision.record)
+        elif decision.action is DataAction.BOUNDARY:
+            output.append(DataBoundary(decision.reason, decision.metrics))
+    return output
 
 
 def _validated_output(output_root: Path, path: Path) -> Path:

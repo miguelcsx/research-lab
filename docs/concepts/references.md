@@ -24,6 +24,22 @@ hf:gpt2
 local:models/checkpoint.pt
 ```
 
+Data declarations use concise semantic schemes:
+
+```text
+source:project.raw
+transform:text.clean
+filter:quality.symbols
+group:text.documents
+dedup:text.simhash
+sink:project.corpus
+check:dataset.nonempty
+metric:dataset.records
+pipeline:project.clean
+dataset:project.clean
+patterns:project.text
+```
+
 ## Component references
 
 A component reference uses the component kind as the scheme:

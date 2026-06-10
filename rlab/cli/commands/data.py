@@ -8,11 +8,21 @@ from rlab.cli.state import CliState
 from rlab.config.overrides import parse_overrides
 from rlab.data.ablation import DataAblation
 from rlab.data.compare import compare_profiles
-from rlab.data.service import build, diff, profile, promote, sample, write_sample
+from rlab.data.service import (
+    audit_samples,
+    audit_summary,
+    audit_table,
+    build,
+    diff,
+    profile,
+    promote,
+    sample,
+    write_sample,
+)
 
 _DEFAULT_SAMPLE_COUNT = 100
 _DEFAULT_EXPLORE_COUNT = 20
-_PARAM_HELP = "Recipe parameter override (key=value, repeatable)"
+_OVERRIDE_HELP = "Typed component override (path=value, repeatable)"
 app = typer.Typer(help="Build, validate, compare, and promote datasets.")
 
 
@@ -21,12 +31,11 @@ def explore_command(
     ctx: typer.Context,
     dataset: str,
     n: int = typer.Option(_DEFAULT_EXPLORE_COUNT, "--n", help="Number of sample records to show"),
-    version: str = "1",
-    param: list[str] | None = typer.Option(None, "--param", "-p", help=_PARAM_HELP),
+    override: list[str] | None = typer.Option(None, "--override", "-o", help=_OVERRIDE_HELP),
 ) -> None:
     """Build a dataset then immediately show profile stats and sample records."""
     state: CliState = ctx.obj
-    run_root = build(state.runtime(), dataset, version, params=parse_overrides(param or ()))
+    run_root = build(state.runtime(), dataset, overrides=parse_overrides(override or ()))
     manifest_path = run_root / "artifacts" / "dataset" / "manifest.yaml"
     prof = profile(manifest_path)
     samples = sample(manifest_path, n)
@@ -41,13 +50,42 @@ def explore_command(
 def build_command(
     ctx: typer.Context,
     dataset: str,
-    version: str = "1",
-    param: list[str] | None = typer.Option(None, "--param", "-p", help=_PARAM_HELP),
+    override: list[str] | None = typer.Option(None, "--override", "-o", help=_OVERRIDE_HELP),
 ) -> None:
     state: CliState = ctx.obj
     state.console.print(
-        build(state.runtime(), dataset, version, params=parse_overrides(param or ()))
+        build(state.runtime(), dataset, overrides=parse_overrides(override or ()))
     )
+
+
+@app.command("audit")
+def audit_command(ctx: typer.Context, run: Path) -> None:
+    state: CliState = ctx.obj
+    state.console.print_json(json.dumps(audit_summary(run)))
+
+
+@app.command("reasons")
+def reasons_command(ctx: typer.Context, run: Path) -> None:
+    state: CliState = ctx.obj
+    state.console.print(table("Data drop reasons", audit_table(run, "reasons")))
+
+
+@app.command("stage-summary")
+def stage_summary_command(ctx: typer.Context, run: Path) -> None:
+    state: CliState = ctx.obj
+    state.console.print(table("Data stage summary", audit_table(run, "stages")))
+
+
+@app.command("source-summary")
+def source_summary_command(ctx: typer.Context, run: Path) -> None:
+    state: CliState = ctx.obj
+    state.console.print(table("Data source summary", audit_table(run, "sources")))
+
+
+@app.command("sample-drops")
+def sample_drops_command(ctx: typer.Context, run: Path, reason: str) -> None:
+    state: CliState = ctx.obj
+    state.console.print_json(json.dumps(audit_samples(run, reason)))
 
 
 @app.command("profile")

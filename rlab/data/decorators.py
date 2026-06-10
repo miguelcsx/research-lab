@@ -1,120 +1,161 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable
+from dataclasses import is_dataclass
 from typing import Any, TypeVar
 
 from rlab.constants import EntryKind
-from rlab.data.context import DataContext
-from rlab.data.ids import CheckId, DatasetId, MetricId, SourceId, StageId
-from rlab.data.recipe import (
-    CheckResult,
-    DataFlow,
-    DatasetRecipe,
-    DataSink,
-    DataStage,
-    FunctionCheck,
-    FunctionMetric,
-    FunctionSource,
-    FunctionStage,
-)
-from rlab.data.sinks import JsonlSink
+from rlab.data.model import AuditPolicy, ComponentUse, DatasetSpec, PipelineSpec
 from rlab.registry.context import current_registry
 from rlab.registry.decorators import register
-from rlab.typing import JsonValue
+from rlab.registry.validation import validate_version
 
-SourceFn = TypeVar("SourceFn", bound=Callable[[DataContext], Iterable[Any]])
-CheckFn = Callable[[Sequence[Any], DataContext], CheckResult]
-MetricFn = Callable[[Sequence[Any], DataContext], JsonValue]
-StageFn = Callable[[Iterable[Any], DataContext], Iterable[Any]]
+T = TypeVar("T", bound=type[Any])
+
+
+def _component(kind: EntryKind, name: str, version: str, tags: tuple[str, ...]) -> Callable[[T], T]:
+    def decorate(cls: T) -> T:
+        if not is_dataclass(cls):
+            raise TypeError(f"@{kind.value} requires a dataclass")
+        return register(
+            current_registry(),
+            kind,
+            name,
+            cls,
+            version=version,
+            tags=tags,
+            declared_by=cls,
+        )
+
+    return decorate
+
+
+def source(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.SOURCE, name, version, tags)
+
+
+def transform(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.TRANSFORM, name, version, tags)
+
+
+def filter(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.FILTER, name, version, tags)
+
+
+def group(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.GROUP, name, version, tags)
+
+
+def dedup(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.DEDUP, name, version, tags)
+
+
+def sink(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.SINK, name, version, tags)
+
+
+def check(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.CHECK, name, version, tags)
+
+
+def metric(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.METRIC, name, version, tags)
+
+
+def patterns(
+    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
+) -> Callable[[T], T]:
+    return _component(EntryKind.PATTERNS, name, version, tags)
+
+
+def pipeline(
+    name: str,
+    *,
+    stages: tuple[ComponentUse, ...],
+    version: str = "1.0.0",
+    tags: tuple[str, ...] = (),
+) -> Callable[[T], T]:
+    validate_version(version)
+
+    def decorate(cls: T) -> T:
+        spec = PipelineSpec(
+            name=name,
+            version=version,
+            stages=stages,
+            description=cls.__doc__ or "",
+            tags=tags,
+        )
+        register(
+            current_registry(),
+            EntryKind.PIPELINE,
+            name,
+            spec,
+            version=version,
+            tags=tags,
+            declared_by=cls,
+        )
+        return cls
+
+    return decorate
 
 
 def dataset(  # noqa: PLR0913
     name: str,
     *,
-    stages: tuple[StageFn | DataStage[Any, Any], ...] = (),
-    sinks: tuple[DataSink[Any], ...] | None = None,
-    checks: tuple[CheckFn, ...] = (),
-    metrics: tuple[MetricFn, ...] = (),
-    version: str = "1",
-    description: str = "",
+    source: ComponentUse,
+    pipeline: str,
+    sinks: tuple[ComponentUse, ...],
+    checks: tuple[ComponentUse, ...] = (),
+    metrics: tuple[ComponentUse, ...] = (),
+    audit: AuditPolicy | None = None,
+    version: str = "1.0.0",
     tags: tuple[str, ...] = (),
-    params: Mapping[str, JsonValue] | None = None,
-    variants: Mapping[str, Mapping[str, JsonValue]] | None = None,
-) -> Callable[[SourceFn], SourceFn]:
-    """Declare a dataset recipe and register it from its source function.
+    description: str = "",
+) -> Callable[[T], T]:
+    validate_version(version)
+    if not sinks:
+        raise ValueError("dataset requires at least one sink")
 
-    The decorated function is the source. Its name becomes the source ID in the
-    manifest. Stage, check, and metric IDs are derived from their function names.
-    Lambdas are rejected — define named functions so manifests stay readable.
-
-    `params` are default recipe parameters, available as `ctx.params` during the
-    build and overridable per-build (`rlab data build <id> --param key=value`).
-    Each entry in `variants` registers an additional recipe `<name>.<variant>`
-    sharing the same flow with its params merged over the defaults — one
-    function can declare a whole family of recipe configurations.
-    """
-
-    def decorate(source_fn: SourceFn) -> SourceFn:
-        _require_named(source_fn)
-        source = FunctionSource(SourceId(source_fn.__name__), source_fn)
-
-        flow: DataFlow[Any] = DataFlow.from_source(source)
-        for stage in stages:
-            if hasattr(stage, "apply"):
-                flow = flow.then(stage)  # type: ignore[arg-type]
-            else:
-                _require_named(stage)
-                flow = flow.then(FunctionStage(StageId(stage.__name__), stage))
-
-        recipe: DatasetRecipe[Any] = DatasetRecipe(
-            id=DatasetId(name),
-            flow=flow,
-            sinks=sinks if sinks is not None else (JsonlSink(),),
-            checks=tuple(_wrap_check(fn) for fn in checks),
-            metrics=tuple(_wrap_metric(fn) for fn in metrics),
+    def decorate(cls: T) -> T:
+        if not isinstance(cls, type):
+            raise TypeError("@dataset is class-only")
+        dataset_spec = DatasetSpec(
+            name=name,
             version=version,
-            description=description,
+            source=source,
+            pipeline=pipeline,
+            sinks=sinks,
+            checks=checks,
+            metrics=metrics,
+            audit=audit or AuditPolicy(),
+            description=description or cls.__doc__ or "",
             tags=tags,
-            params=dict(params or {}),
         )
-
-        _register_recipe(recipe)
-        for suffix, overrides in (variants or {}).items():
-            _register_recipe(recipe.variant(suffix, overrides))
-        return source_fn
+        register(
+            current_registry(),
+            EntryKind.DATASET,
+            name,
+            dataset_spec,
+            version=version,
+            tags=tags,
+            declared_by=cls,
+        )
+        return cls
 
     return decorate
-
-
-def _register_recipe(recipe: DatasetRecipe[Any]) -> None:
-    def _provide() -> DatasetRecipe[Any]:
-        return recipe
-
-    _provide.__name__ = str(recipe.id).replace(".", "_").replace("-", "_")
-    _provide.__doc__ = recipe.description
-
-    register(
-        current_registry(),
-        EntryKind.DATASET,
-        str(recipe.id),
-        _provide,
-        tags=recipe.tags,
-    )
-
-
-def _wrap_check(fn: CheckFn) -> FunctionCheck[Any]:
-    _require_named(fn)
-    return FunctionCheck(CheckId(fn.__name__), fn)
-
-
-def _wrap_metric(fn: MetricFn) -> FunctionMetric[Any]:
-    _require_named(fn)
-    return FunctionMetric(MetricId(fn.__name__), fn)
-
-
-def _require_named(fn: Callable[..., Any]) -> None:
-    if getattr(fn, "__name__", None) == "<lambda>":
-        raise ValueError(
-            "lambdas are not allowed in @dataset; define a named function "
-            "so manifest IDs stay stable and readable"
-        )

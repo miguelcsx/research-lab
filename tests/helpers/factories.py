@@ -11,7 +11,7 @@ from rlab.constants import RunStatus
 from rlab.context.factory import build_runtime
 from rlab.context.runtime import RuntimeContext
 from rlab.experiments.service import run_experiment
-from rlab.manifests.dataset import DatasetManifest, DatasetOutput
+from rlab.manifests.dataset import DatasetAudit, DatasetManifest, DatasetOutput
 from rlab.manifests.io import write_manifest
 from rlab.manifests.run import RunManifest
 from rlab.runs.layout import RunLayout
@@ -67,15 +67,39 @@ def write_dataset(project: Path, name: str = "sample", content: str = "value") -
 def write_dataset_manifest_file(project: Path, name: str = "sample") -> Path:
     data = write_dataset(project, name)
     digest = hashlib.sha256(data.read_bytes()).hexdigest()
+    audit_root = project / "audit"
+    audit_root.mkdir(exist_ok=True)
+    audit_files = {
+        filename: audit_root / filename
+        for filename in (
+            "summary.json",
+            "drop_reasons.csv",
+            "stage_summary.csv",
+            "source_summary.csv",
+        )
+    }
+    for path in audit_files.values():
+        path.write_text("", encoding="utf-8")
     manifest = DatasetManifest(
         kind="dataset",
         name=name,
-        version="1",
+        version="1.0.0",
+        declaration=f"dataset:{name}@1.0.0",
+        pipeline=f"pipeline:{name}@1.0.0",
+        audit=DatasetAudit(
+            kind="dataset_audit",
+            name="audit",
+            version="1.0.0",
+            summary=audit_files["summary.json"],
+            drop_reasons=audit_files["drop_reasons.csv"],
+            stage_summary=audit_files["stage_summary.csv"],
+            source_summary=audit_files["source_summary.csv"],
+        ),
         outputs={
             "data": DatasetOutput(
                 kind="dataset_output",
                 name="data",
-                version="1",
+                version="1.0.0",
                 path=data,
                 sha256=digest,
                 size_bytes=data.stat().st_size,

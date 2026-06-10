@@ -51,7 +51,15 @@ rlab.EvaluationResult
 ```python
 rlab.DataContext
 rlab.DataSource
-rlab.DataStage
+rlab.RecordStage
+rlab.BatchStage
+rlab.DataAction
+rlab.DataDecision
+rlab.DataBoundary
+rlab.ComponentUse
+rlab.PipelineSpec
+rlab.DatasetSpec
+rlab.AuditPolicy
 rlab.DataCheck
 rlab.DataMetric
 rlab.DataSink
@@ -65,6 +73,14 @@ rlab.JsonlSource
 rlab.TextFileSource
 rlab.HuggingFaceSource
 rlab.materialize
+rlab.use
+rlab.data_keep
+rlab.data_update
+rlab.data_drop
+rlab.data_boundary
+rlab.RegexSubstitution
+rlab.ClassificationRule
+rlab.ComparisonOperator
 ```
 
 ## Workflows
@@ -138,7 +154,21 @@ rlab.UnitRegistry
 ```python
 rlab.component
 rlab.benchmark
+rlab.source
+rlab.transform
+rlab.filter
+rlab.group
+rlab.dedup
+rlab.sink
+rlab.check
+rlab.metric
+rlab.pipeline
 rlab.dataset
+rlab.patterns
+rlab.substitute
+rlab.classify
+rlab.predicate
+rlab.threshold
 rlab.evaluation
 rlab.experiment
 rlab.external_evaluation

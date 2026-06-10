@@ -1,118 +1,98 @@
 # Data pipelines
 
-`rlab` builds datasets from immutable, typed recipes. A recipe declares a source,
-stages, checks, metrics, and sinks as plain Python functions; the runtime owns
-execution, output validation, manifests, checksums, lineage, and run capture.
-
-## Define a dataset
-
-Decorate a source function with `@rlab.dataset`. The function produces the raw
-records; stages transform them in order.
+`rlab` data builds are immutable registry declarations. Sources, stages, pipelines,
+datasets, sinks, checks, and metrics have explicit names and semantic versions.
 
 ```python
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import rlab
 
 
-def strip(
-    records: Iterable[dict[str, object]],
-    ctx: rlab.DataContext,
-) -> Iterable[dict[str, object]]:
-    del ctx
-    for record in records:
-        yield {**record, "text": str(record["text"]).strip()}
+@rlab.source("project.raw")
+@dataclass(frozen=True, slots=True)
+class RawSource:
+    limit: int = 2
+
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        del ctx
+        yield from ({"text": " research "}, {"text": ""})[: self.limit]
 
 
-def nonempty(rows: list[dict[str, object]], ctx: rlab.DataContext) -> rlab.CheckResult:
-    del ctx
-    return rlab.CheckResult(bool(rows))
+@rlab.transform("text.strip")
+@dataclass(frozen=True, slots=True)
+class StripText:
+    def apply(
+        self,
+        record: dict[str, object],
+        ctx: rlab.DataContext,
+    ) -> rlab.DataDecision[dict[str, object]]:
+        del ctx
+        text = str(record["text"]).strip()
+        if not text:
+            return rlab.data_drop("empty")
+        return rlab.data_update({**record, "text": text}, reason="stripped")
 
 
-def record_count(rows: list[dict[str, object]], ctx: rlab.DataContext) -> int:
-    del ctx
-    return len(rows)
+@rlab.pipeline(
+    "project.clean",
+    stages=(rlab.use("transform:text.strip"),),
+)
+class CleanPipeline:
+    pass
 
 
 @rlab.dataset(
     "project.clean",
-    stages=(strip,),
-    checks=(nonempty,),
-    metrics=(record_count,),
+    source=rlab.use("source:project.raw"),
+    pipeline="pipeline:project.clean",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+    audit=rlab.AuditPolicy(
+        capture_decisions=True,
+        sample_reasons={"empty": 10},
+    ),
 )
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"text": "  research  "}
-    yield {"text": "lab"}
+class CleanDataset:
+    pass
 ```
 
-Build it with:
+Build with a typed component override:
 
 ```bash
-rlab data build dataset:project.clean
+rlab data build dataset:project.clean --override source.limit=1
 ```
 
-## Parameters
+Unknown paths and values incompatible with the dataclass field type are rejected.
+The dataset declaration's semantic version is the manifest version.
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `name` | `str` | required | Dataset ID used by CLI and manifests |
-| `stages` | `tuple[fn, ...]` | `()` | Pipeline transforms applied in order |
-| `sinks` | `tuple[DataSink, ...]` | `(JsonlSink(),)` | Where to write the output |
-| `checks` | `tuple[fn, ...]` | `()` | Validation functions run after all stages |
-| `metrics` | `tuple[fn, ...]` | `()` | Measurement functions recorded in the manifest |
-| `version` | `str` | `"1"` | Version recorded in the manifest |
-| `description` | `str` | `""` | Human-readable description |
-| `tags` | `tuple[str, ...]` | `()` | Optional registry tags |
+## Decisions and boundaries
 
-Function names become their IDs in the manifest. Lambdas are rejected — define
-named functions so manifests stay stable and readable.
+Record transforms and filters return `DataDecision` using `data_keep`,
+`data_update`, `data_drop`, or `data_boundary`. Boundaries bypass later
+record-level stages and must be consumed by a `group` or `dedup`
+stage before records reach a sink.
 
-## Built-in sinks and sources
+Grouping and deduplication stages receive iterables containing records and
+`DataBoundary` values. They remain normal explicit Python algorithms wrapped
+in registered frozen dataclasses.
 
-Use built-in sources inside the decorated function:
+## Auditing
 
-```python
-@rlab.dataset("corpus.hf", stages=(clean,))
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    yield from rlab.HuggingFaceSource("squad").read(ctx)
+Every build writes `summary.json`, `drop_reasons.csv`, `stage_summary.csv`, and
+`source_summary.csv` under `artifacts/dataset/audit/`. `AuditPolicy` controls
+full decision capture and bounded reason-specific samples.
+
+```bash
+rlab data audit runs/<run-id>
+rlab data reasons runs/<run-id>
+rlab data stage-summary runs/<run-id>
+rlab data source-summary runs/<run-id>
+rlab data sample-drops runs/<run-id> empty
 ```
 
-Available sinks and sources:
+## Declarative utilities
 
-- `rlab.JsonlSink` — default output sink (writes `data.jsonl`)
-- `rlab.JsonlSource` — read from an existing JSONL file
-- `rlab.TextFileSource` — read plain-text lines
-- `rlab.HuggingFaceSource` — stream from Hugging Face datasets (requires `rlab[hf]`)
-- `rlab.materialize()` — idempotent JSONL download helper
-
-## Custom sinks
-
-Implement the `DataSink` protocol as a frozen dataclass:
-
-```python
-from rlab.data.ids import OutputId
-
-@dataclass(frozen=True)
-class ParquetSink:
-    id: OutputId = OutputId("parquet")
-    path: Path = Path("data.parquet")
-
-    def write(self, records, ctx: rlab.DataContext) -> rlab.SinkResult:
-        ...
-        return rlab.SinkResult(outputs={self.id: written_path})
-```
-
-Pass it via `sinks=(ParquetSink(),)`.
-
-## Manifest behavior
-
-The generated manifest records:
-
-- source and stage IDs (derived from function names);
-- output paths, directory flags, sizes, and SHA-256 checksums;
-- check statuses and metrics;
-- licenses returned by sinks.
-
-Keep function names stable, stages deterministic, and output files immutable after
-the manifest is written.
+Use `patterns`, `substitute`, `classify`, `predicate`,
+and `threshold` for simple policies. Complex loading, grouping, validation,
+deduplication, and writing logic should remain explicit typed classes.

@@ -61,8 +61,8 @@ def test_experiment_resume_and_data_artifact_workflow(
     assert isinstance(resumed, Path)
     assert RunReader(resumed).manifest().parent_run == RunReader(first).manifest().name
 
-    data_v1 = build(runtime, "dataset:project.tiny", "1")
-    data_v2 = build(runtime, "dataset:project.tiny", "2")
+    data_v1 = build(runtime, "dataset:project.tiny")
+    data_v2 = build(runtime, "dataset:project.tiny")
     manifest_v1 = data_v1 / "artifacts" / "dataset" / "manifest.yaml"
     manifest_v2 = data_v2 / "artifacts" / "dataset" / "manifest.yaml"
     assert profile(manifest_v1)["records"] == 2

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class DataId(str):
-    """Validated nominal identifier used by the data recipe API."""
+    """Validated nominal identifier used by the data pipeline API."""
 
     def __new__(cls, value: str) -> DataId:
         normalized = value.strip()

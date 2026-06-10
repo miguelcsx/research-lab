@@ -1,47 +1,55 @@
 # Data project
 
-This project exposes one typed dataset recipe from `ingest/corpus.py`:
+This project exposes a reusable, audited dataset from `ingest/corpus.py`:
 
 ```python
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import rlab
 
 
-def clean(
-    records: Iterable[dict[str, object]],
-    ctx: rlab.DataContext,
-) -> Iterable[dict[str, object]]:
-    del ctx
-    for record in records:
+@rlab.source("corpus.raw")
+@dataclass(frozen=True, slots=True)
+class CorpusSource:
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        del ctx
+        yield {"id": "1", "text": "  Hello world  ", "source": "web"}
+        yield {"id": "2", "text": "", "source": "book"}
+
+
+@rlab.transform("corpus.clean")
+@dataclass(frozen=True, slots=True)
+class Clean:
+    def apply(self, record, ctx):
+        del ctx
         text = str(record["text"]).strip()
-        if text:
-            yield {**record, "text": text}
+        if not text:
+            return rlab.data_drop("empty")
+        return rlab.data_update({**record, "text": text}, reason="trimmed")
 
 
-def nonempty(rows: list[dict[str, object]], ctx: rlab.DataContext) -> rlab.CheckResult:
-    del ctx
-    return rlab.CheckResult(bool(rows))
+@rlab.pipeline(
+    "corpus.clean",
+    stages=(rlab.use("transform:corpus.clean"),),
+)
+class CleanPipeline:
+    pass
 
 
-@rlab.dataset("corpus.clean-v1", stages=(clean,), checks=(nonempty,))
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"id": "1", "text": "  Hello world  ", "source": "web"}
-    yield {"id": "2", "text": "Research lab", "source": "book"}
+@rlab.dataset(
+    "corpus.clean",
+    source=rlab.use("source:corpus.raw"),
+    pipeline="pipeline:corpus.clean",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+    audit=rlab.AuditPolicy(sample_reasons={"empty": 5}),
+)
+class CleanCorpus:
+    pass
 ```
-
-Load the module from `lab.toml`:
-
-```toml
-[modules]
-load = ["ingest.corpus"]
-```
-
-Then build and inspect it:
 
 ```bash
-rlab data build dataset:corpus.clean-v1
+rlab data build dataset:corpus.clean
 rlab data profile runs/<run-id>/artifacts/dataset/manifest.yaml
-rlab data sample runs/<run-id>/artifacts/dataset/manifest.yaml --n 5
+rlab data audit runs/<run-id>
 ```

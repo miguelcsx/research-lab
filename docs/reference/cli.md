@@ -72,6 +72,7 @@ rlab eval project.official --model hf:gpt2 --external-runner local
 
 ```bash
 rlab data build dataset:project.tiny
+rlab data build dataset:project.tiny --override source.limit=10
 rlab data profile path/to/manifest.yaml
 rlab data validate path/to/manifest.yaml
 rlab data diff left.yaml right.yaml
@@ -80,6 +81,11 @@ rlab data ablate dataset:x --factor dedup=true,false
 rlab data sample manifest.yaml --n 10
 rlab data sample manifest.yaml --n 100 --output sample.jsonl
 rlab data lineage manifest.yaml
+rlab data audit runs/<run-id>
+rlab data reasons runs/<run-id>
+rlab data sample-drops runs/<run-id> empty
+rlab data stage-summary runs/<run-id>
+rlab data source-summary runs/<run-id>
 rlab data promote manifest.yaml --as project.tiny --alias candidate
 ```
 

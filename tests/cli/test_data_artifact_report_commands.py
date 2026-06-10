@@ -12,13 +12,20 @@ from tests.helpers.cli import assert_success, invoke_cli
 
 def test_data_build_records_param_overrides(project: Path) -> None:
     assert_success(
-        invoke_cli(project, "data", "build", "dataset:project.tiny", "--param", "budget=10")
+        invoke_cli(
+            project,
+            "data",
+            "build",
+            "dataset:project.tiny",
+            "--override",
+            "source.limit=1",
+        )
     )
 
     run_dirs = sorted((project / "runs").glob("data.build_*"))
     assert run_dirs, "expected a data build run directory"
     params = json.loads((run_dirs[-1] / "params.json").read_text())
-    assert params["budget"] == 10
+    assert params["source.limit"] == 1
 
 
 def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
@@ -50,6 +57,10 @@ def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
         ("data", "compare", str(manifest), str(manifest)),
         ("data", "sample", str(manifest), "--n", "1"),
         ("data", "lineage", str(manifest)),
+        ("data", "audit", str(data_run)),
+        ("data", "reasons", str(data_run)),
+        ("data", "stage-summary", str(data_run)),
+        ("data", "source-summary", str(data_run)),
         ("artifacts", "list"),
         ("compare", "datasets", str(manifest), str(manifest)),
         ("report", "run", str(evaluation)),
@@ -78,7 +89,7 @@ def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
         invoke_cli(project, "artifacts", "pull", "artifact:dataset/project.tiny@candidate")
     )
 
-    reference = "artifact:dataset/project.tiny@1"
+    reference = "artifact:dataset/project.tiny@1.0.0"
     for args in (
         ("artifacts", "describe", reference),
         ("artifacts", "lineage", reference),

@@ -195,8 +195,8 @@ All code is strictly typed, comprehensively tested, and linted.
 ## 🎓 How It Works
 
 Projects declare components, benchmarks, evaluations, experiments, and
-workflows next to the code that executes them. Datasets use typed recipe
-catalogs:
+workflows next to the code that executes them. Datasets compose typed sources,
+pipelines, and sinks:
 
 ```python
 @rlab.component("kind", "name")           # reusable model/tool component
@@ -207,7 +207,23 @@ rlab.external_evaluation(...)             # external command evaluation
 @rlab.workflow("name", step="prepare")    # composed workflow step
 @rlab.result_schema("name")               # typed result schema
 
-rlab.register_datasets(rlab.DatasetCatalog(RECIPE))
+@rlab.source("project.raw")
+@dataclass(frozen=True, slots=True)
+class RawSource:
+    ...
+
+@rlab.pipeline("project.clean", stages=(rlab.use("transform:text.clean"),))
+class CleanPipeline:
+    pass
+
+@rlab.dataset(
+    "project.clean",
+    source=rlab.use("source:project.raw"),
+    pipeline="pipeline:project.clean",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+)
+class CleanDataset:
+    pass
 ```
 
 Share modules between projects by importing them as ordinary Python packages — the decorators register components into the active project's registry on import.

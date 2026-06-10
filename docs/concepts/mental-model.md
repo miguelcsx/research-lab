@@ -38,6 +38,11 @@ def sweep(ctx: rlab.RuntimeContext) -> dict[str, float]:
 
 When `rlab` builds a runtime, it loads every module listed in `lab.toml` and fills the registry.
 
+Data pipelines use the same model. Sources and stages are registered frozen
+dataclasses, pipelines are ordered component references, and datasets bind one
+source and pipeline to sinks, checks, metrics, and an audit policy. Runtime
+execution resolves only explicit, semantically versioned registry entries.
+
 ## Runtime context
 
 `RuntimeContext` is the object passed into execution paths. It contains:

@@ -74,24 +74,33 @@ def score(model: object, ctx: rlab.RuntimeContext) -> dict[str, float]:
 ```python
 # ingest/tiny.py
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import rlab
 
 
-def uppercase(
-    records: Iterable[dict[str, object]],
-    ctx: rlab.DataContext,
-) -> Iterable[dict[str, object]]:
-    del ctx
-    for record in records:
-        yield {**record, "text": str(record["text"]).upper()}
+@rlab.source("project.tiny")
+@dataclass(frozen=True, slots=True)
+class TinySource:
+    def read(self, ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
+        del ctx
+        yield {"text": "research"}
+        yield {"text": "lab"}
 
 
-@rlab.dataset("project.tiny", stages=(uppercase,))
-def source(ctx: rlab.DataContext) -> Iterable[dict[str, object]]:
-    del ctx
-    yield {"text": "research"}
-    yield {"text": "lab"}
+@rlab.pipeline("project.tiny", stages=())
+class TinyPipeline:
+    pass
+
+
+@rlab.dataset(
+    "project.tiny",
+    source=rlab.use("source:project.tiny"),
+    pipeline="pipeline:project.tiny",
+    sinks=(rlab.use("sink:rlab.jsonl"),),
+)
+class TinyDataset:
+    pass
 ```
 
 ## Experiment

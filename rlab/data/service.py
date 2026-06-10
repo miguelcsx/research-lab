@@ -1,3 +1,4 @@
+import csv
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -22,17 +23,22 @@ def _dataset_name(reference: str) -> str:
 def build(
     runtime: RuntimeContext,
     reference: str,
-    version: str = "1",
     *,
-    params: Mapping[str, JsonValue] | None = None,
+    overrides: Mapping[str, JsonValue] | None = None,
 ) -> Path:
     name = _dataset_name(reference)
-    overrides = dict(params or {})
-    session = RunSession(runtime, "data.build", name, {"dataset": reference, **overrides})
+    active_overrides = dict(overrides or {})
+    session = RunSession(runtime, "data.build", name, {"dataset": reference, **active_overrides})
     with session.running() as active:
         output = session.layout.artifacts / "dataset"
-        context = DataContext(runtime=active, work_dir=output, params=overrides)
-        manifest = build_dataset(active.registry, name, context, output, version=version)
+        context = DataContext(runtime=active, work_dir=output)
+        manifest = build_dataset(
+            active.registry,
+            name,
+            context,
+            output,
+            overrides=active_overrides,
+        )
         write_manifest(output / "manifest.yaml", manifest)
         session.complete(manifest)
     return session.layout.root
@@ -80,3 +86,45 @@ def promote(
 
 def write_sample(path: Path, records: tuple[Record, ...]) -> None:
     path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+
+
+def audit_summary(path: Path) -> object:
+    manifest = read_dataset_manifest(_manifest_path(path))
+    return json.loads(_audit_path(path, manifest.audit.summary).read_text(encoding="utf-8"))
+
+
+def audit_table(path: Path, table_name: str) -> tuple[dict[str, str], ...]:
+    manifest_path = _manifest_path(path)
+    manifest = read_dataset_manifest(manifest_path)
+    audit_file = {
+        "reasons": manifest.audit.drop_reasons,
+        "stages": manifest.audit.stage_summary,
+        "sources": manifest.audit.source_summary,
+    }[table_name]
+    with _audit_path(manifest_path, audit_file).open(encoding="utf-8", newline="") as stream:
+        return tuple(csv.DictReader(stream))
+
+
+def audit_samples(path: Path, reason: str) -> tuple[Record, ...]:
+    manifest_path = _manifest_path(path)
+    manifest = read_dataset_manifest(manifest_path)
+    sample_path = manifest.audit.samples.get(reason)
+    if sample_path is None:
+        configured = ", ".join(sorted(manifest.audit.samples)) or "none"
+        raise ValueError(
+            f"No audit samples captured for reason {reason!r}; available reasons: {configured}"
+        )
+    return tuple(read_jsonl(_audit_path(manifest_path, sample_path)))
+
+
+def _manifest_path(path: Path) -> Path:
+    if path.is_file():
+        return path
+    candidate = path / "artifacts" / "dataset" / "manifest.yaml"
+    if not candidate.exists():
+        raise FileNotFoundError(f"dataset manifest not found under {path}")
+    return candidate
+
+
+def _audit_path(manifest_path: Path, path: Path) -> Path:
+    return path if path.is_absolute() else manifest_path.parent / path

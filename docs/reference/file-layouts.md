@@ -112,8 +112,14 @@ runs/data.build_project.clean_<timestamp>/
 └── artifacts/
     └── dataset/
         ├── data.jsonl
-        ├── data_report.md
-        └── manifest.yaml
+        ├── manifest.yaml
+        └── audit/
+            ├── summary.json
+            ├── drop_reasons.csv
+            ├── stage_summary.csv
+            ├── source_summary.csv
+            ├── decisions.jsonl
+            └── samples/
 ```
 
 ## Artifact store

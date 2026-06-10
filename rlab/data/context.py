@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from rlab.context.runtime import RuntimeContext
-from rlab.typing import JsonValue
 
 
 class DataContext(BaseModel):
@@ -11,4 +10,3 @@ class DataContext(BaseModel):
 
     runtime: RuntimeContext
     work_dir: Path
-    params: dict[str, JsonValue] = Field(default_factory=dict)
