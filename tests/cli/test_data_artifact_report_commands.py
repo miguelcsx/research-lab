@@ -70,6 +70,11 @@ def test_data_artifacts_compare_report_and_reproduce(project: Path) -> None:
     ):
         assert_success(invoke_cli(project, *args))
 
+    missing_samples = invoke_cli(project, "data", "sample-drops", str(data_run), "empty")
+    assert missing_samples.exit_code != 0
+    assert "No audit samples captured" in missing_samples.output
+    assert "Traceback" not in missing_samples.output
+
     assert_success(
         invoke_cli(project, "data", "ablate", "dataset:x", "--factor", "enabled=true,false")
     )

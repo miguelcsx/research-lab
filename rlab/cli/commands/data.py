@@ -85,7 +85,11 @@ def source_summary_command(ctx: typer.Context, run: Path) -> None:
 @app.command("sample-drops")
 def sample_drops_command(ctx: typer.Context, run: Path, reason: str) -> None:
     state: CliState = ctx.obj
-    state.console.print_json(json.dumps(audit_samples(run, reason)))
+    try:
+        samples = audit_samples(run, reason)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="reason") from exc
+    state.console.print_json(json.dumps(samples))
 
 
 @app.command("profile")
