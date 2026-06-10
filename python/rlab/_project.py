@@ -139,11 +139,15 @@ class Project:
     def pipeline(self, name: str, *stages: Any, version: str = "1", tags: list[str] | tuple[str, ...] = (), description: str | None = None):
         """Register a pipeline declaration."""
         metadata = {"stages": [_jsonable_spec(stage) for stage in stages], "version": version, "tags": list(tags), "description": description}
-        return decorator_factory(self, "pipeline", name, metadata)
+        sentinel = _SentinelCallable(name)
+        self._register(kind="pipeline", name=name, obj=sentinel, metadata=metadata)
+        return name
 
     def dataset(self, name: str, **metadata: Any):
         """Register a dataset declaration."""
-        return decorator_factory(self, "dataset", name, metadata)
+        sentinel = _SentinelCallable(name)
+        self._register(kind="dataset", name=name, obj=sentinel, metadata=metadata)
+        return name
 
     def define_workflow(self, name: str, *, steps: Any):
         """Register a workflow assembled imperatively from step descriptors."""
@@ -333,7 +337,7 @@ class _SentinelCallable:
 def _jsonable_spec(value: Any) -> Any:
     if hasattr(value, "to_dict"):
         return _jsonable_spec(value.to_dict())
-    if is_dataclass(value):
+    if is_dataclass(value) and not isinstance(value, type):
         return _jsonable_spec(asdict(value))
     if isinstance(value, dict):
         return {str(key): _jsonable_spec(child) for key, child in value.items()}
