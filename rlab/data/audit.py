@@ -74,8 +74,11 @@ class AuditRecorder:
         if self.policy.capture_decisions:
             self._decisions.append(row)
         sample_limit = self.policy.sample_reasons.get(decision.reason)
+        if sample_limit is None:
+            return
+
         samples = self._samples[decision.reason]
-        if sample_limit is not None and len(samples) < sample_limit:
+        if len(samples) < sample_limit:
             samples.append({**row, "record": _json_value(input_record)})
 
     def write(self) -> AuditPaths:

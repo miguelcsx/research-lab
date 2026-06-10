@@ -107,6 +107,7 @@ def test_declarative_dataset_writes_versioned_manifest_and_audit(tmp_path: Path)
     assert manifest.audit.summary.exists()
     assert manifest.audit.decisions is not None and manifest.audit.decisions.exists()
     assert manifest.audit.samples["empty"].exists()
+    assert set(manifest.audit.samples) == {"empty"}
     validate_dataset_manifest(manifest)
 
 
