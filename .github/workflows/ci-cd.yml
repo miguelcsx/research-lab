@@ -1,0 +1,726 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - ".github/workflows/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "pyproject.toml"
+      - "python/**"
+      - "templates/**"
+      - "examples/**"
+      - "tests/**"
+      - "docs/**"
+
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "pyproject.toml"
+      - "python/**"
+      - "templates/**"
+      - "examples/**"
+      - "tests/**"
+      - "docs/**"
+
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish artifacts to the configured Python package index"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  RUST_BACKTRACE: "1"
+  PYTHONUNBUFFERED: "1"
+  UV_SYSTEM_PYTHON: "1"
+  RLAB_CI: "1"
+  RLAB_STRICT: "1"
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      is_release: ${{ steps.release.outputs.is_release }}
+      should_publish: ${{ steps.release.outputs.should_publish }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect package version
+        id: package
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          version = pyproject["project"]["version"]
+          print(f"version={version}")
+          PY
+
+      - name: Validate release intent
+        id: release
+        shell: bash
+        run: |
+          IS_RELEASE="false"
+          SHOULD_PUBLISH="false"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            IS_RELEASE="true"
+            SHOULD_PUBLISH="true"
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish }}" == "true" ]]; then
+            SHOULD_PUBLISH="true"
+          fi
+
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "should_publish=${SHOULD_PUBLISH}" >> "$GITHUB_OUTPUT"
+
+      - name: Check required repository files
+        shell: bash
+        run: |
+          test -f Cargo.toml
+          test -f pyproject.toml
+          test -d crates/rlab-core
+          test -d crates/rlab-cli
+          test -d crates/rlab-py
+          test -d python/rlab
+          test -f python/rlab/__init__.py
+          test -f python/rlab/__main__.py
+          test -f python/rlab/_runner.py
+          test -f python/rlab/py.typed
+
+      - name: Validate no generated Python cache files are committed
+        shell: bash
+        run: |
+          if find . -type d -name "__pycache__" -print -quit | grep -q .; then
+            echo "Committed __pycache__ directory found."
+            exit 1
+          fi
+
+          if find . -type f -name "*.pyc" -print -quit | grep -q .; then
+            echo "Committed .pyc file found."
+            exit 1
+          fi
+
+  rust-quality:
+    name: Rust quality
+    runs-on: ubuntu-latest
+    needs:
+      - preflight
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-quality
+          cache-on-failure: true
+
+      - name: Check formatting
+        shell: bash
+        run: cargo fmt --all --check
+
+      - name: Check workspace
+        shell: bash
+        run: cargo check --workspace --all-targets --all-features --locked
+
+      - name: Run Clippy
+        shell: bash
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  rust-tests:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    needs:
+      - rust-quality
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-tests
+          cache-on-failure: true
+
+      - name: Run Rust tests
+        shell: bash
+        run: cargo test --workspace --all-features --locked
+
+  python-quality:
+    name: Python quality
+    runs-on: ubuntu-latest
+    needs:
+      - preflight
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: python-quality-${{ matrix.python-version }}
+          cache-on-failure: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install uv
+        shell: bash
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install Python quality tools
+        shell: bash
+        run: |
+          uv pip install --system \
+            maturin \
+            ruff \
+            mypy \
+            pytest
+
+      - name: Check Python formatting and lint
+        shell: bash
+        run: |
+          ruff format --check python tests examples
+          ruff check python tests examples
+
+      - name: Type-check Python facade
+        shell: bash
+        run: mypy python/rlab
+
+      - name: Compile Python files
+        shell: bash
+        run: python -m compileall -q python examples
+
+      - name: Build extension in-place for import smoke
+        shell: bash
+        run: maturin develop --release
+
+      - name: Import smoke test
+        shell: bash
+        run: |
+          python - <<'PY'
+          import rlab
+
+          assert hasattr(rlab, "Project")
+          assert hasattr(rlab, "Metric")
+          assert hasattr(rlab, "ResultBundle")
+
+          lab = rlab.Project()
+          assert lab is not None
+          PY
+
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          rlab --help
+          python -m rlab --help
+          rlab config show --json
+          rlab validate --json
+
+      - name: Run Python tests
+        shell: bash
+        run: |
+          if [ -d tests/python ]; then
+            pytest tests/python
+          else
+            echo "No tests/python directory found; skipping Python test directory."
+          fi
+
+  integration-zero-config:
+    name: Zero-config integration
+    runs-on: ubuntu-latest
+    needs:
+      - rust-tests
+      - python-quality
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: integration-zero-config
+          cache-on-failure: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install uv and maturin
+        shell: bash
+        run: python -m pip install --upgrade pip uv maturin
+
+      - name: Build and install local package
+        shell: bash
+        run: maturin develop --release
+
+      - name: Create zero-config user project
+        shell: bash
+        run: |
+          mkdir -p /tmp/rlab-zero-config/experiments
+          cat > /tmp/rlab-zero-config/pyproject.toml <<'EOF'
+          [project]
+          name = "rlab-zero-config-smoke"
+          version = "0.1.0"
+          dependencies = ["rlab"]
+          EOF
+
+          cat > /tmp/rlab-zero-config/experiments/__init__.py <<'EOF'
+          from .sweep import sweep
+          EOF
+
+          cat > /tmp/rlab-zero-config/experiments/sweep.py <<'EOF'
+          import rlab
+
+          lab = rlab.Project()
+
+          @lab.experiment("sweep")
+          def sweep(ctx):
+              ctx.log_metric("loss", 0.2)
+              ctx.log_metrics({"accuracy": 0.91, "runtime_seconds": 1.0})
+              ctx.note("zero-config integration smoke")
+              return {"ok": True}
+          EOF
+
+      - name: Run zero-config workflow
+        working-directory: /tmp/rlab-zero-config
+        shell: bash
+        run: |
+          rlab discover --json
+          rlab run experiment:sweep --json
+          rlab runs list --json
+
+          RUN_ID="$(rlab runs list --json | python -c 'import json,sys; print(json.load(sys.stdin)["runs"][0]["id"])')"
+          rlab runs show "$RUN_ID" --json
+
+      - name: Validate generated run structure
+        working-directory: /tmp/rlab-zero-config
+        shell: bash
+        run: |
+          test -d .rlab/runs
+          test -d .rlab/artifacts
+          find .rlab/runs -name run.yaml -print -quit | grep -q .
+          find .rlab/runs -name metrics.jsonl -print -quit | grep -q .
+          find .rlab/runs -name metrics_summary.json -print -quit | grep -q .
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    needs:
+      - rust-quality
+      - python-quality
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-sdist
+          cache-on-failure: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install maturin
+        shell: bash
+        run: python -m pip install --upgrade pip maturin
+
+      - name: Build sdist
+        shell: bash
+        run: maturin sdist --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  build-wheels-linux:
+    name: Build wheels / Linux
+    runs-on: ubuntu-latest
+    needs:
+      - rust-quality
+      - python-quality
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64
+          - aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          manylinux: auto
+          sccache: "true"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  build-wheels-macos:
+    name: Build wheels / macOS
+    needs:
+      - rust-quality
+      - python-quality
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  build-wheels-windows:
+    name: Build wheels / Windows
+    runs-on: windows-latest
+    needs:
+      - rust-quality
+      - python-quality
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-distributions:
+    name: Verify built distributions
+    runs-on: ubuntu-latest
+    needs:
+      - build-sdist
+      - build-wheels-linux
+      - build-wheels-macos
+      - build-wheels-windows
+      - integration-zero-config
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Flatten distribution artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find dist-artifacts -type f \( -name "*.whl" -o -name "*.tar.gz" \) -exec cp {} dist/ \;
+          ls -lh dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install verification tools
+        shell: bash
+        run: python -m pip install --upgrade pip uv twine
+
+      - name: Check distribution metadata
+        shell: bash
+        run: twine check dist/*
+
+      - name: Verify wheel install on current platform
+        shell: bash
+        run: |
+          WHEEL="$(python - <<'PY'
+          from pathlib import Path
+          wheels = sorted(Path("dist").glob("*manylinux*x86_64*.whl"))
+          if not wheels:
+              wheels = sorted(Path("dist").glob("*linux*x86_64*.whl"))
+          if not wheels:
+              raise SystemExit("No Linux x86_64 wheel found for verification.")
+          print(wheels[0])
+          PY
+          )"
+
+          python -m venv .venv-wheel-smoke
+          source .venv-wheel-smoke/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install "$WHEEL"
+
+          python - <<'PY'
+          import rlab
+
+          assert hasattr(rlab, "Project")
+          assert hasattr(rlab, "Metric")
+          assert hasattr(rlab, "ResultBundle")
+          PY
+
+          rlab --help
+          python -m rlab --help
+
+      - name: Upload final distributions bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release-github:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - verify-distributions
+      - preflight
+    if: needs.preflight.outputs.is_release == 'true'
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download final distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+
+      - name: Create release and upload distributions
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  publish-python-package:
+    name: Publish Python package
+    runs-on: ubuntu-latest
+    needs:
+      - verify-distributions
+      - preflight
+    if: needs.preflight.outputs.should_publish == 'true'
+    timeout-minutes: 15
+
+    environment:
+      name: release
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download final distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install uv
+        shell: bash
+        run: python -m pip install --upgrade pip uv
+
+      - name: Publish to package index
+        shell: bash
+        env:
+          UV_PUBLISH_URL: ${{ secrets.UV_PUBLISH_URL }}
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "${UV_PUBLISH_URL}" ]; then
+            echo "Missing secret: UV_PUBLISH_URL"
+            exit 1
+          fi
+
+          if [ -z "${UV_PUBLISH_TOKEN}" ]; then
+            echo "Missing secret: UV_PUBLISH_TOKEN"
+            exit 1
+          fi
+
+          uv publish \
+            --publish-url "${UV_PUBLISH_URL}" \
+            --token "${UV_PUBLISH_TOKEN}" \
+            dist/*
+
+  final-status:
+    name: Final status
+    runs-on: ubuntu-latest
+    needs:
+      - preflight
+      - rust-quality
+      - rust-tests
+      - python-quality
+      - integration-zero-config
+      - build-sdist
+      - build-wheels-linux
+      - build-wheels-macos
+      - build-wheels-windows
+      - verify-distributions
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: Check required jobs
+        shell: bash
+        run: |
+          check_job() {
+            local name="$1"
+            local result="$2"
+
+            if [ "$result" != "success" ]; then
+              echo "Required job failed or was skipped: ${name} => ${result}"
+              exit 1
+            fi
+          }
+
+          check_job "preflight" "${{ needs.preflight.result }}"
+          check_job "rust-quality" "${{ needs.rust-quality.result }}"
+          check_job "rust-tests" "${{ needs.rust-tests.result }}"
+          check_job "python-quality" "${{ needs.python-quality.result }}"
+          check_job "integration-zero-config" "${{ needs.integration-zero-config.result }}"
+          check_job "build-sdist" "${{ needs.build-sdist.result }}"
+          check_job "build-wheels-linux" "${{ needs.build-wheels-linux.result }}"
+          check_job "build-wheels-macos" "${{ needs.build-wheels-macos.result }}"
+          check_job "build-wheels-windows" "${{ needs.build-wheels-windows.result }}"
+          check_job "verify-distributions" "${{ needs.verify-distributions.result }}"
+
+          echo "All required CI/CD jobs completed successfully."
