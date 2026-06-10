@@ -1,0 +1,30 @@
+[workspace]
+members = [
+  "crates/rlab-core",
+  "crates/rlab-cli",
+  "crates/rlab-py",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.1.0"
+authors = ["Miguel Cardenas"]
+repository = "ssh://git@github.com/miguelcsx/research-lab.git"
+
+[workspace.dependencies]
+camino = { version = "1.1", features = ["serde1"] }
+clap = { version = "4.5", features = ["derive"] }
+hex = "0.4"
+fs2 = "0.4"
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "1.0"
+time = { version = "0.3", features = ["formatting", "macros", "serde", "serde-well-known"] }
+toml = "0.8"
+walkdir = "2.5"
+zip = "2.1"
