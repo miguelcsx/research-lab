@@ -91,9 +91,7 @@ def build_dataset(
         raise ValueError("dataset must produce at least one output")
 
     audit_paths = execution.audit.write()
-    stage_prefixes = tuple(
-        f"{kind.value}:" for kind in (*RECORD_STAGE_KINDS, *BATCH_STAGE_KINDS)
-    )
+    stage_prefixes = tuple(f"{kind.value}:" for kind in (*RECORD_STAGE_KINDS, *BATCH_STAGE_KINDS))
     manifest = dataset_manifest(
         name,
         dataset.version,
@@ -112,9 +110,7 @@ def build_dataset(
         configuration=execution.metadata.configuration,
         audit=audit_paths,
     )
-    return manifest.model_copy(
-        update={"licenses": tuple(dict.fromkeys(results.licenses))}
-    )
+    return manifest.model_copy(update={"licenses": tuple(dict.fromkeys(results.licenses))})
 
 
 def _resolve_dataset(

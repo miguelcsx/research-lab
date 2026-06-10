@@ -121,10 +121,7 @@ class AuditRecorder:
         _write_csv(
             source_summary,
             ("source", "read", "emitted"),
-            (
-                {"source": source, **counts}
-                for source, counts in self.source_counts.items()
-            ),
+            ({"source": source, **counts} for source, counts in self.source_counts.items()),
         )
 
         decisions_path: Path | None = None
@@ -180,6 +177,5 @@ def _json_value(value: object) -> JsonValue:
 
 def _safe_name(value: str) -> str:
     return "".join(
-        character if character.isalnum() or character in "-_." else "_"
-        for character in value
+        character if character.isalnum() or character in "-_." else "_" for character in value
     )

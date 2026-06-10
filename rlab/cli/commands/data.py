@@ -53,9 +53,7 @@ def build_command(
     override: list[str] | None = typer.Option(None, "--override", "-o", help=_OVERRIDE_HELP),
 ) -> None:
     state: CliState = ctx.obj
-    state.console.print(
-        build(state.runtime(), dataset, overrides=parse_overrides(override or ()))
-    )
+    state.console.print(build(state.runtime(), dataset, overrides=parse_overrides(override or ())))
 
 
 @app.command("audit")

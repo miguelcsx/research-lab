@@ -30,57 +30,39 @@ def _component(kind: EntryKind, name: str, version: str, tags: tuple[str, ...]) 
     return decorate
 
 
-def source(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def source(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.SOURCE, name, version, tags)
 
 
-def transform(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def transform(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.TRANSFORM, name, version, tags)
 
 
-def filter(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def filter(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.FILTER, name, version, tags)
 
 
-def group(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def group(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.GROUP, name, version, tags)
 
 
-def dedup(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def dedup(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.DEDUP, name, version, tags)
 
 
-def sink(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def sink(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.SINK, name, version, tags)
 
 
-def check(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def check(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.CHECK, name, version, tags)
 
 
-def metric(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def metric(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.METRIC, name, version, tags)
 
 
-def patterns(
-    name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()
-) -> Callable[[T], T]:
+def patterns(name: str, *, version: str = "1.0.0", tags: tuple[str, ...] = ()) -> Callable[[T], T]:
     return _component(EntryKind.PATTERNS, name, version, tags)
 
 

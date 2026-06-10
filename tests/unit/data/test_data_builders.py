@@ -47,9 +47,7 @@ def _declare_pipeline(runtime: RuntimeContext, *, audit: rlab.AuditPolicy | None
         @rlab.check("test.nonempty")
         @dataclass(frozen=True, slots=True)
         class Nonempty:
-            def evaluate(
-                self, records: Sequence[Record], _ctx: DataContext
-            ) -> rlab.CheckResult:
+            def evaluate(self, records: Sequence[Record], _ctx: DataContext) -> rlab.CheckResult:
                 return rlab.CheckResult(bool(records))
 
         @rlab.metric("test.record_count")
