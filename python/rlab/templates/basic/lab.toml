@@ -1,0 +1,15 @@
+schema_version = 1
+
+[project]
+name = "basic"
+
+[paths]
+runs = ".rlab/runs"
+artifacts = ".rlab/artifacts"
+cache = ".rlab/cache"
+
+[python]
+modules = ["experiments"]
+
+[production]
+strict = false
