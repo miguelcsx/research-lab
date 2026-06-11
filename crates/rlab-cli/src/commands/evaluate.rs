@@ -34,7 +34,7 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
     let parsed = parse_target(&command.target, Some("model")).map_err(|error| match error {
         ParseTargetError::FilePath { value } => rlab_core::RlabError::Reference {
             message: format!(
-                "'{value}' looks like a file path, but 'rlab evaluate' expects a registry target".
+                "'{value}' looks like a file path, but 'rlab evaluate' expects a registry target"
             ),
         },
         ParseTargetError::InvalidKind { value, reason } => rlab_core::RlabError::Reference {
