@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +52,7 @@ class ExternalEvaluation:
 class AdapterContext:
     project_root: Path
     artifact_root: Path
+    params: Mapping[str, Any] = field(default_factory=dict)
 
     def project_path(self, value: str | Path) -> Path:
         return self.project_root / value

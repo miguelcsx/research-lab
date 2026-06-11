@@ -110,12 +110,23 @@ pub fn process_event_public(
 }
 
 fn parse_target(value: &str) -> RlabResult<(RegistryKind, String)> {
+    // Detect file paths early and give an actionable error.
+    if value.ends_with(".py") || value.ends_with(".toml") || value.contains('/') || value.contains('\\') {
+        return Err(RlabError::Reference {
+            message: format!(
+                "'{value}' looks like a file path, but 'rlab run' expects a registry target.\n  \
+                 Use the form: rlab run <kind>:<name>\n  \
+                 Examples: rlab run dataset:babylm.curation.smoke\n           rlab run experiment:my.experiment\n  \
+                 Run 'rlab discover' to list all registered targets."
+            ),
+        });
+    }
     let mut parts = value.splitn(2, ':');
     let kind_str = match parts.next() {
         Some(text) if !text.trim().is_empty() => text,
         _ => {
             return Err(RlabError::Reference {
-                message: format!("invalid target: {value}"),
+                message: format!("invalid target: '{value}' — expected <kind>:<name>"),
             })
         }
     };
@@ -123,7 +134,9 @@ fn parse_target(value: &str) -> RlabResult<(RegistryKind, String)> {
         Some(text) if !text.trim().is_empty() => text,
         _ => {
             return Err(RlabError::Reference {
-                message: format!("target must be kind:name: {value}"),
+                message: format!(
+                    "missing name in target '{value}' — expected <kind>:<name>, e.g. dataset:babylm.curation.smoke"
+                ),
             })
         }
     };
