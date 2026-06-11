@@ -10,6 +10,9 @@ pub struct SchemaVersion {
 
 impl SchemaVersion {
     pub fn current(kind: &str) -> Self {
-        Self { schema_version: CURRENT_SCHEMA_VERSION, kind: kind.to_string() }
+        Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            kind: kind.to_string(),
+        }
     }
 }

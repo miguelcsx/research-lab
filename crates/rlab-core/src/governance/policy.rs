@@ -40,7 +40,12 @@ impl LabPolicy {
             require_data_manifest: false,
             require_clean_git_for_promotion: false,
             require_review_for_paper: false,
-            forbidden_env_patterns: vec!["TOKEN".to_string(), "SECRET".to_string(), "PASSWORD".to_string(), "KEY".to_string()],
+            forbidden_env_patterns: vec![
+                "TOKEN".to_string(),
+                "SECRET".to_string(),
+                "PASSWORD".to_string(),
+                "KEY".to_string(),
+            ],
         }
     }
 
@@ -48,9 +53,14 @@ impl LabPolicy {
         env.keys()
             .filter(|key| {
                 let upper = key.to_uppercase();
-                self.forbidden_env_patterns.iter().any(|pattern| upper.contains(&pattern.to_uppercase()))
+                self.forbidden_env_patterns
+                    .iter()
+                    .any(|pattern| upper.contains(&pattern.to_uppercase()))
             })
-            .map(|key| PolicyViolation { rule: "forbidden_env_patterns".to_string(), subject: key.clone() })
+            .map(|key| PolicyViolation {
+                rule: "forbidden_env_patterns".to_string(),
+                subject: key.clone(),
+            })
             .collect()
     }
 }

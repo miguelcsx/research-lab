@@ -24,12 +24,20 @@ where
 {
     ensure_dir(output_dir)?;
     let data_path = output_dir.join("data.jsonl");
-    let mut report = MaterializeReport { schema_version: SCHEMA_VERSION, written_records: 0, dropped_records: 0, drop_reasons: BTreeMap::new() };
+    let mut report = MaterializeReport {
+        schema_version: SCHEMA_VERSION,
+        written_records: 0,
+        dropped_records: 0,
+        drop_reasons: BTreeMap::new(),
+    };
     for decision in decisions {
         match decision {
             DataDecision::Keep { record, .. } | DataDecision::Update { record, .. } => {
                 validate_json_object(&record)?;
-                append_line(&data_path, &serde_json::to_string(&record).map_err(RlabError::serialization)?)?;
+                append_line(
+                    &data_path,
+                    &serde_json::to_string(&record).map_err(RlabError::serialization)?,
+                )?;
                 report.written_records += 1;
             }
             DataDecision::Drop { reason, .. } => {
@@ -38,7 +46,9 @@ where
                 *count += 1;
             }
             DataDecision::Boundary { .. } => {
-                return Err(RlabError::Validation { message: "data boundary reached sink without being consumed".to_string() });
+                return Err(RlabError::Validation {
+                    message: "data boundary reached sink without being consumed".to_string(),
+                });
             }
         }
     }
@@ -50,6 +60,8 @@ fn validate_json_object(value: &Value) -> RlabResult<()> {
     if value.is_object() {
         Ok(())
     } else {
-        Err(RlabError::Validation { message: "materialized data records must be JSON objects".to_string() })
+        Err(RlabError::Validation {
+            message: "materialized data records must be JSON objects".to_string(),
+        })
     }
 }

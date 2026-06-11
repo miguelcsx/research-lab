@@ -35,13 +35,19 @@ pub struct EvaluationResult {
 impl EvaluationSuite {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported evaluation suite schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported evaluation suite schema_version".to_string(),
+            });
         }
         if self.name.trim().is_empty() {
-            return Err(RlabError::Validation { message: "evaluation suite name cannot be empty".to_string() });
+            return Err(RlabError::Validation {
+                message: "evaluation suite name cannot be empty".to_string(),
+            });
         }
         if self.tasks.is_empty() {
-            return Err(RlabError::Validation { message: format!("evaluation suite {} has no tasks", self.name) });
+            return Err(RlabError::Validation {
+                message: format!("evaluation suite {} has no tasks", self.name),
+            });
         }
         Ok(())
     }
@@ -50,7 +56,9 @@ impl EvaluationSuite {
 impl EvaluationResult {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported evaluation result schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported evaluation result schema_version".to_string(),
+            });
         }
         for task in &self.tasks {
             for metric in &task.metrics {

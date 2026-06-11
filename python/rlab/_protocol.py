@@ -25,6 +25,8 @@ class HostRequest:
     modules: list[str]
     target: HostTarget | None
     run_id: str | None
+    run_dir: str | None
+    cache_dir: str | None
     params: dict[str, Any]
     seed: int | None
     strict: bool
@@ -54,6 +56,8 @@ def read_request() -> HostRequest:
         modules=[str(module) for module in raw.get("modules", [])],
         target=target,
         run_id=None if raw.get("run_id") is None else str(raw["run_id"]),
+        run_dir=None if raw.get("run_dir") is None else str(raw["run_dir"]),
+        cache_dir=None if raw.get("cache_dir") is None else str(raw["cache_dir"]),
         params=dict(raw.get("params", {})),
         seed=raw.get("seed"),
         strict=bool(raw.get("strict", False)),

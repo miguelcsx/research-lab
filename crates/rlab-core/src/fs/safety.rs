@@ -1,4 +1,3 @@
-
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::{RlabError, RlabResult};
@@ -24,12 +23,19 @@ pub fn ensure_child_path(root: &Path, candidate: &Path) -> RlabResult<PathBuf> {
 }
 
 pub fn ensure_existing_child_path(root: &Path, candidate: &Path) -> RlabResult<PathBuf> {
-    let root_abs = root.canonicalize().map_err(|error| RlabError::io(root, error))?;
+    let root_abs = root
+        .canonicalize()
+        .map_err(|error| RlabError::io(root, error))?;
     let path = ensure_child_path(&root_abs, candidate)?;
-    let canonical = path.canonicalize().map_err(|error| RlabError::io(&path, error))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| RlabError::io(&path, error))?;
     if !canonical.starts_with(&root_abs) {
         return Err(RlabError::Validation {
-            message: format!("path escapes project root after canonicalization: {}", candidate.display()),
+            message: format!(
+                "path escapes project root after canonicalization: {}",
+                candidate.display()
+            ),
         });
     }
     Ok(canonical)

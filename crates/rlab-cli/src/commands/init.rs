@@ -13,10 +13,17 @@ pub struct InitCommand {
 
 pub fn run(command: InitCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
-    let name = if command.name.trim().is_empty() { config.project.name.clone() } else { command.name };
+    let name = if command.name.trim().is_empty() {
+        config.project.name.clone()
+    } else {
+        command.name
+    };
     init_project(&config.project.root, &name)?;
     if json {
-        print_json("init", serde_json::json!({"project": name, "root": config.project.root}))?;
+        print_json(
+            "init",
+            serde_json::json!({"project": name, "root": config.project.root}),
+        )?;
     } else {
         print_line(&format!("initialized rlab project '{name}'"));
     }

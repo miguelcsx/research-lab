@@ -39,7 +39,9 @@ impl RunStatus {
             "cancelled" => Ok(Self::Cancelled),
             "stale" => Ok(Self::Stale),
             "reproduced" => Ok(Self::Reproduced),
-            _ => Err(RlabError::Run { message: format!("unknown run status: {value}") }),
+            _ => Err(RlabError::Run {
+                message: format!("unknown run status: {value}"),
+            }),
         }
     }
 
@@ -80,7 +82,12 @@ mod tests {
 
     #[test]
     fn parse_roundtrip() {
-        for status in [RunStatus::Created, RunStatus::Running, RunStatus::Completed, RunStatus::Failed] {
+        for status in [
+            RunStatus::Created,
+            RunStatus::Running,
+            RunStatus::Completed,
+            RunStatus::Failed,
+        ] {
             assert_eq!(RunStatus::parse(status.as_str()).unwrap(), status);
         }
     }

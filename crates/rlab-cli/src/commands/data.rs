@@ -167,6 +167,8 @@ fn run_data_build(
             name,
         }),
         run_id: Some(session.directory.id.as_str().to_string()),
+        run_dir: Some(session.directory.path.clone()),
+        cache_dir: Some(paths.cache.clone()),
         params,
         seed: None,
         strict: strict || config.production.strict,

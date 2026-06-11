@@ -16,15 +16,31 @@ pub struct LintFinding {
 pub fn lint_project(paths: &ProjectPaths) -> RlabResult<Vec<LintFinding>> {
     let mut findings = Vec::new();
     if !paths.root.join("pyproject.toml").exists() && !paths.root.join("lab.toml").exists() {
-        findings.push(LintFinding { schema_version: SCHEMA_VERSION, level: "warning".to_string(), message: "project has neither pyproject.toml nor lab.toml".to_string(), path: None });
+        findings.push(LintFinding {
+            schema_version: SCHEMA_VERSION,
+            level: "warning".to_string(),
+            message: "project has neither pyproject.toml nor lab.toml".to_string(),
+            path: None,
+        });
     }
     for entry in WalkDir::new(&paths.root).max_depth(3).into_iter() {
-        let entry = entry.map_err(|error| RlabError::Io { path: paths.root.clone(), message: error.to_string() })?;
+        let entry = entry.map_err(|error| RlabError::Io {
+            path: paths.root.clone(),
+            message: error.to_string(),
+        })?;
         if entry.file_type().is_file() {
             let path = entry.path();
-            let metadata = entry.metadata().map_err(|error| RlabError::Io { path: path.to_path_buf(), message: error.to_string() })?;
+            let metadata = entry.metadata().map_err(|error| RlabError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
             if metadata.len() > 100_000_000 {
-                findings.push(LintFinding { schema_version: SCHEMA_VERSION, level: "warning".to_string(), message: "large file should not be committed without intent".to_string(), path: Some(path.display().to_string()) });
+                findings.push(LintFinding {
+                    schema_version: SCHEMA_VERSION,
+                    level: "warning".to_string(),
+                    message: "large file should not be committed without intent".to_string(),
+                    path: Some(path.display().to_string()),
+                });
             }
         }
     }

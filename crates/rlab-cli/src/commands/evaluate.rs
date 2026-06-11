@@ -83,6 +83,8 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
             name: command.suite.clone(),
         }),
         run_id: Some(session.directory.id.as_str().to_string()),
+        run_dir: Some(session.directory.path.clone()),
+        cache_dir: Some(paths.cache.clone()),
         params,
         seed: None,
         strict: command.strict || config.production.strict,
@@ -117,6 +119,13 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
         print_json("evaluate", run)?;
     } else {
         print_line(&format!("completed evaluation run: {}", run.id.as_str()));
+        let metrics = rlab_core::run::inspect_run(&paths, run.id.as_str())?.metrics;
+        if let Some(values) = metrics.as_object() {
+            for (name, value) in values {
+                print_line(&format!("  {name}: {value}"));
+            }
+        }
+        print_line(&format!("inspect: rlab runs show {}", run.id.as_str()));
     }
     Ok(0)
 }

@@ -27,7 +27,10 @@ pub fn scan_for_secrets(text: &str) -> Vec<SecretHit> {
         .filter_map(|line| line.split_once('='))
         .filter_map(|(key, _value)| {
             if is_sensitive_key(key) {
-                Some(SecretHit { key: key.to_string(), reason: "sensitive key name".to_string() })
+                Some(SecretHit {
+                    key: key.to_string(),
+                    reason: "sensitive key name".to_string(),
+                })
             } else {
                 None
             }
@@ -37,5 +40,7 @@ pub fn scan_for_secrets(text: &str) -> Vec<SecretHit> {
 
 fn is_sensitive_key(key: &str) -> bool {
     let lowered = key.to_lowercase();
-    SECRET_KEYWORDS.iter().any(|needle| lowered.contains(needle))
+    SECRET_KEYWORDS
+        .iter()
+        .any(|needle| lowered.contains(needle))
 }

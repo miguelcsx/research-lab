@@ -29,5 +29,9 @@ pub fn check_compatibility(manifests: &[LicenseManifest]) -> LicenseCompatibilit
             }
         })
         .collect::<Vec<_>>();
-    LicenseCompatibilitySummary { schema_version: SCHEMA_VERSION, compatible: warnings.is_empty(), warnings }
+    LicenseCompatibilitySummary {
+        schema_version: SCHEMA_VERSION,
+        compatible: warnings.is_empty(),
+        warnings,
+    }
 }

@@ -58,7 +58,10 @@ impl RegistryCache {
     }
 
     pub fn into_registry(self) -> Registry {
-        Registry { schema_version: REGISTRY_SCHEMA_VERSION, records: self.records }
+        Registry {
+            schema_version: REGISTRY_SCHEMA_VERSION,
+            records: self.records,
+        }
     }
 
     pub fn is_valid_for(&self, key: &RegistryCacheKey) -> RlabResult<bool> {
@@ -99,7 +102,11 @@ pub fn load_registry_cache(path: &Path, key: &RegistryCacheKey) -> RlabResult<Op
     Ok(None)
 }
 
-pub fn save_registry_cache(path: &Path, registry: Registry, key: &RegistryCacheKey) -> RlabResult<()> {
+pub fn save_registry_cache(
+    path: &Path,
+    registry: Registry,
+    key: &RegistryCacheKey,
+) -> RlabResult<()> {
     let cache = RegistryCache::from_registry(registry, key)?;
     write_json_atomic(path, &cache)
 }

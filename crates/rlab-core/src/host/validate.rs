@@ -13,14 +13,27 @@ pub fn validate_event(event: &HostEvent) -> RlabResult<()> {
         HostEvent::Metric(value) => {
             validate_protocol(value.protocol_version.0)?;
             if value.metric.name.trim().is_empty() {
-                return Err(RlabError::Host { message: "metric name cannot be empty".to_string() });
+                return Err(RlabError::Host {
+                    message: "metric name cannot be empty".to_string(),
+                });
             }
             Ok(())
         }
         HostEvent::Artifact(value) => validate_protocol(value.protocol_version.0),
-        HostEvent::Log(value) | HostEvent::Warning(value) | HostEvent::Error(value) => validate_protocol(value.protocol_version.0),
-        HostEvent::Completed { protocol_version, .. } | HostEvent::Failed { protocol_version, .. } => validate_protocol(protocol_version.0),
-        HostEvent::Batch { protocol_version, events, .. } => {
+        HostEvent::Log(value) | HostEvent::Warning(value) | HostEvent::Error(value) => {
+            validate_protocol(value.protocol_version.0)
+        }
+        HostEvent::Completed {
+            protocol_version, ..
+        }
+        | HostEvent::Failed {
+            protocol_version, ..
+        } => validate_protocol(protocol_version.0),
+        HostEvent::Batch {
+            protocol_version,
+            events,
+            ..
+        } => {
             validate_protocol(protocol_version.0)?;
             for nested in events {
                 validate_event(nested)?;
@@ -32,7 +45,9 @@ pub fn validate_event(event: &HostEvent) -> RlabResult<()> {
 
 fn validate_protocol(version: u32) -> RlabResult<()> {
     if version != PROTOCOL_VERSION_NUMBER {
-        return Err(RlabError::Host { message: format!("unsupported protocol version: {version}") });
+        return Err(RlabError::Host {
+            message: format!("unsupported protocol version: {version}"),
+        });
     }
     Ok(())
 }

@@ -42,21 +42,30 @@ pub struct Sample {
 
 impl Grid {
     pub fn new(axes: BTreeMap<String, Vec<Value>>) -> RlabResult<Self> {
-        let grid = Self { schema_version: SCHEMA_VERSION, axes };
+        let grid = Self {
+            schema_version: SCHEMA_VERSION,
+            axes,
+        };
         grid.validate()?;
         Ok(grid)
     }
 
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported grid schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported grid schema_version".to_string(),
+            });
         }
         for (name, values) in &self.axes {
             if name.trim().is_empty() {
-                return Err(RlabError::Validation { message: "matrix axis name cannot be empty".to_string() });
+                return Err(RlabError::Validation {
+                    message: "matrix axis name cannot be empty".to_string(),
+                });
             }
             if values.is_empty() {
-                return Err(RlabError::Validation { message: format!("matrix axis {name} has no values") });
+                return Err(RlabError::Validation {
+                    message: format!("matrix axis {name} has no values"),
+                });
             }
         }
         Ok(())
@@ -83,14 +92,20 @@ impl Grid {
 impl Sample {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported sample schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported sample schema_version".to_string(),
+            });
         }
         if self.n == 0 {
-            return Err(RlabError::Validation { message: "sample size must be greater than zero".to_string() });
+            return Err(RlabError::Validation {
+                message: "sample size must be greater than zero".to_string(),
+            });
         }
         for (name, distribution) in &self.space {
             if name.trim().is_empty() {
-                return Err(RlabError::Validation { message: "sample axis name cannot be empty".to_string() });
+                return Err(RlabError::Validation {
+                    message: "sample axis name cannot be empty".to_string(),
+                });
             }
             distribution.validate()?;
         }
@@ -101,13 +116,19 @@ impl Sample {
 impl Distribution {
     pub fn validate(&self) -> RlabResult<()> {
         match self {
-            Self::Choice { values } if values.is_empty() => Err(RlabError::Validation { message: "choice distribution requires at least one value".to_string() }),
+            Self::Choice { values } if values.is_empty() => Err(RlabError::Validation {
+                message: "choice distribution requires at least one value".to_string(),
+            }),
             Self::Uniform { low, high } | Self::LogUniform { low, high } => {
                 if !low.is_finite() || !high.is_finite() || low >= high {
-                    return Err(RlabError::Validation { message: "distribution bounds must be finite and low < high".to_string() });
+                    return Err(RlabError::Validation {
+                        message: "distribution bounds must be finite and low < high".to_string(),
+                    });
                 }
                 if matches!(self, Self::LogUniform { .. }) && *low <= 0.0 {
-                    return Err(RlabError::Validation { message: "log_uniform low bound must be positive".to_string() });
+                    return Err(RlabError::Validation {
+                        message: "log_uniform low bound must be positive".to_string(),
+                    });
                 }
                 Ok(())
             }

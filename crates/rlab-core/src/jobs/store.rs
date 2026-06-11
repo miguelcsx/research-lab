@@ -1,4 +1,3 @@
-
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -42,12 +41,20 @@ pub fn start_job(paths: &ProjectPaths, command: &str) -> RlabResult<JobRecord> {
         Command::new("cmd").args(["/C", command]).output()
     } else {
         Command::new("sh").args(["-c", command]).output()
-    }.map_err(|error| RlabError::Io { path: paths.root.clone(), message: error.to_string() })?;
+    }
+    .map_err(|error| RlabError::Io {
+        path: paths.root.clone(),
+        message: error.to_string(),
+    })?;
     let mut log = String::new();
     log.push_str(&String::from_utf8_lossy(&output.stdout));
     log.push_str(&String::from_utf8_lossy(&output.stderr));
     write_text_atomic(&log_path, &log)?;
-    let status = if output.status.success() { JobStatus::Completed } else { JobStatus::Failed };
+    let status = if output.status.success() {
+        JobStatus::Completed
+    } else {
+        JobStatus::Failed
+    };
     let record = JobRecord {
         schema_version: SCHEMA_VERSION,
         id,
@@ -68,15 +75,32 @@ pub fn list_jobs(paths: &ProjectPaths) -> RlabResult<Vec<JobRecord>> {
 
 pub fn job_logs(paths: &ProjectPaths, id: &str) -> RlabResult<String> {
     let jobs = list_jobs(paths)?;
-    let record = jobs.into_iter().rev().find(|job| job.id == id).ok_or_else(|| RlabError::NotFound { subject: format!("job {id}") })?;
-    std::fs::read_to_string(&record.log_path).map_err(|error| RlabError::Io { path: record.log_path.into(), message: error.to_string() })
+    let record = jobs
+        .into_iter()
+        .rev()
+        .find(|job| job.id == id)
+        .ok_or_else(|| RlabError::NotFound {
+            subject: format!("job {id}"),
+        })?;
+    std::fs::read_to_string(&record.log_path).map_err(|error| RlabError::Io {
+        path: record.log_path.into(),
+        message: error.to_string(),
+    })
 }
 
 pub fn cancel_job(paths: &ProjectPaths, id: &str) -> RlabResult<JobRecord> {
     let jobs = list_jobs(paths)?;
-    let latest = jobs.iter().rev().find(|job| job.id == id).ok_or_else(|| RlabError::NotFound { subject: format!("job {id}") })?;
+    let latest = jobs
+        .iter()
+        .rev()
+        .find(|job| job.id == id)
+        .ok_or_else(|| RlabError::NotFound {
+            subject: format!("job {id}"),
+        })?;
     if latest.status != JobStatus::Running {
-        return Err(RlabError::Validation { message: format!("job {id} is not running and cannot be cancelled") });
+        return Err(RlabError::Validation {
+            message: format!("job {id} is not running and cannot be cancelled"),
+        });
     }
     let record = JobRecord {
         schema_version: SCHEMA_VERSION,
@@ -94,7 +118,9 @@ pub fn cancel_job(paths: &ProjectPaths, id: &str) -> RlabResult<JobRecord> {
 
 fn validate_command(command: &str) -> RlabResult<()> {
     if command.trim().is_empty() {
-        return Err(RlabError::Validation { message: "job command cannot be empty".to_string() });
+        return Err(RlabError::Validation {
+            message: "job command cannot be empty".to_string(),
+        });
     }
     Ok(())
 }

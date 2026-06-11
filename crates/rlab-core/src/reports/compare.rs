@@ -8,10 +8,15 @@ use crate::fs::write_text_atomic;
 pub fn write_compare_report(paths: &ProjectPaths, output: &Path) -> RlabResult<()> {
     let rows = compare_runs(paths, None)?;
     let json = serde_json::to_string_pretty(&rows).map_err(RlabError::serialization)?;
-    write_text_atomic(output, &format!("# Run comparison
+    write_text_atomic(
+        output,
+        &format!(
+            "# Run comparison
 
 ```json
 {json}
 ```
-"))
+"
+        ),
+    )
 }

@@ -239,7 +239,9 @@ class Project:
         except (TypeError, OSError):
             source = ""
         description = _first_doc_line(obj)
-        if self._is_strict_unstable(kind=kind, qualname=qualname, source=source):
+        if not isinstance(
+            obj, (_SentinelCallable, _WorkflowCallable)
+        ) and self._is_strict_unstable(kind=kind, qualname=qualname, source=source):
             raise ValueError(f"unstable strict declaration for {kind}:{name}")
         metadata_copy = {key: _jsonable_spec(value) for key, value in metadata.items()}
         version = str(metadata_copy.pop("version", "1"))

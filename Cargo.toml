@@ -27,4 +27,5 @@ thiserror = "1.0"
 time = { version = "0.3", features = ["formatting", "macros", "serde", "serde-well-known"] }
 toml = "0.8"
 walkdir = "2.5"
+wait-timeout = "0.2"
 zip = "2.1"

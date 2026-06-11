@@ -8,5 +8,6 @@ pub fn ensure_dir(path: &Path) -> RlabResult<()> {
 }
 
 pub fn canonicalize_existing(path: &Path) -> RlabResult<PathBuf> {
-    path.canonicalize().map_err(|error| RlabError::io(path, error))
+    path.canonicalize()
+        .map_err(|error| RlabError::io(path, error))
 }

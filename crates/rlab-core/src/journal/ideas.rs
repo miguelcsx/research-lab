@@ -29,7 +29,9 @@ impl IdeaStatus {
             "validated" => Ok(Self::Validated),
             "rejected" => Ok(Self::Rejected),
             "published" => Ok(Self::Published),
-            _ => Err(RlabError::Validation { message: format!("invalid idea status: {value}") }),
+            _ => Err(RlabError::Validation {
+                message: format!("invalid idea status: {value}"),
+            }),
         }
     }
 }
@@ -61,7 +63,11 @@ pub fn list_ideas(paths: &ProjectPaths) -> RlabResult<Vec<IdeaEntry>> {
     read_jsonl(&paths.cache.join("ideas.jsonl"))
 }
 
-pub fn promote_idea(paths: &ProjectPaths, id: &str, status: IdeaStatus) -> RlabResult<Vec<IdeaEntry>> {
+pub fn promote_idea(
+    paths: &ProjectPaths,
+    id: &str,
+    status: IdeaStatus,
+) -> RlabResult<Vec<IdeaEntry>> {
     let entries = list_ideas(paths)?
         .into_iter()
         .map(|mut entry| {

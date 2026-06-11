@@ -12,7 +12,16 @@ pub struct CostPlan {
     pub storage_gb: f64,
 }
 
-pub fn estimate_cost(jobs: u64, seconds_per_job: f64, storage_gb_per_job: f64) -> RlabResult<CostPlan> {
+pub fn estimate_cost(
+    jobs: u64,
+    seconds_per_job: f64,
+    storage_gb_per_job: f64,
+) -> RlabResult<CostPlan> {
     let estimate = estimate_budget(jobs, seconds_per_job, storage_gb_per_job)?;
-    Ok(CostPlan { schema_version: SCHEMA_VERSION, jobs, seconds: estimate.total_seconds, storage_gb: estimate.total_storage_gb })
+    Ok(CostPlan {
+        schema_version: SCHEMA_VERSION,
+        jobs,
+        seconds: estimate.total_seconds,
+        storage_gb: estimate.total_storage_gb,
+    })
 }

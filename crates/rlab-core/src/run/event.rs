@@ -15,6 +15,11 @@ pub struct RunEvent {
 
 impl RunEvent {
     pub fn new(event_type: String, payload: Value) -> Self {
-        Self { schema_version: RUN_EVENT_SCHEMA_VERSION, event_type, timestamp: OffsetDateTime::now_utc(), payload }
+        Self {
+            schema_version: RUN_EVENT_SCHEMA_VERSION,
+            event_type,
+            timestamp: OffsetDateTime::now_utc(),
+            payload,
+        }
     }
 }

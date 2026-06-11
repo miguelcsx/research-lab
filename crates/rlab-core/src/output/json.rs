@@ -10,6 +10,10 @@ pub struct JsonEnvelope<T: Serialize> {
 
 impl<T: Serialize> JsonEnvelope<T> {
     pub fn new(kind: &str, data: T) -> Self {
-        Self { schema_version: SCHEMA_VERSION, kind: kind.to_string(), data }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            kind: kind.to_string(),
+            data,
+        }
     }
 }

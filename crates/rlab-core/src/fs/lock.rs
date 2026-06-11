@@ -1,4 +1,3 @@
-
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
@@ -24,7 +23,10 @@ impl RunLock {
             .open(&path)
             .map_err(|error| RlabError::io(&path, error))?;
         file.try_lock_exclusive().map_err(|error| RlabError::Run {
-            message: format!("run directory is already locked or unavailable: {} ({error})", run_dir.display()),
+            message: format!(
+                "run directory is already locked or unavailable: {} ({error})",
+                run_dir.display()
+            ),
         })?;
         Ok(Self { path, file })
     }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -19,6 +20,14 @@ from ._protocol import (
     base_event,
     emit_event,
     read_request,
+)
+from ._rlab import run_external_command
+from .external import (
+    AdapterContext,
+    ExternalCommand,
+    ExternalCommandError,
+    ExternalResult,
+    ExternalWorkspace,
 )
 
 JsonDict: TypeAlias = dict[str, Any]
@@ -98,6 +107,12 @@ class RuntimeContext:
 
     def __init__(self, request: HostRequest) -> None:
         self.run_id = request.run_id
+        if request.run_dir is None:
+            raise ValueError("runtime execution requires a resolved run_dir")
+        if request.cache_dir is None:
+            raise ValueError("runtime execution requires a resolved cache_dir")
+        self.run_dir = Path(request.run_dir)
+        self.cache_dir = Path(request.cache_dir)
         self.params = dict(request.params)
         self.seed = request.seed
         self.project_root = Path(request.project_root)
@@ -163,8 +178,8 @@ class RuntimeContext:
         return source
 
     def save_table(self, name: str, rows: list[dict[str, Any]]) -> Path:
-        """Write a JSON table next to the project and emit it as an artifact."""
-        output = self.project_root / ".rlab" / "tmp" / f"{name}.json"
+        """Write a run-scoped JSON table and emit it as an artifact."""
+        output = self.run_dir / "generated" / "tables" / f"{name}.json"
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(rows, indent=2), encoding="utf-8")
         return self.save_artifact(name, output, kind="table")
@@ -183,6 +198,129 @@ class RuntimeContext:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         return self.save_artifact(name, dst, version=version)
+
+    def run_external(self, name: str, command: ExternalCommand) -> ExternalResult:
+        """Execute an external command through the Rust runner."""
+        command.validate()
+        output_dir = self.run_dir / "external" / _safe_external_name(name)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        stdout_path = output_dir / "stdout.log"
+        stderr_path = output_dir / "stderr.log"
+        raw = run_external_command(
+            list(command.args),
+            command.cwd,
+            dict(command.env),
+            command.timeout_seconds,
+            stdout_path,
+            stderr_path,
+        )
+        payload = json.loads(raw)
+        result = ExternalResult(
+            exit_code=payload.get("exit_code"),
+            stdout=stdout_path.read_text(encoding="utf-8", errors="replace"),
+            stderr=stderr_path.read_text(encoding="utf-8", errors="replace"),
+            timed_out=bool(payload.get("timed_out", False)),
+        )
+        self.save_artifact(f"{name}.stdout", stdout_path, kind="log")
+        self.save_artifact(f"{name}.stderr", stderr_path, kind="log")
+        if result.timed_out or result.exit_code != 0:
+            raise ExternalCommandError(name, result)
+        if command.output_root is not None:
+            self._register_external_artifacts(
+                name,
+                command.output_root,
+                command.artifacts,
+            )
+        return result
+
+    def external_workspace(
+        self,
+        name: str,
+        spec: ExternalWorkspace,
+        params: Mapping[str, Any],
+    ) -> AdapterContext:
+        """Materialize framework-owned storage for an external adapter."""
+        spec.validate()
+        external_root = self.run_dir / "external" / _safe_external_name(name)
+        outputs = external_root / "outputs"
+        workspace = self._materialize_external_workspace(
+            name,
+            spec,
+            params,
+            outputs,
+        )
+        return AdapterContext(
+            project_root=self.project_root,
+            workspace=workspace,
+            outputs=outputs,
+            params=dict(params),
+        )
+
+    def _materialize_external_workspace(
+        self,
+        name: str,
+        spec: ExternalWorkspace,
+        params: Mapping[str, Any],
+        outputs: Path,
+    ) -> Path:
+        external_root = outputs.parent
+        workspace = external_root / "workspace"
+        outputs.mkdir(parents=True, exist_ok=True)
+        if workspace.exists():
+            return workspace
+
+        source_value = params.get(spec.source_param, spec.default_source)
+        source = _resolve_project_path(self.project_root, str(source_value))
+        if not source.is_dir():
+            raise FileNotFoundError(
+                f"external workspace source does not exist: {source}"
+            )
+
+        cache_root = self.cache_dir / _safe_external_name(name)
+        excluded = tuple(path.path for path in (*spec.cached, *spec.outputs))
+        fingerprint = _workspace_fingerprint(source, spec.ignored, excluded)
+        cached_workspace = cache_root / "workspaces" / fingerprint
+        if not cached_workspace.exists():
+            _copy_workspace(source, cached_workspace, spec.ignored, excluded)
+        if not workspace.exists():
+            shutil.copytree(cached_workspace, workspace, symlinks=True)
+
+        for path in spec.cached:
+            target = cache_root / "resources" / _safe_external_name(path.name)
+            source_path = source / _safe_relative_path(path.path)
+            if not target.exists():
+                if source_path.is_dir():
+                    shutil.copytree(source_path, target, symlinks=True)
+                elif source_path.is_file():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source_path, target)
+                else:
+                    target.mkdir(parents=True, exist_ok=True)
+            _replace_with_symlink(workspace / _safe_relative_path(path.path), target)
+
+        for path in spec.outputs:
+            target = outputs / _safe_relative_path(path.name)
+            target.mkdir(parents=True, exist_ok=True)
+            _replace_with_symlink(workspace / _safe_relative_path(path.path), target)
+
+        return workspace
+
+    def _register_external_artifacts(
+        self,
+        command_name: str,
+        output_root: Path,
+        patterns: tuple[str, ...],
+    ) -> None:
+        matches = {
+            path
+            for pattern in patterns
+            for path in output_root.glob(pattern)
+            if path.is_file()
+        }
+        for path in sorted(matches):
+            relative = path.relative_to(output_root)
+            stem = relative.with_suffix("").as_posix().replace("/", ".")
+            self.save_artifact(_bounded_artifact_name(command_name, stem), path)
 
 
 def main() -> int:
@@ -270,6 +408,21 @@ def _emit_dict_metrics(ctx: RuntimeContext, value: Any, prefix: str) -> None:
 
     if flat:
         ctx.log_metrics(flat)
+
+
+def _safe_external_name(name: str) -> str:
+    value = str(name).strip()
+    if not value or any(part in value for part in ("/", "\\", "..")):
+        raise ValueError(f"invalid external command name: {name!r}")
+    return value
+
+
+def _bounded_artifact_name(command_name: str, stem: str) -> str:
+    value = f"{command_name}.{stem}"
+    if len(value) <= 180:
+        return value
+    suffix = hashlib.sha256(value.encode()).hexdigest()[:16]
+    return f"{value[:163]}.{suffix}"
 
 
 def _execute_workflow(
@@ -682,6 +835,82 @@ def _materialize_component(component: Any) -> Any:
         return component()
 
     return component
+
+
+def _workspace_fingerprint(
+    source: Path,
+    ignored: tuple[str, ...],
+    excluded: tuple[str, ...],
+) -> str:
+    digest = hashlib.sha256()
+    ignored_names = set(ignored)
+    excluded_paths = {_safe_relative_path(path) for path in excluded}
+    for root, directories, filenames in os.walk(source):
+        root_path = Path(root)
+        relative_root = root_path.relative_to(source)
+        directories[:] = sorted(
+            name
+            for name in directories
+            if name not in ignored_names and relative_root / name not in excluded_paths
+        )
+        for filename in sorted(name for name in filenames if name not in ignored_names):
+            path = root_path / filename
+            relative = path.relative_to(source)
+            if relative in excluded_paths:
+                continue
+            stat = path.stat()
+            digest.update(relative.as_posix().encode())
+            digest.update(str(stat.st_size).encode())
+            digest.update(str(stat.st_mtime_ns).encode())
+    return digest.hexdigest()
+
+
+def _copy_workspace(
+    source: Path,
+    destination: Path,
+    ignored: tuple[str, ...],
+    excluded: tuple[str, ...],
+) -> None:
+    ignored_names = set(ignored)
+    excluded_paths = {_safe_relative_path(path) for path in excluded}
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        relative_root = Path(directory).relative_to(source)
+        return {
+            name
+            for name in names
+            if name in ignored_names or relative_root / name in excluded_paths
+        }
+
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    temporary.parent.mkdir(parents=True, exist_ok=True)
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    shutil.copytree(source, temporary, symlinks=True, ignore=ignore)
+    try:
+        temporary.rename(destination)
+    except OSError:
+        if not destination.exists():
+            raise
+        shutil.rmtree(temporary)
+
+
+def _replace_with_symlink(link: Path, target: Path) -> None:
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink() and link.resolve() == target.resolve():
+        return
+    if link.is_symlink() or link.is_file():
+        link.unlink()
+    elif link.exists():
+        shutil.rmtree(link)
+    link.symlink_to(target, target_is_directory=target.is_dir())
+
+
+def _safe_relative_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        raise ValueError(f"external path must be a non-empty relative path: {value!r}")
+    return path
 
 
 def _resolve_project_path(project_root: Path, path: str | Path) -> Path:

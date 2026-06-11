@@ -18,7 +18,12 @@ pub struct NegativeResultEntry {
     pub created_at: OffsetDateTime,
 }
 
-pub fn add_negative_result(paths: &ProjectPaths, hypothesis: &str, tried: &str, reason: &str) -> RlabResult<NegativeResultEntry> {
+pub fn add_negative_result(
+    paths: &ProjectPaths,
+    hypothesis: &str,
+    tried: &str,
+    reason: &str,
+) -> RlabResult<NegativeResultEntry> {
     let entry = NegativeResultEntry {
         schema_version: NEGATIVE_SCHEMA_VERSION,
         hypothesis: hypothesis.to_string(),
@@ -34,7 +39,10 @@ pub fn list_negative_results(paths: &ProjectPaths) -> RlabResult<Vec<NegativeRes
     read_jsonl(&paths.cache.join("negatives.jsonl"))
 }
 
-pub fn search_negative_results(paths: &ProjectPaths, term: &str) -> RlabResult<Vec<NegativeResultEntry>> {
+pub fn search_negative_results(
+    paths: &ProjectPaths,
+    term: &str,
+) -> RlabResult<Vec<NegativeResultEntry>> {
     let needle = term.to_lowercase();
     Ok(list_negative_results(paths)?
         .into_iter()

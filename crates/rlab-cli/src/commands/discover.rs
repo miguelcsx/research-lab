@@ -46,6 +46,8 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
         modules: config.python.modules.clone(),
         target: None,
         run_id: None,
+        run_dir: None,
+        cache_dir: None,
         params: serde_json::json!({}),
         seed: None,
         strict,
@@ -62,13 +64,27 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
     let mut registry = Registry::new();
     for event in &events {
         validate_event(event)?;
-        if let HostEvent::RegistryRecord(record) = event {
-            registry.insert(record.record.clone())?;
-        }
+        collect_registry_event(event, &mut registry)?;
     }
     save_registry_cache(&paths.registry_cache, registry.clone(), &cache_key)?;
     render(registry, json)?;
     Ok(0)
+}
+
+fn collect_registry_event(event: &HostEvent, registry: &mut Registry) -> RlabResult<()> {
+    match event {
+        HostEvent::RegistryRecord(record) => registry.insert(record.record.clone()),
+        HostEvent::Failed { error, .. } => Err(rlab_core::RlabError::Host {
+            message: error.to_string(),
+        }),
+        HostEvent::Batch { events, .. } => {
+            for nested in events {
+                collect_registry_event(nested, registry)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 fn render(registry: Registry, json: bool) -> RlabResult<()> {

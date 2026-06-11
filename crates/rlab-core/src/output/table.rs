@@ -9,18 +9,29 @@ pub struct Table {
 impl Table {
     pub fn new(headers: Vec<String>) -> RlabResult<Self> {
         if headers.is_empty() {
-            return Err(RlabError::Validation { message: "table requires at least one header".to_string() });
+            return Err(RlabError::Validation {
+                message: "table requires at least one header".to_string(),
+            });
         }
         if headers.iter().any(|header| header.trim().is_empty()) {
-            return Err(RlabError::Validation { message: "table headers cannot be empty".to_string() });
+            return Err(RlabError::Validation {
+                message: "table headers cannot be empty".to_string(),
+            });
         }
-        Ok(Self { headers, rows: Vec::new() })
+        Ok(Self {
+            headers,
+            rows: Vec::new(),
+        })
     }
 
     pub fn push_row(&mut self, row: Vec<String>) -> RlabResult<()> {
         if row.len() != self.headers.len() {
             return Err(RlabError::Validation {
-                message: format!("table row has {} cells but expected {}", row.len(), self.headers.len()),
+                message: format!(
+                    "table row has {} cells but expected {}",
+                    row.len(),
+                    self.headers.len()
+                ),
             });
         }
         self.rows.push(row);
@@ -39,11 +50,18 @@ impl Table {
     }
 
     pub fn render_tsv(&self) -> String {
-        render_rows(&self.headers.iter().map(String::as_str).collect::<Vec<_>>(), &self.rows)
+        render_rows(
+            &self.headers.iter().map(String::as_str).collect::<Vec<_>>(),
+            &self.rows,
+        )
     }
 
     fn column_widths(&self) -> Vec<usize> {
-        let mut widths = self.headers.iter().map(|value| value.chars().count()).collect::<Vec<_>>();
+        let mut widths = self
+            .headers
+            .iter()
+            .map(|value| value.chars().count())
+            .collect::<Vec<_>>();
         for row in &self.rows {
             for (index, cell) in row.iter().enumerate() {
                 let width = cell.chars().count();

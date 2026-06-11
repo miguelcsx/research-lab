@@ -1,4 +1,3 @@
-
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -35,14 +34,19 @@ pub fn append_line(path: &Path, line: &str) -> RlabResult<()> {
         .append(true)
         .open(path)
         .map_err(|error| RlabError::io(path, error))?;
-    file.write_all(line.as_bytes()).map_err(|error| RlabError::io(path, error))?;
-    file.write_all(b"\n").map_err(|error| RlabError::io(path, error))
+    file.write_all(line.as_bytes())
+        .map_err(|error| RlabError::io(path, error))?;
+    file.write_all(b"\n")
+        .map_err(|error| RlabError::io(path, error))
 }
 
 fn temporary_path(path: &Path) -> RlabResult<PathBuf> {
-    let file_name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| RlabError::Validation {
-        message: format!("path has no valid file name: {}", path.display()),
-    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| RlabError::Validation {
+            message: format!("path has no valid file name: {}", path.display()),
+        })?;
     let process_id = std::process::id();
     let nanos = time::OffsetDateTime::now_utc().unix_timestamp_nanos();
     Ok(path.with_file_name(format!(".{file_name}.{process_id}.{nanos}.tmp")))

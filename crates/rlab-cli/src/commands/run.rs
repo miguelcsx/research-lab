@@ -42,6 +42,8 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
             name: name.clone(),
         }),
         run_id: Some(session.directory.id.as_str().to_string()),
+        run_dir: Some(session.directory.path.clone()),
+        cache_dir: Some(paths.cache.clone()),
         params,
         seed: None,
         strict: command.strict || config.production.strict,
@@ -143,7 +145,9 @@ pub fn parse_target(
         || value.starts_with("../")
         || value.starts_with('\\')
     {
-        return Err(ParseTargetError::FilePath { value: value.to_string() });
+        return Err(ParseTargetError::FilePath {
+            value: value.to_string(),
+        });
     }
     if !value.contains(':') {
         if let Some(kind) = default_kind {
@@ -170,7 +174,9 @@ pub fn parse_target(
     let name = match parts.next() {
         Some(text) if !text.trim().is_empty() => text.to_string(),
         _ => {
-            return Err(ParseTargetError::MissingName { value: value.to_string() });
+            return Err(ParseTargetError::MissingName {
+                value: value.to_string(),
+            });
         }
     };
     Ok(ParsedTarget { kind_str, name })

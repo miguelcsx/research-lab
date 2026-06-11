@@ -15,7 +15,9 @@ pub struct DescriptiveStats {
 
 pub fn describe_array(values: &[f64]) -> RlabResult<DescriptiveStats> {
     if values.is_empty() {
-        return Err(RlabError::Validation { message: "cannot describe an empty array".to_string() });
+        return Err(RlabError::Validation {
+            message: "cannot describe an empty array".to_string(),
+        });
     }
     let count = values.len();
     let sum = values.iter().copied().sum::<f64>();
@@ -23,11 +25,29 @@ pub fn describe_array(values: &[f64]) -> RlabResult<DescriptiveStats> {
     let mut min = values[0];
     let mut max = values[0];
     for value in values.iter().copied().skip(1) {
-        if value < min { min = value; }
-        if value > max { max = value; }
+        if value < min {
+            min = value;
+        }
+        if value > max {
+            max = value;
+        }
     }
-    let variance = values.iter().map(|value| { let delta = value - mean; delta * delta }).sum::<f64>() / count as f64;
-    Ok(DescriptiveStats { schema_version: SCHEMA_VERSION, count, mean, min, max, variance })
+    let variance = values
+        .iter()
+        .map(|value| {
+            let delta = value - mean;
+            delta * delta
+        })
+        .sum::<f64>()
+        / count as f64;
+    Ok(DescriptiveStats {
+        schema_version: SCHEMA_VERSION,
+        count,
+        mean,
+        min,
+        max,
+        variance,
+    })
 }
 
 #[cfg(test)]

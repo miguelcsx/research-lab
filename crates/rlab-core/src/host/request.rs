@@ -29,6 +29,8 @@ pub struct HostRequest {
     pub modules: Vec<String>,
     pub target: Option<HostTarget>,
     pub run_id: Option<String>,
+    pub run_dir: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
     pub params: Value,
     pub seed: Option<u64>,
     pub strict: bool,

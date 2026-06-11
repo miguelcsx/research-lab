@@ -1,4 +1,3 @@
-
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -15,7 +14,10 @@ pub struct CompareRow {
     pub metrics: BTreeMap<String, f64>,
 }
 
-pub fn compare_runs(paths: &ProjectPaths, metric_filter: Option<String>) -> RlabResult<Vec<CompareRow>> {
+pub fn compare_runs(
+    paths: &ProjectPaths,
+    metric_filter: Option<String>,
+) -> RlabResult<Vec<CompareRow>> {
     let runs = list_runs(paths)?;
     let mut rows = Vec::new();
     for run in runs {
@@ -27,7 +29,10 @@ pub fn compare_runs(paths: &ProjectPaths, metric_filter: Option<String>) -> Rlab
                 metrics.retain(|name, _| name == metric);
             }
             if metric_filter.is_none() || !metrics.is_empty() {
-                rows.push(CompareRow { run_id: run.id, metrics });
+                rows.push(CompareRow {
+                    run_id: run.id,
+                    metrics,
+                });
             }
         }
     }
@@ -43,7 +48,9 @@ fn parse_metric_summary(content: &str) -> RlabResult<BTreeMap<String, f64>> {
 }
 
 fn parse_metrics_object(value: &Value) -> RlabResult<BTreeMap<String, f64>> {
-    let object = value.as_object().ok_or_else(|| RlabError::Serialization { message: "metrics summary must be a JSON object".to_string() })?;
+    let object = value.as_object().ok_or_else(|| RlabError::Serialization {
+        message: "metrics summary must be a JSON object".to_string(),
+    })?;
     let mut metrics = BTreeMap::new();
     for (name, metric_value) in object {
         if let Some(number) = metric_value.as_f64() {

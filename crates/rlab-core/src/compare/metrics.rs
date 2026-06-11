@@ -15,18 +15,29 @@ pub struct MetricComparison {
 
 pub fn compare_metric_arrays(a: &[f64], b: &[f64]) -> RlabResult<MetricComparison> {
     if a.is_empty() || b.is_empty() {
-        return Err(RlabError::Validation { message: "metric arrays must not be empty".to_string() });
+        return Err(RlabError::Validation {
+            message: "metric arrays must not be empty".to_string(),
+        });
     }
     let mean_a = mean(a)?;
     let mean_b = mean(b)?;
-    Ok(MetricComparison { schema_version: SCHEMA_VERSION, mean_a, mean_b, delta: mean_b - mean_a, count_a: a.len(), count_b: b.len() })
+    Ok(MetricComparison {
+        schema_version: SCHEMA_VERSION,
+        mean_a,
+        mean_b,
+        delta: mean_b - mean_a,
+        count_a: a.len(),
+        count_b: b.len(),
+    })
 }
 
 fn mean(values: &[f64]) -> RlabResult<f64> {
     let mut total = 0.0_f64;
     for value in values {
         if !value.is_finite() {
-            return Err(RlabError::Validation { message: "metric array contains non-finite value".to_string() });
+            return Err(RlabError::Validation {
+                message: "metric array contains non-finite value".to_string(),
+            });
         }
         total += value;
     }

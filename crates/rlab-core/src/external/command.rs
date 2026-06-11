@@ -10,6 +10,8 @@ pub struct ExternalCommand {
     pub cwd: Option<PathBuf>,
     pub env: BTreeMap<String, String>,
     pub timeout_seconds: Option<u64>,
+    pub stdout_path: Option<PathBuf>,
+    pub stderr_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,4 +20,5 @@ pub struct ExternalResult {
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+    pub timed_out: bool,
 }

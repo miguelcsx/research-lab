@@ -19,7 +19,12 @@ pub struct DecisionEntry {
     pub created_at: OffsetDateTime,
 }
 
-pub fn add_decision(paths: &ProjectPaths, text: &str, selected_run: Option<String>, criteria: Value) -> RlabResult<DecisionEntry> {
+pub fn add_decision(
+    paths: &ProjectPaths,
+    text: &str,
+    selected_run: Option<String>,
+    criteria: Value,
+) -> RlabResult<DecisionEntry> {
     let entry = DecisionEntry {
         schema_version: DECISION_SCHEMA_VERSION,
         text: text.to_string(),

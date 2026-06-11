@@ -15,9 +15,21 @@ pub enum HostEvent {
     Log(LogEvent),
     Warning(LogEvent),
     Error(LogEvent),
-    Completed { protocol_version: ProtocolVersion, request_id: String, result: Value },
-    Failed { protocol_version: ProtocolVersion, request_id: String, error: Value },
-    Batch { protocol_version: ProtocolVersion, request_id: String, events: Vec<HostEvent> },
+    Completed {
+        protocol_version: ProtocolVersion,
+        request_id: String,
+        result: Value,
+    },
+    Failed {
+        protocol_version: ProtocolVersion,
+        request_id: String,
+        error: Value,
+    },
+    Batch {
+        protocol_version: ProtocolVersion,
+        request_id: String,
+        events: Vec<HostEvent>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

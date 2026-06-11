@@ -21,15 +21,38 @@ pub struct LineageReport {
     pub downstream: Vec<String>,
 }
 
-pub fn add_lineage_edge(paths: &ProjectPaths, from: &str, to: &str, reason: Option<String>) -> RlabResult<LineageEdge> {
-    let edge = LineageEdge { schema_version: SCHEMA_VERSION, from: from.to_string(), to: to.to_string(), reason };
+pub fn add_lineage_edge(
+    paths: &ProjectPaths,
+    from: &str,
+    to: &str,
+    reason: Option<String>,
+) -> RlabResult<LineageEdge> {
+    let edge = LineageEdge {
+        schema_version: SCHEMA_VERSION,
+        from: from.to_string(),
+        to: to.to_string(),
+        reason,
+    };
     append_jsonl(&paths.cache.join("lineage.jsonl"), &edge)?;
     Ok(edge)
 }
 
 pub fn lineage_for(paths: &ProjectPaths, reference: &str) -> RlabResult<LineageReport> {
     let edges: Vec<LineageEdge> = read_jsonl(&paths.cache.join("lineage.jsonl"))?;
-    let upstream = edges.iter().filter(|edge| edge.to == reference).map(|edge| edge.from.clone()).collect();
-    let downstream = edges.iter().filter(|edge| edge.from == reference).map(|edge| edge.to.clone()).collect();
-    Ok(LineageReport { schema_version: SCHEMA_VERSION, reference: reference.to_string(), upstream, downstream })
+    let upstream = edges
+        .iter()
+        .filter(|edge| edge.to == reference)
+        .map(|edge| edge.from.clone())
+        .collect();
+    let downstream = edges
+        .iter()
+        .filter(|edge| edge.from == reference)
+        .map(|edge| edge.to.clone())
+        .collect();
+    Ok(LineageReport {
+        schema_version: SCHEMA_VERSION,
+        reference: reference.to_string(),
+        upstream,
+        downstream,
+    })
 }

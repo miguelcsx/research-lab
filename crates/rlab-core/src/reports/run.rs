@@ -14,7 +14,8 @@ pub fn write_run_report(paths: &ProjectPaths, run_id: &str, output: &Path) -> Rl
     } else {
         "{}".to_string()
     };
-    let report = format!("# Run {run_id}
+    let report = format!(
+        "# Run {run_id}
 
 - operation: `{}`
 - name: `{}`
@@ -25,6 +26,11 @@ pub fn write_run_report(paths: &ProjectPaths, run_id: &str, output: &Path) -> Rl
 ```json
 {}
 ```
-", run.operation, run.name, run.status.as_str(), summary);
+",
+        run.operation,
+        run.name,
+        run.status.as_str(),
+        summary
+    );
     write_text_atomic(output, &report)
 }

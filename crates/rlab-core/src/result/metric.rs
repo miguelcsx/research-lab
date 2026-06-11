@@ -25,19 +25,37 @@ pub struct Metric {
 }
 
 impl Metric {
-    pub fn new(name: String, value: f64, unit: Option<String>, direction: Option<MetricDirection>) -> Self {
-        Self { schema_version: METRIC_SCHEMA_VERSION, name, value, unit, direction, timestamp: OffsetDateTime::now_utc() }
+    pub fn new(
+        name: String,
+        value: f64,
+        unit: Option<String>,
+        direction: Option<MetricDirection>,
+    ) -> Self {
+        Self {
+            schema_version: METRIC_SCHEMA_VERSION,
+            name,
+            value,
+            unit,
+            direction,
+            timestamp: OffsetDateTime::now_utc(),
+        }
     }
 
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != METRIC_SCHEMA_VERSION {
-            return Err(RlabError::Validation { message: "unsupported metric schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported metric schema_version".to_string(),
+            });
         }
         if self.name.trim().is_empty() {
-            return Err(RlabError::Validation { message: "metric name cannot be empty".to_string() });
+            return Err(RlabError::Validation {
+                message: "metric name cannot be empty".to_string(),
+            });
         }
         if !self.value.is_finite() {
-            return Err(RlabError::Validation { message: format!("metric {} value must be finite", self.name) });
+            return Err(RlabError::Validation {
+                message: format!("metric {} value must be finite", self.name),
+            });
         }
         Ok(())
     }
@@ -49,7 +67,12 @@ mod tests {
 
     #[test]
     fn valid_metric_passes() {
-        let m = Metric::new("loss".to_string(), 0.42, None, Some(MetricDirection::Minimize));
+        let m = Metric::new(
+            "loss".to_string(),
+            0.42,
+            None,
+            Some(MetricDirection::Minimize),
+        );
         assert!(m.validate().is_ok());
     }
 

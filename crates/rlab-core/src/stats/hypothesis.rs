@@ -18,6 +18,16 @@ pub fn compare_samples(left: &[f64], right: &[f64]) -> RlabResult<SampleComparis
     let left_stats = describe_array(left)?;
     let right_stats = describe_array(right)?;
     let mean_delta = right_stats.mean - left_stats.mean;
-    let relative_delta = if left_stats.mean == 0.0 { None } else { Some(mean_delta / left_stats.mean) };
-    Ok(SampleComparison { schema_version: SCHEMA_VERSION, left: left_stats, right: right_stats, mean_delta, relative_delta })
+    let relative_delta = if left_stats.mean == 0.0 {
+        None
+    } else {
+        Some(mean_delta / left_stats.mean)
+    };
+    Ok(SampleComparison {
+        schema_version: SCHEMA_VERSION,
+        left: left_stats,
+        right: right_stats,
+        mean_delta,
+        relative_delta,
+    })
 }

@@ -10,6 +10,9 @@ pub struct ArtifactManifestHeader {
 
 impl ArtifactManifestHeader {
     pub fn artifact() -> Self {
-        Self { schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION, kind: "artifact_manifest".to_string() }
+        Self {
+            schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            kind: "artifact_manifest".to_string(),
+        }
     }
 }

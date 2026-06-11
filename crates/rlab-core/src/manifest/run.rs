@@ -10,6 +10,9 @@ pub struct RunManifestHeader {
 
 impl RunManifestHeader {
     pub fn run() -> Self {
-        Self { schema_version: RUN_MANIFEST_SCHEMA_VERSION, kind: "run_manifest".to_string() }
+        Self {
+            schema_version: RUN_MANIFEST_SCHEMA_VERSION,
+            kind: "run_manifest".to_string(),
+        }
     }
 }

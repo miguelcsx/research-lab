@@ -11,17 +11,28 @@ impl RunId {
         let formatted = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .map_err(RlabError::serialization)?;
-        let timestamp: String = formatted.chars().filter(|ch| ch.is_ascii_alphanumeric()).collect();
+        let timestamp: String = formatted
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .collect();
         let safe_name: String = name
             .chars()
-            .map(|ch| if matches!(ch, '/' | '\\' | ' ') { '_' } else { ch })
+            .map(|ch| {
+                if matches!(ch, '/' | '\\' | ' ') {
+                    '_'
+                } else {
+                    ch
+                }
+            })
             .collect();
         Ok(Self(format!("{operation}_{safe_name}_{timestamp}")))
     }
 
     pub fn parse(value: String) -> RlabResult<Self> {
         if value.trim().is_empty() {
-            return Err(RlabError::Run { message: "run id cannot be empty".to_string() });
+            return Err(RlabError::Run {
+                message: "run id cannot be empty".to_string(),
+            });
         }
         Ok(Self(value))
     }

@@ -2,15 +2,8 @@ use std::path::Path;
 
 use clap::{Args, Subcommand};
 use rlab_core::{
-    adapter_inventory,
-    host::validate_event,
-    load_effective_config,
-    HostCommand,
-    HostEvent,
-    HostRequest,
-    ProtocolVersion,
-    Registry,
-    RlabResult,
+    adapter_inventory, host::validate_event, load_effective_config, HostCommand, HostEvent,
+    HostRequest, ProtocolVersion, Registry, RlabResult,
 };
 
 use crate::host::process::run_python_host;
@@ -43,11 +36,20 @@ pub fn run(command: AdaptersCommand, root: Option<&Path>, json: bool) -> RlabRes
             }
         }
         AdaptersSubcommand::Inspect { name } => {
-            let adapter = inventory.adapters.into_iter().find(|adapter| adapter.descriptor.name == name);
+            let adapter = inventory
+                .adapters
+                .into_iter()
+                .find(|adapter| adapter.descriptor.name == name);
             match adapter {
                 Some(value) if json => print_json("adapter_inspect", value)?,
-                Some(value) => print_line(&serde_json::to_string_pretty(&value).map_err(rlab_core::RlabError::serialization)?),
-                None if json => print_json("adapter_inspect", serde_json::json!({"schema_version":1,"found":false,"name":name}))?,
+                Some(value) => print_line(
+                    &serde_json::to_string_pretty(&value)
+                        .map_err(rlab_core::RlabError::serialization)?,
+                ),
+                None if json => print_json(
+                    "adapter_inspect",
+                    serde_json::json!({"schema_version":1,"found":false,"name":name}),
+                )?,
                 None => print_line(&format!("adapter not found: {name}")),
             }
         }
@@ -64,12 +66,18 @@ fn discover_registry(config: &rlab_core::EffectiveConfig) -> RlabResult<Registry
         modules: config.python.modules.clone(),
         target: None,
         run_id: None,
+        run_dir: None,
+        cache_dir: None,
         params: serde_json::json!({}),
         seed: None,
         strict: config.production.strict,
         environment: serde_json::json!({}),
     };
-    let events = run_python_host(&config.python.executable, &config.python.runner_module, &request)?;
+    let events = run_python_host(
+        &config.python.executable,
+        &config.python.runner_module,
+        &request,
+    )?;
     let mut registry = Registry::new();
     for event in events {
         validate_event(&event)?;

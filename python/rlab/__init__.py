@@ -5,7 +5,14 @@ import json
 
 from ._project import Project
 from ._runner import RuntimeContext
-from ._decorators import ComponentUse, DataDecision, data_boundary, data_drop, data_keep, data_update
+from ._decorators import (
+    ComponentUse,
+    DataDecision,
+    data_boundary,
+    data_drop,
+    data_keep,
+    data_update,
+)
 from ._rlab import (
     ArtifactManifest,
     ArtifactStore,
@@ -44,7 +51,12 @@ from .data import (
     substitute,
     threshold,
 )
-from .evaluations.model import EvaluationResult, EvaluationSuite, EvaluationTask, TaskResult
+from .evaluations.model import (
+    EvaluationResult,
+    EvaluationSuite,
+    EvaluationTask,
+    TaskResult,
+)
 from .experiments.model import (
     Distribution,
     Experiment,
@@ -58,17 +70,35 @@ from .experiments.model import (
     log_uniform,
     uniform,
 )
-from .results import FigureArtifact, FileArtifact, LogArtifact, ResultSchema, TableArtifact
+from .results import (
+    FigureArtifact,
+    FileArtifact,
+    LogArtifact,
+    ResultSchema,
+    TableArtifact,
+)
 from .external import (
     AdapterContext,
     AdapterResult,
     AdapterValidationError,
     BaseAdapter,
     ExternalCommand,
+    ExternalCommandError,
     ExternalEvaluation,
+    ExternalPath,
     ExternalResult,
+    ExternalWorkspace,
 )
-from .governance import Assumption, LabPolicy, LicenseManifest, Threat, check_compatibility, redact_secrets, scan_for_pii, scan_for_secrets
+from .governance import (
+    Assumption,
+    LabPolicy,
+    LicenseManifest,
+    Threat,
+    check_compatibility,
+    redact_secrets,
+    scan_for_pii,
+    scan_for_secrets,
+)
 from .plan import BudgetEstimate, estimate_budget, estimate_required_repetitions
 from .stats.compare import MetricComparison, compare_metric_arrays
 from .studies.model import Study, StudyPlan
@@ -83,6 +113,7 @@ WorkflowContext = RuntimeContext
 # During runner execution (under pinned_project), Project() returns the pinned
 # project, so declarations register into the correct project automatically.
 # ---------------------------------------------------------------------------
+
 
 def experiment(name: str, **metadata):
     """Register an experiment on the default project."""
@@ -158,9 +189,13 @@ def metric(name: str, **metadata):
     return Project().metric(name, **metadata)
 
 
-def pipeline(name: str, *stages, version: str = "1", tags=(), description: str | None = None):
+def pipeline(
+    name: str, *stages, version: str = "1", tags=(), description: str | None = None
+):
     """Register a pipeline on the default project."""
-    return Project().pipeline(name, *stages, version=version, tags=tags, description=description)
+    return Project().pipeline(
+        name, *stages, version=version, tags=tags, description=description
+    )
 
 
 def dataset(name: str, **metadata):
@@ -188,7 +223,9 @@ def define_workflow(name: str, *, steps):
     return Workflow(name=name, steps=tuple(steps))
 
 
-def compare_runs(path: str | Path = ".rlab/runs", *, metric: str | None = None) -> list[dict[str, object]]:
+def compare_runs(
+    path: str | Path = ".rlab/runs", *, metric: str | None = None
+) -> list[dict[str, object]]:
     """Compare completed run metric summaries from a runs directory.
 
     This Python helper mirrors the Rust CLI's basic comparison contract for
@@ -249,8 +286,11 @@ __all__ = [
     "Experiment",
     "ExperimentResult",
     "ExternalCommand",
+    "ExternalCommandError",
     "ExternalEvaluation",
+    "ExternalPath",
     "ExternalResult",
+    "ExternalWorkspace",
     "ExternalStep",
     "FileArtifact",
     "FigureArtifact",

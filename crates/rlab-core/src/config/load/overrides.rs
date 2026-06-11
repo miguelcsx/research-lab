@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use crate::error::{RlabError, RlabResult};
 
-use super::apply::set_cache_paths;
 use super::super::model::EffectiveConfig;
 use super::super::overrides::ConfigOverride;
+use super::apply::set_cache_paths;
 
 const OVERRIDE_PATH_SEPARATOR: &str = ".";
 const OVERRIDE_PRODUCTION_STRICT: &str = "production.strict";
@@ -14,7 +14,10 @@ const OVERRIDE_PATHS_RUNS: &str = "paths.runs";
 const OVERRIDE_PATHS_ARTIFACTS: &str = "paths.artifacts";
 const OVERRIDE_PATHS_CACHE: &str = "paths.cache";
 
-pub fn apply_overrides(config: &mut EffectiveConfig, overrides: &[ConfigOverride]) -> RlabResult<()> {
+pub fn apply_overrides(
+    config: &mut EffectiveConfig,
+    overrides: &[ConfigOverride],
+) -> RlabResult<()> {
     for override_value in overrides {
         apply_override(config, override_value)?;
     }
@@ -42,7 +45,10 @@ fn apply_override(config: &mut EffectiveConfig, override_value: &ConfigOverride)
             config.paths.artifacts = PathBuf::from(override_string(override_value, &path)?);
         }
         OVERRIDE_PATHS_CACHE => {
-            set_cache_paths(config, PathBuf::from(override_string(override_value, &path)?));
+            set_cache_paths(
+                config,
+                PathBuf::from(override_string(override_value, &path)?),
+            );
         }
         _ => {
             return Err(RlabError::Config {

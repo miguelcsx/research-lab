@@ -15,5 +15,9 @@ pub struct TableRender {
 
 pub fn render_table(path: &Path) -> RlabResult<TableRender> {
     let text = fs::read_to_string(path).map_err(|error| RlabError::io(path, error))?;
-    Ok(TableRender { schema_version: SCHEMA_VERSION, path: path.display().to_string(), text })
+    Ok(TableRender {
+        schema_version: SCHEMA_VERSION,
+        path: path.display().to_string(),
+        text,
+    })
 }

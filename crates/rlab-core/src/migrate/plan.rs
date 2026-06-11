@@ -24,7 +24,11 @@ pub struct MigrationPlan {
 
 impl MigrationPlan {
     pub fn empty() -> Self {
-        Self { schema_version: CURRENT_SCHEMA_VERSION, current_schema_version: CURRENT_SCHEMA_VERSION, actions: Vec::new() }
+        Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            current_schema_version: CURRENT_SCHEMA_VERSION,
+            actions: Vec::new(),
+        }
     }
 
     pub fn push_missing_schema(&mut self, path: PathBuf, kind: &str) {
@@ -43,7 +47,9 @@ impl MigrationPlan {
             action: "upgrade_schema".to_string(),
             from_schema_version: Some(from),
             to_schema_version: CURRENT_SCHEMA_VERSION,
-            reason: format!("{kind} file schema_version {from} is older than {CURRENT_SCHEMA_VERSION}"),
+            reason: format!(
+                "{kind} file schema_version {from} is older than {CURRENT_SCHEMA_VERSION}"
+            ),
         });
     }
 
@@ -51,7 +57,10 @@ impl MigrationPlan {
         for action in &self.actions {
             if action.from_schema_version.is_none() {
                 return Err(RlabError::Validation {
-                    message: format!("cannot automatically migrate file without schema_version: {}", action.path.display()),
+                    message: format!(
+                        "cannot automatically migrate file without schema_version: {}",
+                        action.path.display()
+                    ),
                 });
             }
         }

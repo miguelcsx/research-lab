@@ -14,7 +14,12 @@ pub struct FileArtifact {
 
 impl FileArtifact {
     pub fn new(name: String, path: PathBuf, version: String) -> Self {
-        Self { schema_version: SCHEMA_VERSION, name, path, version }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            name,
+            path,
+            version,
+        }
     }
 }
 
@@ -27,7 +32,11 @@ pub struct TableArtifact {
 
 impl TableArtifact {
     pub fn new(name: String, path: PathBuf) -> Self {
-        Self { schema_version: SCHEMA_VERSION, name, path }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            name,
+            path,
+        }
     }
 }
 
@@ -40,6 +49,10 @@ pub struct LogArtifact {
 
 impl LogArtifact {
     pub fn new(name: String, path: PathBuf) -> Self {
-        Self { schema_version: SCHEMA_VERSION, name, path }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            name,
+            path,
+        }
     }
 }

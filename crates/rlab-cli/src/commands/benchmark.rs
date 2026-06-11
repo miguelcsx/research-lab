@@ -7,7 +7,7 @@ use rlab_core::{
 };
 
 use crate::commands::run::{
-    parse_params_public, process_event_public, parse_target, ParseTargetError, ParsedTarget,
+    parse_params_public, parse_target, process_event_public, ParseTargetError, ParsedTarget,
 };
 use crate::host::process::run_python_host;
 use crate::render::{human::print_line, json::print_json};
@@ -76,6 +76,8 @@ pub fn run(command: BenchmarkCommand, root: Option<&Path>, json: bool) -> RlabRe
             name: command.benchmark_name.clone(),
         }),
         run_id: Some(session.directory.id.as_str().to_string()),
+        run_dir: Some(session.directory.path.clone()),
+        cache_dir: Some(paths.cache.clone()),
         params,
         seed: None,
         strict: command.strict || config.production.strict,

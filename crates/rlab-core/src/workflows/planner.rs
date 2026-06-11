@@ -14,5 +14,9 @@ pub struct WorkflowPlan {
 
 pub fn plan_workflow(workflow: &Workflow) -> RlabResult<WorkflowPlan> {
     workflow.validate()?;
-    Ok(WorkflowPlan { schema_version: SCHEMA_VERSION, workflow: workflow.name.clone(), steps: workflow.steps.clone() })
+    Ok(WorkflowPlan {
+        schema_version: SCHEMA_VERSION,
+        workflow: workflow.name.clone(),
+        steps: workflow.steps.clone(),
+    })
 }

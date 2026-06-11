@@ -1,4 +1,3 @@
-
 use std::fs;
 
 use serde::{Deserialize, Serialize};
@@ -26,36 +25,68 @@ pub fn build_search_index(paths: &ProjectPaths) -> RlabResult<Vec<SearchDocument
     Ok(documents)
 }
 
-fn append_run_documents(paths: &ProjectPaths, documents: &mut Vec<SearchDocument>) -> RlabResult<()> {
+fn append_run_documents(
+    paths: &ProjectPaths,
+    documents: &mut Vec<SearchDocument>,
+) -> RlabResult<()> {
     for run in list_runs(paths)? {
         let mut text = format!("{} {} {} {:?}", run.id, run.operation, run.name, run.status);
         for file in ["metrics_summary.json", "results.json", "report.md"] {
             let path = paths.runs.join(&run.id).join(file);
             if path.exists() {
                 text.push(' ');
-                text.push_str(&fs::read_to_string(&path).map_err(|error| RlabError::io(&path, error))?);
+                text.push_str(
+                    &fs::read_to_string(&path).map_err(|error| RlabError::io(&path, error))?,
+                );
             }
         }
-        documents.push(SearchDocument { schema_version: SCHEMA_VERSION, kind: "run".to_string(), id: run.id, text });
+        documents.push(SearchDocument {
+            schema_version: SCHEMA_VERSION,
+            kind: "run".to_string(),
+            id: run.id,
+            text,
+        });
     }
     Ok(())
 }
 
-fn append_registry_documents(paths: &ProjectPaths, documents: &mut Vec<SearchDocument>) -> RlabResult<()> {
+fn append_registry_documents(
+    paths: &ProjectPaths,
+    documents: &mut Vec<SearchDocument>,
+) -> RlabResult<()> {
     if !paths.registry_cache.exists() {
         return Ok(());
     }
-    let content = fs::read_to_string(&paths.registry_cache).map_err(|error| RlabError::io(&paths.registry_cache, error))?;
-    documents.push(SearchDocument { schema_version: SCHEMA_VERSION, kind: "registry".to_string(), id: "registry_cache".to_string(), text: content });
+    let content = fs::read_to_string(&paths.registry_cache)
+        .map_err(|error| RlabError::io(&paths.registry_cache, error))?;
+    documents.push(SearchDocument {
+        schema_version: SCHEMA_VERSION,
+        kind: "registry".to_string(),
+        id: "registry_cache".to_string(),
+        text: content,
+    });
     Ok(())
 }
 
-fn append_journal_documents(paths: &ProjectPaths, documents: &mut Vec<SearchDocument>) -> RlabResult<()> {
-    for name in ["decisions.jsonl", "negatives.jsonl", "ideas.jsonl", "notes.jsonl"] {
+fn append_journal_documents(
+    paths: &ProjectPaths,
+    documents: &mut Vec<SearchDocument>,
+) -> RlabResult<()> {
+    for name in [
+        "decisions.jsonl",
+        "negatives.jsonl",
+        "ideas.jsonl",
+        "notes.jsonl",
+    ] {
         let path = paths.cache.join(name);
         if path.exists() {
             let text = fs::read_to_string(&path).map_err(|error| RlabError::io(&path, error))?;
-            documents.push(SearchDocument { schema_version: SCHEMA_VERSION, kind: "journal".to_string(), id: name.to_string(), text });
+            documents.push(SearchDocument {
+                schema_version: SCHEMA_VERSION,
+                kind: "journal".to_string(),
+                id: name.to_string(),
+                text,
+            });
         }
     }
     Ok(())

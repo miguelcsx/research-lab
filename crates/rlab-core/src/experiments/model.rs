@@ -38,14 +38,20 @@ pub struct ExperimentPlan {
 impl ExperimentSpec {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported experiment schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported experiment schema_version".to_string(),
+            });
         }
         if self.name.trim().is_empty() {
-            return Err(RlabError::Validation { message: "experiment name cannot be empty".to_string() });
+            return Err(RlabError::Validation {
+                message: "experiment name cannot be empty".to_string(),
+            });
         }
         for metric in &self.metrics {
             if metric.trim().is_empty() {
-                return Err(RlabError::Validation { message: "metric names cannot be empty".to_string() });
+                return Err(RlabError::Validation {
+                    message: "metric names cannot be empty".to_string(),
+                });
             }
         }
         self.retry.validate()

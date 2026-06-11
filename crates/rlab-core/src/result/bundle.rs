@@ -16,7 +16,11 @@ pub struct ResultBundle {
 
 impl ResultBundle {
     pub fn empty() -> Self {
-        Self { schema_version: RESULT_BUNDLE_SCHEMA_VERSION, metrics: Vec::new(), data: BTreeMap::new() }
+        Self {
+            schema_version: RESULT_BUNDLE_SCHEMA_VERSION,
+            metrics: Vec::new(),
+            data: BTreeMap::new(),
+        }
     }
 
     pub fn from_metric_map(metrics: BTreeMap<String, f64>) -> Self {
@@ -24,6 +28,10 @@ impl ResultBundle {
             .into_iter()
             .map(|(name, value)| Metric::new(name, value, None, None))
             .collect();
-        Self { schema_version: RESULT_BUNDLE_SCHEMA_VERSION, metrics: metric_values, data: BTreeMap::new() }
+        Self {
+            schema_version: RESULT_BUNDLE_SCHEMA_VERSION,
+            metrics: metric_values,
+            data: BTreeMap::new(),
+        }
     }
 }

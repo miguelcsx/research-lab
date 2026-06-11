@@ -11,4 +11,3 @@ pub fn validate_non_empty(label: &str, value: &str) -> RlabResult<()> {
         message: format!("{label} {EMPTY_VALUE_MESSAGE_SUFFIX}"),
     })
 }
-

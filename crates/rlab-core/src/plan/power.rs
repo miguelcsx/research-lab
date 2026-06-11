@@ -10,6 +10,14 @@ pub struct PowerPlan {
     pub repetitions: u64,
 }
 
-pub fn estimate_power_repetitions(effect_size: f64, variance: f64, alpha: f64, power: f64) -> RlabResult<PowerPlan> {
-    Ok(PowerPlan { schema_version: SCHEMA_VERSION, repetitions: estimate_required_repetitions(effect_size, variance, alpha, power)? })
+pub fn estimate_power_repetitions(
+    effect_size: f64,
+    variance: f64,
+    alpha: f64,
+    power: f64,
+) -> RlabResult<PowerPlan> {
+    Ok(PowerPlan {
+        schema_version: SCHEMA_VERSION,
+        repetitions: estimate_required_repetitions(effect_size, variance, alpha, power)?,
+    })
 }

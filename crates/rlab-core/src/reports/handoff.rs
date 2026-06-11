@@ -8,7 +8,8 @@ use crate::run::show_run;
 pub fn write_handoff(paths: &ProjectPaths, run_id: &str, recipient: &str) -> RlabResult<PathBuf> {
     let run = show_run(paths, run_id)?;
     let path = run.path.join("handoff.md");
-    let body = format!("# Handoff for {run_id}
+    let body = format!(
+        "# Handoff for {run_id}
 
 Recipient: {recipient}
 
@@ -29,7 +30,11 @@ rlab reproduce {}
 ## Suggested next experiments
 
 - Review metrics and compare against current baseline.
-", run.name, run.operation, run.path.display());
+",
+        run.name,
+        run.operation,
+        run.path.display()
+    );
     write_text_atomic(&path, &body)?;
     Ok(path)
 }

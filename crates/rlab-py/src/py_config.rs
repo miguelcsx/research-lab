@@ -18,12 +18,12 @@ impl PyEffectiveConfig {
     }
 }
 
-#[pyfunction]
+#[pyfunction(name = "find_project_root")]
 pub fn find_project_root_py(start: PathBuf) -> PyResult<PathBuf> {
     find_project_root(&start).map_err(to_py_error)
 }
 
-#[pyfunction]
+#[pyfunction(name = "load_config")]
 #[pyo3(signature = (root=None))]
 pub fn load_config_py(root: Option<PathBuf>) -> PyResult<PyEffectiveConfig> {
     let config = rlab_core::load_effective_config(root.as_deref(), &[]).map_err(to_py_error)?;

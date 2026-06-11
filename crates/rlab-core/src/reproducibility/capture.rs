@@ -34,7 +34,11 @@ fn copy_if_present(paths: &ProjectPaths, dir: &std::path::Path, name: &str) -> R
 
 fn lockfile_marker(paths: &ProjectPaths) -> String {
     let lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock", "Cargo.lock"];
-    let present = lockfiles.iter().filter(|name| paths.root.join(name).exists()).copied().collect::<Vec<_>>();
+    let present = lockfiles
+        .iter()
+        .filter(|name| paths.root.join(name).exists())
+        .copied()
+        .collect::<Vec<_>>();
     if present.is_empty() {
         "no lockfile captured\n".to_string()
     } else {
@@ -70,9 +74,9 @@ fn git_diff(root: &std::path::Path) -> RlabResult<Option<String>> {
 fn run_git(root: &std::path::Path, args: &[&str]) -> RlabResult<Option<String>> {
     let output = Command::new("git").args(args).current_dir(root).output();
     match output {
-        Ok(value) if value.status.success() => {
-            String::from_utf8(value.stdout).map(Some).map_err(RlabError::serialization)
-        }
+        Ok(value) if value.status.success() => String::from_utf8(value.stdout)
+            .map(Some)
+            .map_err(RlabError::serialization),
         Ok(_) => Ok(None),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(RlabError::io(root, error)),

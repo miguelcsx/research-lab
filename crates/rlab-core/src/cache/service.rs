@@ -32,10 +32,19 @@ pub fn cache_list(paths: &ProjectPaths) -> RlabResult<Vec<CacheEntry>> {
     }
     let mut entries = Vec::new();
     for item in WalkDir::new(&paths.cache).into_iter() {
-        let item = item.map_err(|error| RlabError::Io { path: paths.cache.clone(), message: error.to_string() })?;
+        let item = item.map_err(|error| RlabError::Io {
+            path: paths.cache.clone(),
+            message: error.to_string(),
+        })?;
         if item.file_type().is_file() {
-            let metadata = item.metadata().map_err(|error| RlabError::Io { path: item.path().to_path_buf(), message: error.to_string() })?;
-            entries.push(CacheEntry { path: item.path().display().to_string(), bytes: metadata.len() });
+            let metadata = item.metadata().map_err(|error| RlabError::Io {
+                path: item.path().to_path_buf(),
+                message: error.to_string(),
+            })?;
+            entries.push(CacheEntry {
+                path: item.path().display().to_string(),
+                bytes: metadata.len(),
+            });
         }
     }
     entries.sort_by(|left, right| left.path.cmp(&right.path));
@@ -45,7 +54,12 @@ pub fn cache_list(paths: &ProjectPaths) -> RlabResult<Vec<CacheEntry>> {
 pub fn cache_inspect(paths: &ProjectPaths) -> RlabResult<CacheInspection> {
     let entries = cache_list(paths)?;
     let total_bytes = entries.iter().map(|entry| entry.bytes).sum();
-    Ok(CacheInspection { schema_version: SCHEMA_VERSION, path: paths.cache.display().to_string(), entries, total_bytes })
+    Ok(CacheInspection {
+        schema_version: SCHEMA_VERSION,
+        path: paths.cache.display().to_string(),
+        entries,
+        total_bytes,
+    })
 }
 
 pub fn clean_cache(paths: &ProjectPaths) -> RlabResult<CacheInspection> {

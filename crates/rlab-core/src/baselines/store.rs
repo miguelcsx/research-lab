@@ -17,8 +17,21 @@ pub struct BaselineComparison {
     pub delta: Option<f64>,
 }
 
-pub fn add_baseline(paths: &ProjectPaths, name: &str, metric: &str, value: f64, description: Option<String>) -> RlabResult<crate::evaluations::BaselineEntry> {
-    let entry = crate::evaluations::BaselineEntry { schema_version: SCHEMA_VERSION, name: name.to_string(), metric: metric.to_string(), value, description, created_at: OffsetDateTime::now_utc() };
+pub fn add_baseline(
+    paths: &ProjectPaths,
+    name: &str,
+    metric: &str,
+    value: f64,
+    description: Option<String>,
+) -> RlabResult<crate::evaluations::BaselineEntry> {
+    let entry = crate::evaluations::BaselineEntry {
+        schema_version: SCHEMA_VERSION,
+        name: name.to_string(),
+        metric: metric.to_string(),
+        value,
+        description,
+        created_at: OffsetDateTime::now_utc(),
+    };
     append_jsonl(&paths.cache.join("baselines.jsonl"), &entry)?;
     Ok(entry)
 }
@@ -31,8 +44,10 @@ pub fn compare_baseline(paths: &ProjectPaths, run_id: &str) -> RlabResult<Vec<Ba
     let run = show_run(paths, run_id)?;
     let metrics_path = run.path.join("metrics_summary.json");
     let metrics = if metrics_path.exists() {
-        let content = std::fs::read_to_string(&metrics_path).map_err(|error| RlabError::io(&metrics_path, error))?;
-        serde_json::from_str::<std::collections::BTreeMap<String, f64>>(&content).map_err(RlabError::serialization)?
+        let content = std::fs::read_to_string(&metrics_path)
+            .map_err(|error| RlabError::io(&metrics_path, error))?;
+        serde_json::from_str::<std::collections::BTreeMap<String, f64>>(&content)
+            .map_err(RlabError::serialization)?
     } else {
         std::collections::BTreeMap::new()
     };
@@ -41,7 +56,14 @@ pub fn compare_baseline(paths: &ProjectPaths, run_id: &str) -> RlabResult<Vec<Ba
         .map(|baseline| {
             let run_value = metrics.get(&baseline.metric).copied();
             let delta = run_value.map(|value| value - baseline.value);
-            BaselineComparison { schema_version: SCHEMA_VERSION, name: baseline.name, metric: baseline.metric, baseline_value: baseline.value, run_value, delta }
+            BaselineComparison {
+                schema_version: SCHEMA_VERSION,
+                name: baseline.name,
+                metric: baseline.metric,
+                baseline_value: baseline.value,
+                run_value,
+                delta,
+            }
         })
         .collect())
 }

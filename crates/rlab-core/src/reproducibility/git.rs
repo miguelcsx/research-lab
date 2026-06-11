@@ -25,7 +25,9 @@ pub fn capture_git_diff(root: &Path) -> RlabResult<Option<String>> {
 fn run_git(root: &Path, args: &[&str]) -> RlabResult<Option<String>> {
     let output = Command::new("git").args(args).current_dir(root).output();
     match output {
-        Ok(value) if value.status.success() => String::from_utf8(value.stdout).map(Some).map_err(RlabError::serialization),
+        Ok(value) if value.status.success() => String::from_utf8(value.stdout)
+            .map(Some)
+            .map_err(RlabError::serialization),
         Ok(_) => Ok(None),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(RlabError::io(root, error)),
