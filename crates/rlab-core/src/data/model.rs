@@ -13,10 +13,24 @@ pub struct ComponentUse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "decision", rename_all = "snake_case")]
 pub enum DataDecision {
-    Keep { schema_version: u32, record: Value },
-    Update { schema_version: u32, record: Value, reason: Option<String> },
-    Drop { schema_version: u32, reason: String },
-    Boundary { schema_version: u32, value: Value, kind: String },
+    Keep {
+        schema_version: u32,
+        record: Value,
+    },
+    Update {
+        schema_version: u32,
+        record: Value,
+        reason: Option<String>,
+    },
+    Drop {
+        schema_version: u32,
+        reason: String,
+    },
+    Boundary {
+        schema_version: u32,
+        value: Value,
+        kind: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,19 +75,28 @@ pub struct AuditPolicy {
 impl ComponentUse {
     pub fn new(reference: String) -> RlabResult<Self> {
         if reference.trim().is_empty() {
-            return Err(RlabError::Validation { message: "component reference cannot be empty".to_string() });
+            return Err(RlabError::Validation {
+                message: "component reference cannot be empty".to_string(),
+            });
         }
-        Ok(Self { schema_version: SCHEMA_VERSION, reference })
+        Ok(Self {
+            schema_version: SCHEMA_VERSION,
+            reference,
+        })
     }
 }
 
 impl PipelineSpec {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported pipeline schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported pipeline schema_version".to_string(),
+            });
         }
         if self.name.trim().is_empty() || self.version.trim().is_empty() {
-            return Err(RlabError::Validation { message: "pipeline name and version are required".to_string() });
+            return Err(RlabError::Validation {
+                message: "pipeline name and version are required".to_string(),
+            });
         }
         Ok(())
     }
@@ -82,10 +105,17 @@ impl PipelineSpec {
 impl DatasetSpec {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported dataset schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported dataset schema_version".to_string(),
+            });
         }
-        if self.name.trim().is_empty() || self.version.trim().is_empty() || self.pipeline.trim().is_empty() {
-            return Err(RlabError::Validation { message: "dataset name, version, and pipeline are required".to_string() });
+        if self.name.trim().is_empty()
+            || self.version.trim().is_empty()
+            || self.pipeline.trim().is_empty()
+        {
+            return Err(RlabError::Validation {
+                message: "dataset name, version, and pipeline are required".to_string(),
+            });
         }
         self.audit.validate()
     }
@@ -93,12 +123,18 @@ impl DatasetSpec {
 
 impl AuditPolicy {
     pub fn relaxed() -> Self {
-        Self { schema_version: SCHEMA_VERSION, capture_decisions: false, sample_limit_per_reason: 10 }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            capture_decisions: false,
+            sample_limit_per_reason: 10,
+        }
     }
 
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != 1 {
-            return Err(RlabError::Validation { message: "unsupported audit policy schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported audit policy schema_version".to_string(),
+            });
         }
         Ok(())
     }

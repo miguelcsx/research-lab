@@ -1,4 +1,12 @@
-const SECRET_MARKERS: &[&str] = &["token", "secret", "password", "credential", "api_key", "apikey", "key"];
+const SECRET_MARKERS: &[&str] = &[
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "api_key",
+    "apikey",
+    "key",
+];
 const REDACTED: &str = "<redacted>";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

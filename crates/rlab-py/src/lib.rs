@@ -1,3 +1,6 @@
+#![allow(clippy::useless_conversion)]
+
+mod convert;
 mod error;
 mod module;
 mod py_artifact;

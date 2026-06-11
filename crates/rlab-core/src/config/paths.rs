@@ -19,14 +19,14 @@ pub struct ProjectPaths {
 impl ProjectPaths {
     pub fn from_config(config: &EffectiveConfig) -> RlabResult<Self> {
         let root = config.project.root.clone();
-        let paths = Self {
-            runs: resolve(&root, &config.paths.runs)?,
-            artifacts: resolve(&root, &config.paths.artifacts)?,
-            cache: resolve(&root, &config.paths.cache)?,
-            registry_cache: resolve(&root, &config.paths.registry_cache)?,
+
+        Ok(Self {
+            runs: resolve_project_path(&root, &config.paths.runs)?,
+            artifacts: resolve_project_path(&root, &config.paths.artifacts)?,
+            cache: resolve_project_path(&root, &config.paths.cache)?,
+            registry_cache: resolve_project_path(&root, &config.paths.registry_cache)?,
             root,
-        };
-        Ok(paths)
+        })
     }
 
     pub fn ensure_base_dirs(&self) -> RlabResult<()> {
@@ -36,6 +36,6 @@ impl ProjectPaths {
     }
 }
 
-fn resolve(root: &Path, value: &Path) -> RlabResult<PathBuf> {
+fn resolve_project_path(root: &Path, value: &Path) -> RlabResult<PathBuf> {
     ensure_child_path(root, value)
 }

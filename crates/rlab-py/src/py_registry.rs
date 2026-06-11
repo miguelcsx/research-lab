@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use pyo3::prelude::*;
 use serde_json::Value;
 
+use crate::convert::json::{from_json_str, to_json, to_pretty_json};
 use crate::error::to_py_error;
 
 #[pyclass(name = "RegistryRecord")]
@@ -16,6 +17,7 @@ pub struct PyRegistryRecord {
 impl PyRegistryRecord {
     #[new]
     #[pyo3(signature = (kind, name, version, module, qualname, source, tags=None, description="", metadata=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         kind: &str,
         name: &str,
@@ -27,34 +29,35 @@ impl PyRegistryRecord {
         description: &str,
         metadata: Option<String>,
     ) -> PyResult<Self> {
-        let metadata_map = match metadata {
-            Some(value) => serde_json::from_str::<BTreeMap<String, Value>>(&value).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
-            None => BTreeMap::new(),
-        };
-        let parsed_kind = rlab_core::RegistryKind::parse(kind).map_err(to_py_error)?;
-        let tag_values = tags.unwrap_or_default();
-        let record = rlab_core::RegistryRecord::new(
-            parsed_kind,
-            name.to_string(),
-            version.to_string(),
-            module.to_string(),
-            qualname.to_string(),
+        let record = registry_record_from_python_args(RegistryRecordArgs {
+            kind,
+            name,
+            version,
+            module,
+            qualname,
             source,
-            tag_values,
-            description.to_string(),
-            metadata_map,
-        );
-        rlab_core::registry::validate_registry_record(&record).map_err(to_py_error)?;
+            tags,
+            description,
+            metadata,
+        })?;
+
+        validate_record(&record)?;
+
         Ok(Self { inner: record })
     }
 
     #[getter]
-    pub fn kind(&self) -> String { self.inner.kind.as_str().to_string() }
+    pub fn kind(&self) -> String {
+        self.inner.kind.as_str().to_string()
+    }
+
     #[getter]
-    pub fn name(&self) -> String { self.inner.name.clone() }
+    pub fn name(&self) -> String {
+        self.inner.name.clone()
+    }
 
     pub fn to_json(&self) -> PyResult<String> {
-        serde_json::to_string(&self.inner).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
+        to_json(&self.inner)
     }
 }
 
@@ -68,7 +71,9 @@ pub struct PyRegistry {
 impl PyRegistry {
     #[new]
     pub fn new() -> Self {
-        Self { inner: rlab_core::Registry::new() }
+        Self {
+            inner: rlab_core::Registry::new(),
+        }
     }
 
     pub fn insert(&mut self, record: &PyRegistryRecord) -> PyResult<()> {
@@ -76,6 +81,49 @@ impl PyRegistry {
     }
 
     pub fn to_json(&self) -> PyResult<String> {
-        serde_json::to_string_pretty(&self.inner).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
+        to_pretty_json(&self.inner)
     }
+}
+
+struct RegistryRecordArgs<'a> {
+    kind: &'a str,
+    name: &'a str,
+    version: &'a str,
+    module: &'a str,
+    qualname: &'a str,
+    source: PathBuf,
+    tags: Option<Vec<String>>,
+    description: &'a str,
+    metadata: Option<String>,
+}
+
+fn registry_record_from_python_args(
+    args: RegistryRecordArgs<'_>,
+) -> PyResult<rlab_core::RegistryRecord> {
+    Ok(rlab_core::RegistryRecord::new(
+        parse_registry_kind(args.kind)?,
+        args.name.to_owned(),
+        args.version.to_owned(),
+        args.module.to_owned(),
+        args.qualname.to_owned(),
+        args.source,
+        args.tags.unwrap_or_default(),
+        args.description.to_owned(),
+        parse_metadata(args.metadata)?,
+    ))
+}
+
+fn parse_registry_kind(kind: &str) -> PyResult<rlab_core::RegistryKind> {
+    rlab_core::RegistryKind::parse(kind).map_err(to_py_error)
+}
+
+fn parse_metadata(metadata: Option<String>) -> PyResult<BTreeMap<String, Value>> {
+    match metadata {
+        Some(value) => from_json_str(&value),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+fn validate_record(record: &rlab_core::RegistryRecord) -> PyResult<()> {
+    rlab_core::registry::validate_registry_record(record).map_err(to_py_error)
 }

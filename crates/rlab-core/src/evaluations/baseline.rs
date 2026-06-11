@@ -18,7 +18,7 @@ pub struct BaselineEntry {
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct BaselineStore {
     pub schema_version: u32,
     pub entries: BTreeMap<String, BaselineEntry>,
@@ -27,13 +27,19 @@ pub struct BaselineStore {
 impl BaselineEntry {
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != SCHEMA_VERSION {
-            return Err(RlabError::Validation { message: "unsupported baseline schema_version".to_string() });
+            return Err(RlabError::Validation {
+                message: "unsupported baseline schema_version".to_string(),
+            });
         }
         if self.name.trim().is_empty() || self.metric.trim().is_empty() {
-            return Err(RlabError::Validation { message: "baseline name and metric are required".to_string() });
+            return Err(RlabError::Validation {
+                message: "baseline name and metric are required".to_string(),
+            });
         }
         if !self.value.is_finite() {
-            return Err(RlabError::Validation { message: "baseline value must be finite".to_string() });
+            return Err(RlabError::Validation {
+                message: "baseline value must be finite".to_string(),
+            });
         }
         Ok(())
     }
@@ -41,7 +47,10 @@ impl BaselineEntry {
 
 impl BaselineStore {
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION, entries: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            entries: BTreeMap::new(),
+        }
     }
 
     pub fn insert(&mut self, entry: BaselineEntry) -> RlabResult<()> {

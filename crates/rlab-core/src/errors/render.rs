@@ -16,8 +16,14 @@ pub struct RunErrorReport {
 pub fn render_run_error(paths: &ProjectPaths, run_id: &str) -> RlabResult<RunErrorReport> {
     let path = paths.runs.join(run_id).join("logs/error.txt");
     if !path.exists() {
-        return Err(RlabError::NotFound { subject: format!("error log for run {run_id}") });
+        return Err(RlabError::NotFound {
+            subject: format!("error log for run {run_id}"),
+        });
     }
     let error = fs::read_to_string(&path).map_err(|source| RlabError::io(&path, source))?;
-    Ok(RunErrorReport { schema_version: SCHEMA_VERSION, run_id: run_id.to_string(), error })
+    Ok(RunErrorReport {
+        schema_version: SCHEMA_VERSION,
+        run_id: run_id.to_string(),
+        error,
+    })
 }

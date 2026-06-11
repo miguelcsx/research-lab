@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ._loader import load_modules
+from ._loaders import register_builtin_loaders
 from ._protocol import (
     PROTOCOL_VERSION,
     HostRequest,
@@ -142,6 +143,7 @@ def main() -> int:
         project = load_modules(
             request.project_root, request.modules, strict=request.strict
         )
+        register_builtin_loaders(project)
         for record in project.records:
             event = base_event(request, "registry_record")
             event["record"] = record
@@ -183,9 +185,44 @@ def _execute(request: HostRequest, project: Any) -> None:
     else:
         callable_obj = project.resolve(request.target.kind, request.target.name)
         result = _invoke_target(request, project, callable_obj, ctx)
+    # Emit one metric event per scalar value in the returned dict so the
+    # Rust CLI can append them to metrics.jsonl (and metrics_summary.json
+    # gets populated on completion). Lists and non-numeric values are
+    # skipped — they will still appear under the Completed result payload.
+    if isinstance(result, dict):
+        _emit_dict_metrics(ctx, result, prefix="")
     event = base_event(request, "completed")
     event["result"] = {"schema_version": 1, "data": _jsonable(result)}
     emit_event(event)
+
+
+def _emit_dict_metrics(
+    ctx: RuntimeContext, value: Any, prefix: str
+) -> None:
+    """Flatten `value` into per-leaf metric events under dotted keys."""
+    flat: dict[str, float] = {}
+
+    def _walk(node: Any, path: str) -> None:
+        if isinstance(node, bool):
+            return
+        if isinstance(node, (int, float)):
+            numeric = float(node)
+            if numeric != numeric or numeric in (float("inf"), float("-inf")):
+                return  # skip NaN / Inf — Rust Metric::validate rejects them
+            if path:
+                flat[path] = numeric
+            return
+        if isinstance(node, dict):
+            for key, child in node.items():
+                _walk(child, f"{path}.{key}" if path else str(key))
+            return
+        if isinstance(node, list):
+            for index, child in enumerate(node):
+                _walk(child, f"{path}.{index}" if path else str(index))
+
+    _walk(value, prefix)
+    if flat:
+        ctx.log_metrics(flat)
 
 
 def _execute_workflow(
@@ -411,17 +448,44 @@ def _invoke_target(
         target = _resolve_component(project, target_ref)
         return callable_obj(target, ctx)
     if request.target.kind == "evaluation":
-        model_ref = ctx.params.get("model")
-        model = _resolve_component(project, model_ref)
-        return callable_obj(model, ctx)
+        target_ref = ctx.params.get("target")
+        if not isinstance(target_ref, str) or not target_ref:
+            raise ValueError(
+                "evaluation requires a 'target' param in <kind>:<name> form"
+            )
+        target = _resolve_component(project, target_ref)
+        return callable_obj(target, ctx)
     return callable_obj(ctx)
 
 
 def _resolve_component(project: Any, reference: Any) -> Any:
+    """Resolve a `<kind>:<name>` reference.
+
+    Two-segment loader references of the form `model:<loader>:<path>` are
+    dispatched to the registered `model:<loader>` factory's `.load(path)`
+    method. This is how `--target model:hf:org/repo` resolves without
+    requiring a per-repo component registration.
+    """
     if not isinstance(reference, str) or ":" not in reference:
-        raise ValueError("component reference must be kind:name")
-    kind, name = reference.split(":", 1)
-    component = project.resolve(kind, name)
+        raise ValueError(
+            f"component reference must be kind:name, got {reference!r}"
+        )
+    kind, rest = reference.split(":", 1)
+    if kind == "model" and ":" in rest:
+        loader_name, loader_path = rest.split(":", 1)
+        try:
+            loader = project.resolve("model", loader_name)
+        except KeyError as exc:
+            raise KeyError(
+                f"no model loader registered for model:{loader_name}"
+            ) from exc
+        load = getattr(loader, "load", None)
+        if not callable(load):
+            raise ValueError(
+                f"model:{loader_name} is not a loader (no .load(path) method)"
+            )
+        return load(loader_path)
+    component = project.resolve(kind, rest)
     if isinstance(component, type):
         return component()
     if callable(component) and not hasattr(component, "__dict__"):

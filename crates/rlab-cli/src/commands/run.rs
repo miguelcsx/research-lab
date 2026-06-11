@@ -22,7 +22,7 @@ pub struct RunCommand {
 pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
-    let (kind, name) = parse_target(&command.target)?;
+    let (kind, name) = parse_target_kind(&command.target)?;
     let params = parse_params_public(&command.params)?;
     let session = RunSession::create(
         &paths,
@@ -109,38 +109,93 @@ pub fn process_event_public(
     }
 }
 
-fn parse_target(value: &str) -> RlabResult<(RegistryKind, String)> {
-    // Detect file paths early and give an actionable error.
-    if value.ends_with(".py") || value.ends_with(".toml") || value.contains('/') || value.contains('\\') {
-        return Err(RlabError::Reference {
+pub struct ParsedTarget {
+    pub kind_str: String,
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub enum ParseTargetError {
+    FilePath { value: String },
+    InvalidKind { value: String, reason: String },
+    MissingName { value: String },
+}
+
+/// Parse a `<kind>:<name>` reference. Used by `rlab run` and `rlab evaluate`.
+///
+/// If `default_kind` is provided and the value contains no `:`, the parsed
+/// kind is set to `default_kind` and the entire value is used as the name.
+/// This lets subcommands whose target always has the same kind (e.g. `rlab
+/// evaluate <suite> <model-name>`) accept a bare name.
+pub fn parse_target(
+    value: &str,
+    default_kind: Option<&str>,
+) -> Result<ParsedTarget, ParseTargetError> {
+    // Detect file paths early and give an actionable error. We only flag
+    // values that *look* like paths (start with `/`, `./`, `../`, or `\`,
+    // or end in `.py`/`.toml`) so that 3-segment refs like
+    // `model:hf:org/repo` (which contain `/` in the path portion) are
+    // still accepted.
+    if value.ends_with(".py")
+        || value.ends_with(".toml")
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.starts_with('\\')
+    {
+        return Err(ParseTargetError::FilePath { value: value.to_string() });
+    }
+    if !value.contains(':') {
+        if let Some(kind) = default_kind {
+            return Ok(ParsedTarget {
+                kind_str: kind.to_string(),
+                name: value.to_string(),
+            });
+        }
+        return Err(ParseTargetError::InvalidKind {
+            value: value.to_string(),
+            reason: "expected <kind>:<name>".to_string(),
+        });
+    }
+    let mut parts = value.splitn(2, ':');
+    let kind_str = match parts.next() {
+        Some(text) if !text.trim().is_empty() => text.to_string(),
+        _ => {
+            return Err(ParseTargetError::InvalidKind {
+                value: value.to_string(),
+                reason: "expected <kind>:<name>".to_string(),
+            });
+        }
+    };
+    let name = match parts.next() {
+        Some(text) if !text.trim().is_empty() => text.to_string(),
+        _ => {
+            return Err(ParseTargetError::MissingName { value: value.to_string() });
+        }
+    };
+    Ok(ParsedTarget { kind_str, name })
+}
+
+fn parse_target_kind(value: &str) -> RlabResult<(RegistryKind, String)> {
+    let parsed = parse_target(value, None).map_err(|error| match error {
+        ParseTargetError::FilePath { value } => RlabError::Reference {
             message: format!(
                 "'{value}' looks like a file path, but 'rlab run' expects a registry target.\n  \
                  Use the form: rlab run <kind>:<name>\n  \
                  Examples: rlab run dataset:babylm.curation.smoke\n           rlab run experiment:my.experiment\n  \
                  Run 'rlab discover' to list all registered targets."
             ),
-        });
-    }
-    let mut parts = value.splitn(2, ':');
-    let kind_str = match parts.next() {
-        Some(text) if !text.trim().is_empty() => text,
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("invalid target: '{value}' — expected <kind>:<name>"),
-            })
-        }
-    };
-    let name = match parts.next() {
-        Some(text) if !text.trim().is_empty() => text,
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!(
-                    "missing name in target '{value}' — expected <kind>:<name>, e.g. dataset:babylm.curation.smoke"
-                ),
-            })
-        }
-    };
-    Ok((RegistryKind::parse(kind_str)?, name.to_string()))
+        },
+        ParseTargetError::InvalidKind { value, reason } => RlabError::Reference {
+            message: format!("invalid target: '{value}' — {reason}"),
+        },
+        ParseTargetError::MissingName { value } => RlabError::Reference {
+            message: format!(
+                "missing name in target '{value}' — expected <kind>:<name>, e.g. dataset:babylm.curation.smoke"
+            ),
+        },
+    })?;
+    Ok((RegistryKind::parse(&parsed.kind_str)?, parsed.name))
 }
 
 pub fn parse_params_public(params: &[String]) -> RlabResult<serde_json::Value> {

@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 
+use crate::convert::json::to_pretty_json;
 use crate::error::to_py_error;
 
 #[pyclass(name = "ArtifactManifest")]
@@ -13,7 +14,7 @@ pub struct PyArtifactManifest {
 #[pymethods]
 impl PyArtifactManifest {
     pub fn to_json(&self) -> PyResult<String> {
-        serde_json::to_string_pretty(&self.inner).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
+        to_pretty_json(&self.inner)
     }
 }
 
@@ -25,14 +26,44 @@ pub struct PyArtifactStore {
 #[pymethods]
 impl PyArtifactStore {
     #[new]
-    pub fn new(root: PathBuf) -> Self { Self { root } }
+    pub fn new(root: PathBuf) -> Self {
+        Self { root }
+    }
 
-    pub fn promote(&self, source: PathBuf, kind: String, name: String, version: String) -> PyResult<PyArtifactManifest> {
-        let config = rlab_core::load_effective_config(Some(&self.root), &[]).map_err(to_py_error)?;
-        let paths = rlab_core::ProjectPaths::from_config(&config).map_err(to_py_error)?;
-        let manifest = rlab_core::ArtifactStore::new(&paths)
-            .promote(rlab_core::PromoteRequest { source, artifact_kind: kind, name, version, alias: None })
+    pub fn promote(
+        &self,
+        source: PathBuf,
+        kind: String,
+        name: String,
+        version: String,
+    ) -> PyResult<PyArtifactManifest> {
+        let store = artifact_store_for_root(&self.root)?;
+        let manifest = store
+            .promote(promote_request(source, kind, name, version))
             .map_err(to_py_error)?;
+
         Ok(PyArtifactManifest { inner: manifest })
+    }
+}
+
+fn artifact_store_for_root(root: &Path) -> PyResult<rlab_core::ArtifactStore> {
+    let config = rlab_core::load_effective_config(Some(root), &[]).map_err(to_py_error)?;
+    let paths = rlab_core::ProjectPaths::from_config(&config).map_err(to_py_error)?;
+
+    Ok(rlab_core::ArtifactStore::new(&paths))
+}
+
+fn promote_request(
+    source: PathBuf,
+    kind: String,
+    name: String,
+    version: String,
+) -> rlab_core::PromoteRequest {
+    rlab_core::PromoteRequest {
+        source,
+        artifact_kind: kind,
+        name,
+        version,
+        alias: None,
     }
 }

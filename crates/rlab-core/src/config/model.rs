@@ -1,16 +1,15 @@
-
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 
-const DEFAULT_RUNS_DIR: &str = ".rlab/runs";
-const DEFAULT_ARTIFACTS_DIR: &str = ".rlab/artifacts";
-const DEFAULT_CACHE_DIR: &str = ".rlab/cache";
-const DEFAULT_REGISTRY_CACHE_FILE: &str = "registry.json";
-const DEFAULT_PYTHON_EXECUTABLE: &str = "python";
-const DEFAULT_RUNNER_MODULE: &str = "rlab._runner";
+pub const DEFAULT_RUNS_DIR: &str = ".rlab/runs";
+pub const DEFAULT_ARTIFACTS_DIR: &str = ".rlab/artifacts";
+pub const DEFAULT_CACHE_DIR: &str = ".rlab/cache";
+pub const DEFAULT_REGISTRY_CACHE_FILE: &str = "registry.json";
+pub const DEFAULT_PYTHON_EXECUTABLE: &str = "python";
+pub const DEFAULT_RUNNER_MODULE: &str = "rlab._runner";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectiveConfig {
@@ -60,18 +59,20 @@ pub struct ReproducibilityConfig {
 impl EffectiveConfig {
     pub fn default_for(root: PathBuf, name: String) -> Self {
         let cache = PathBuf::from(DEFAULT_CACHE_DIR);
+        let registry_cache = cache.join(DEFAULT_REGISTRY_CACHE_FILE);
+
         Self {
             schema_version: CONFIG_SCHEMA_VERSION,
             project: ProjectConfig { name, root },
             paths: PathConfig {
                 runs: PathBuf::from(DEFAULT_RUNS_DIR),
                 artifacts: PathBuf::from(DEFAULT_ARTIFACTS_DIR),
-                cache: cache.clone(),
-                registry_cache: cache.join(DEFAULT_REGISTRY_CACHE_FILE),
+                cache,
+                registry_cache,
             },
             python: PythonConfig {
-                executable: DEFAULT_PYTHON_EXECUTABLE.to_string(),
-                runner_module: DEFAULT_RUNNER_MODULE.to_string(),
+                executable: DEFAULT_PYTHON_EXECUTABLE.to_owned(),
+                runner_module: DEFAULT_RUNNER_MODULE.to_owned(),
                 modules: Vec::new(),
             },
             production: ProductionConfig { strict: false },

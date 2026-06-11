@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 
+use crate::convert::json::to_pretty_json;
 use crate::error::to_py_error;
 
 #[pyclass(name = "EffectiveConfig")]
@@ -12,29 +13,24 @@ pub struct PyEffectiveConfig {
 
 #[pymethods]
 impl PyEffectiveConfig {
-    #[getter]
-    pub fn project_name(&self) -> String {
-        self.inner.project.name.clone()
-    }
-
-    #[getter]
-    pub fn root(&self) -> PathBuf {
-        self.inner.project.root.clone()
-    }
-
     pub fn to_json(&self) -> PyResult<String> {
-        serde_json::to_string_pretty(&self.inner).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
+        to_pretty_json(&self.inner)
     }
 }
 
-#[pyfunction(name = "find_project_root")]
-pub fn find_project_root_py(path: PathBuf) -> PyResult<PathBuf> {
-    rlab_core::find_project_root(&path).map_err(to_py_error)
+#[pyfunction]
+pub fn find_project_root_py(start: PathBuf) -> PyResult<PathBuf> {
+    find_project_root(&start).map_err(to_py_error)
 }
 
-#[pyfunction(name = "load_config")]
+#[pyfunction]
 #[pyo3(signature = (root=None))]
 pub fn load_config_py(root: Option<PathBuf>) -> PyResult<PyEffectiveConfig> {
     let config = rlab_core::load_effective_config(root.as_deref(), &[]).map_err(to_py_error)?;
+
     Ok(PyEffectiveConfig { inner: config })
+}
+
+fn find_project_root(start: &Path) -> Result<PathBuf, rlab_core::RlabError> {
+    rlab_core::find_project_root(start)
 }

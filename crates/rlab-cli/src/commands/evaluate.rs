@@ -6,7 +6,9 @@ use rlab_core::{
     HostTarget, ProtocolVersion, RegistryKind, RlabResult, RunSession,
 };
 
-use crate::commands::run::{parse_params_public, process_event_public};
+use crate::commands::run::{
+    parse_params_public, parse_target, process_event_public, ParseTargetError, ParsedTarget,
+};
 use crate::host::process::run_python_host;
 use crate::render::{human::print_line, json::print_json};
 const SCHEMA_VERSION: u32 = 1;
@@ -14,8 +16,12 @@ const SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Args)]
 pub struct EvaluateCommand {
     pub suite: String,
-    #[arg(long)]
-    pub model: String,
+    /// Target to evaluate. Accepts:
+    ///   * a bare name (resolved as `model:<name>`),
+    ///   * `<kind>:<name>` (e.g. `model:foo.bar`),
+    ///   * `<kind>:<loader>:<path>` to load via a registered loader
+    ///     (e.g. `model:hf:org/repo`).
+    pub target: String,
     #[arg(long)]
     pub strict: bool,
     #[arg(long = "param")]
@@ -25,18 +31,39 @@ pub struct EvaluateCommand {
 pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
+    let parsed = parse_target(&command.target, Some("model")).map_err(|error| match error {
+        ParseTargetError::FilePath { value } => rlab_core::RlabError::Reference {
+            message: format!(
+                "'{value}' looks like a file path, but 'rlab evaluate' expects a registry target.\n  \
+                 Use the form: rlab evaluate <suite> <kind>:<name>\n  \
+                 Examples: rlab evaluate babylm.strict.fast model:babylm.baseline.gpt2_strict_small\n           \
+                           rlab evaluate babylm.strict.fast model:hf:my-org/my-model\n  \
+                 Run 'rlab discover' to list all registered targets."
+            ),
+        },
+        ParseTargetError::InvalidKind { value, reason } => rlab_core::RlabError::Reference {
+            message: format!("invalid target kind in '{value}': {reason}"),
+        },
+        ParseTargetError::MissingName { value } => rlab_core::RlabError::Reference {
+            message: format!(
+                "missing name in target '{value}' — expected <kind>:<name>, e.g. model:babylm.baseline.gpt2_strict_small"
+            ),
+        },
+    })?;
+    let ParsedTarget { kind_str, name } = parsed;
     let mut params = parse_params_public(&command.params)?;
-    // Accept bare component names (`--model my.model`) by prepending the
-    // `model:` kind prefix that `_resolve_component` expects. Users that
-    // want a different kind (e.g. `hf:org/repo`) can still pass the full
-    // `kind:name` form and it will be left untouched.
-    let model_ref = if command.model.contains(':') {
-        command.model.clone()
-    } else {
-        format!("model:{}", command.model)
-    };
     if let serde_json::Value::Object(object) = &mut params {
-        object.insert("model".to_string(), serde_json::Value::String(model_ref));
+        // Store the full `kind:ref` string so the runner can dispatch loader
+        // refs (e.g. `model:hf:org/repo`) correctly. The target describes
+        // the *thing being evaluated*, which is a different concept from
+        // the run's `HostTarget.kind` (which is always `evaluation` here).
+        // Even when the user passed a bare name on the CLI, we expand it
+        // to `model:<name>` here so the runner has a single, consistent
+        // dispatch format.
+        object.insert(
+            "target".to_string(),
+            serde_json::Value::String(format!("{kind_str}:{name}")),
+        );
     }
     let session = RunSession::create(
         &paths,

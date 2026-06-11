@@ -3,7 +3,10 @@ use crate::error::RlabResult;
 
 use super::finding::{DiagnosticFinding, DiagnosticLevel};
 
-pub fn doctor_project(config: &EffectiveConfig, paths: &ProjectPaths) -> RlabResult<Vec<DiagnosticFinding>> {
+pub fn doctor_project(
+    config: &EffectiveConfig,
+    paths: &ProjectPaths,
+) -> RlabResult<Vec<DiagnosticFinding>> {
     let mut findings = Vec::new();
     if !config.project.root.join("lab.toml").exists() {
         findings.push(DiagnosticFinding {

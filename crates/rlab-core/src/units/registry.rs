@@ -12,7 +12,7 @@ pub struct Unit {
     pub dimension: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UnitRegistry {
     pub schema_version: u32,
     pub units: BTreeMap<String, Unit>,
@@ -20,12 +20,20 @@ pub struct UnitRegistry {
 
 impl UnitRegistry {
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION, units: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            units: BTreeMap::new(),
+        }
     }
 
     pub fn insert(&mut self, unit: Unit) -> RlabResult<()> {
-        if unit.name.trim().is_empty() || unit.symbol.trim().is_empty() || unit.dimension.trim().is_empty() {
-            return Err(RlabError::Validation { message: "unit name, symbol, and dimension are required".to_string() });
+        if unit.name.trim().is_empty()
+            || unit.symbol.trim().is_empty()
+            || unit.dimension.trim().is_empty()
+        {
+            return Err(RlabError::Validation {
+                message: "unit name, symbol, and dimension are required".to_string(),
+            });
         }
         self.units.insert(unit.symbol.clone(), unit);
         Ok(())

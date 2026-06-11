@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::{RlabError, RlabResult};
-use crate::fs::{write_json_atomic};
+use crate::fs::write_json_atomic;
 use crate::result::Metric;
 
 pub const RUN_MANIFEST_FILE: &str = "run.json";
