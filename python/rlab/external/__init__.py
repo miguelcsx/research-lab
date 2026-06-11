@@ -97,21 +97,6 @@ class ExternalCommandError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalEvaluation:
-    """External evaluation declaration."""
-
-    name: str
-    command: ExternalCommand
-    parser: str | None = None
-    output: Path | None = None
-
-    def validate(self) -> None:
-        if not self.name.strip():
-            raise AdapterValidationError("external evaluation name cannot be empty")
-        self.command.validate()
-
-
-@dataclass(frozen=True, slots=True)
 class AdapterContext:
     project_root: Path
     workspace: Path
@@ -123,12 +108,6 @@ class AdapterContext:
 
     def output_path(self, value: str | Path) -> Path:
         return self.outputs / value
-
-
-@dataclass(frozen=True, slots=True)
-class AdapterResult:
-    metrics: dict[str, float]
-    artifacts: dict[str, str]
 
 
 class AdapterValidationError(ValueError):
@@ -157,12 +136,10 @@ def _validate_relative(value: str, label: str) -> None:
 
 __all__ = [
     "AdapterContext",
-    "AdapterResult",
     "AdapterValidationError",
     "BaseAdapter",
     "ExternalCommand",
     "ExternalCommandError",
-    "ExternalEvaluation",
     "ExternalPath",
     "ExternalResult",
     "ExternalWorkspace",

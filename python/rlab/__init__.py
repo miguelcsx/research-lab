@@ -79,12 +79,10 @@ from .results import (
 )
 from .external import (
     AdapterContext,
-    AdapterResult,
     AdapterValidationError,
     BaseAdapter,
     ExternalCommand,
     ExternalCommandError,
-    ExternalEvaluation,
     ExternalPath,
     ExternalResult,
     ExternalWorkspace,
@@ -253,7 +251,6 @@ def compare_runs(
 
 __all__ = [
     "AdapterContext",
-    "AdapterResult",
     "AdapterValidationError",
     "ArtifactManifest",
     "ArtifactStore",
@@ -287,7 +284,6 @@ __all__ = [
     "ExperimentResult",
     "ExternalCommand",
     "ExternalCommandError",
-    "ExternalEvaluation",
     "ExternalPath",
     "ExternalResult",
     "ExternalWorkspace",
