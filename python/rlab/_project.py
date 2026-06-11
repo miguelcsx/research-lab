@@ -338,6 +338,8 @@ class _SentinelCallable:
 
 
 def _jsonable_spec(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return value
     if hasattr(value, "to_dict"):
         return _jsonable_spec(value.to_dict())
     if hasattr(value, "model_dump"):
