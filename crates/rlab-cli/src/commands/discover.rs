@@ -18,6 +18,8 @@ use crate::render::{
 
 #[derive(Debug, Args)]
 pub struct DiscoverCommand {
+    /// Show only records of this registry kind, for example `experiment`.
+    pub kind: Option<String>,
     #[arg(long)]
     pub refresh: bool,
     #[arg(long)]
@@ -34,7 +36,7 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
     let cache_key = cache_key_for(&config, strict)?;
     if !command.refresh && !command.no_cache {
         if let Some(registry) = load_registry_cache(&paths.registry_cache, &cache_key)? {
-            render(registry, json)?;
+            render(filter_registry(registry, command.kind.as_deref())?, json)?;
             return Ok(0);
         }
     }
@@ -67,8 +69,24 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
         collect_registry_event(event, &mut registry)?;
     }
     save_registry_cache(&paths.registry_cache, registry.clone(), &cache_key)?;
-    render(registry, json)?;
+    render(filter_registry(registry, command.kind.as_deref())?, json)?;
     Ok(0)
+}
+
+fn filter_registry(mut registry: Registry, kind: Option<&str>) -> RlabResult<Registry> {
+    let Some(kind) = kind else {
+        return Ok(registry);
+    };
+    let kind = rlab_core::RegistryKind::parse(normalize_kind(kind))?;
+    registry.records.retain(|record| record.kind == kind);
+    Ok(registry)
+}
+
+fn normalize_kind(kind: &str) -> &str {
+    match kind {
+        "studies" => "study",
+        _ => kind.strip_suffix('s').unwrap_or(kind),
+    }
 }
 
 fn collect_registry_event(event: &HostEvent, registry: &mut Registry) -> RlabResult<()> {
@@ -146,4 +164,70 @@ fn module_candidates(root: &Path, module: &str) -> Vec<PathBuf> {
         root.join(format!("{rel}.py")),
         root.join(&rel).join("__init__.py"),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use rlab_core::{Registry, RegistryKind, RegistryRecord};
+
+    use super::filter_registry;
+
+    fn registry() -> Registry {
+        let mut registry = Registry::new();
+        for (kind, name) in [
+            (RegistryKind::Experiment, "train"),
+            (RegistryKind::Dataset, "corpus"),
+        ] {
+            registry
+                .insert(RegistryRecord::new(
+                    kind,
+                    name.to_string(),
+                    "1".to_string(),
+                    "project".to_string(),
+                    name.to_string(),
+                    "project.py".into(),
+                    Vec::new(),
+                    String::new(),
+                    Default::default(),
+                ))
+                .expect("valid registry record");
+        }
+        registry
+    }
+
+    #[test]
+    fn filters_by_singular_kind() {
+        let filtered = filter_registry(registry(), Some("experiment")).expect("valid kind");
+        assert_eq!(filtered.records.len(), 1);
+        assert_eq!(filtered.records[0].kind, RegistryKind::Experiment);
+    }
+
+    #[test]
+    fn filters_by_plural_kind() {
+        let filtered = filter_registry(registry(), Some("datasets")).expect("valid kind");
+        assert_eq!(filtered.records.len(), 1);
+        assert_eq!(filtered.records[0].kind, RegistryKind::Dataset);
+    }
+
+    #[test]
+    fn filters_studies_by_plural_kind() {
+        let mut registry = registry();
+        registry
+            .insert(RegistryRecord::new(
+                RegistryKind::Study,
+                "comparison".to_string(),
+                "1".to_string(),
+                "project".to_string(),
+                "comparison".to_string(),
+                "project.py".into(),
+                Vec::new(),
+                String::new(),
+                Default::default(),
+            ))
+            .expect("valid registry record");
+
+        let filtered = filter_registry(registry, Some("studies")).expect("valid kind");
+        assert_eq!(filtered.records.len(), 1);
+        assert_eq!(filtered.records[0].kind, RegistryKind::Study);
+    }
 }

@@ -170,13 +170,13 @@ class Project:
             "tags": list(tags),
             "description": description,
         }
-        sentinel = _SentinelCallable(name)
+        sentinel = _declaration_sentinel(name)
         self._register(kind="pipeline", name=name, obj=sentinel, metadata=metadata)
         return name
 
     def dataset(self, name: str, **metadata: Any):
         """Register a dataset declaration."""
-        sentinel = _SentinelCallable(name)
+        sentinel = _declaration_sentinel(name)
         self._register(kind="dataset", name=name, obj=sentinel, metadata=metadata)
         # Store pre-configured runtime callables so the runner can use them
         # without deserializing the JSON-spec metadata back to typed objects.
@@ -195,7 +195,7 @@ class Project:
     def define_workflow(self, name: str, *, steps: Any):
         """Register a workflow assembled imperatively from step descriptors."""
         metadata = {"steps": [_jsonable_spec(step) for step in steps]}
-        sentinel = _SentinelCallable(name)
+        sentinel = _declaration_sentinel(name)
         self._register(kind="workflow", name=name, obj=sentinel, metadata=metadata)
         return sentinel
 
@@ -235,7 +235,7 @@ class Project:
         module = str(getattr(obj, "__module__", ""))
         qualname = str(getattr(obj, "__qualname__", getattr(obj, "__name__", "")))
         try:
-            source = inspect.getsourcefile(obj) or ""
+            source = getattr(obj, "__rlab_source__", "") or inspect.getsourcefile(obj) or ""
         except (TypeError, OSError):
             source = ""
         description = _first_doc_line(obj)
@@ -405,13 +405,35 @@ class _WorkflowCallable:
 
 
 class _SentinelCallable:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, module: str = "rlab.generated", source: str = "") -> None:
         self.__name__ = name
         self.__qualname__ = name
-        self.__module__ = "rlab.generated"
+        self.__module__ = module
+        self.__rlab_source__ = source
 
     def __call__(self, *_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("declarative sentinel cannot be executed directly")
+
+
+def _declaration_sentinel(name: str) -> _SentinelCallable:
+    module, source = _declaration_origin()
+    return _SentinelCallable(name, module=module, source=source)
+
+
+def _declaration_origin() -> tuple[str, str]:
+    package_root = Path(__file__).resolve().parent
+    frame = inspect.currentframe()
+    try:
+        while frame is not None:
+            frame = frame.f_back
+            if frame is None:
+                break
+            source = Path(frame.f_code.co_filename).resolve()
+            if source != package_root and package_root not in source.parents:
+                return str(frame.f_globals.get("__name__", "")), str(source)
+    finally:
+        del frame
+    return "rlab.generated", ""
 
 
 def _jsonable_spec(value: Any) -> Any:
