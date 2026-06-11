@@ -34,20 +34,14 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
     let parsed = parse_target(&command.target, Some("model")).map_err(|error| match error {
         ParseTargetError::FilePath { value } => rlab_core::RlabError::Reference {
             message: format!(
-                "'{value}' looks like a file path, but 'rlab evaluate' expects a registry target.\n  \
-                 Use the form: rlab evaluate <suite> <kind>:<name>\n  \
-                 Examples: rlab evaluate babylm.strict.fast model:babylm.baseline.gpt2_strict_small\n           \
-                           rlab evaluate babylm.strict.fast model:hf:my-org/my-model\n  \
-                 Run 'rlab discover' to list all registered targets."
+                "'{value}' looks like a file path, but 'rlab evaluate' expects a registry target".
             ),
         },
         ParseTargetError::InvalidKind { value, reason } => rlab_core::RlabError::Reference {
             message: format!("invalid target kind in '{value}': {reason}"),
         },
         ParseTargetError::MissingName { value } => rlab_core::RlabError::Reference {
-            message: format!(
-                "missing name in target '{value}' — expected <kind>:<name>, e.g. model:babylm.baseline.gpt2_strict_small"
-            ),
+            message: format!("missing name in target '{value}' — expected <kind>:<name>"),
         },
     })?;
     let ParsedTarget { kind_str, name } = parsed;
