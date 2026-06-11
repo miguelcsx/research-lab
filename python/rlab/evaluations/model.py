@@ -22,7 +22,11 @@ class EvaluationSuite:
     schema_version: int = 1
 
     def to_dict(self) -> dict:
-        return {"schema_version": self.schema_version, "name": self.name, "tasks": [task.to_dict() for task in self.tasks]}
+        return {
+            "schema_version": self.schema_version,
+            "name": self.name,
+            "tasks": [task.to_dict() for task in self.tasks],
+        }
 
 
 @dataclass(slots=True)
@@ -43,4 +47,9 @@ class EvaluationResult:
     schema_version: int = 1
 
     def to_dict(self) -> dict:
-        return {"schema_version": self.schema_version, "suite": self.suite, "model": self.model, "tasks": [task.to_dict() for task in self.tasks]}
+        return {
+            "schema_version": self.schema_version,
+            "suite": self.suite,
+            "model": self.model,
+            "tasks": [task.to_dict() for task in self.tasks],
+        }

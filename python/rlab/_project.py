@@ -144,6 +144,17 @@ class Project:
         """Register a dataset metric."""
         return decorator_factory(self, "metric", name, metadata)
 
+    def loader(self, name: str, **metadata: Any):
+        """Register a loader — a component that resolves external paths.
+
+        A loader is a class that exposes ``load(path)`` and is invoked
+        when a target reference has the form ``<kind>:<loader>:<path>``.
+        Loaders are how projects integrate external resources (model
+        registries, artifact stores, dataset hubs) without rlab needing
+        vendor-specific code.
+        """
+        return decorator_factory(self, "loader", name, metadata)
+
     def pipeline(
         self,
         name: str,

@@ -99,6 +99,15 @@ def component(kind: str, name: str, **metadata):
     return Project().component(kind, name, **metadata)
 
 
+def loader(name: str, **metadata):
+    """Register a loader on the default project.
+
+    A loader is a class that exposes ``load(path)`` and is invoked when
+    a target reference has the form ``<kind>:<loader>:<path>``.
+    """
+    return Project().loader(name, **metadata)
+
+
 def benchmark(name: str, *, target: str, **metadata):
     """Register a benchmark on the default project."""
     return Project().benchmark(name, target=target, **metadata)

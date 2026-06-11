@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, TypeAlias
 
-from rlab._decorators import ComponentUse, DataDecision, data_boundary, data_drop, data_keep, data_update
+from rlab._decorators import (
+    ComponentUse,
+    DataDecision,
+    data_boundary,
+    data_drop,
+    data_keep,
+    data_update,
+)
+
+Record: TypeAlias = Mapping[str, Any]
+MutableRecord: TypeAlias = dict[str, Any]
+RecordStage: TypeAlias = Callable[[Mapping[str, Any]], DataDecision]
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,71 +138,140 @@ class DataExperiment:
 
 def patterns(name: str, mapping: Mapping[str, str]) -> dict[str, Any]:
     """Build a declarative named-pattern transform descriptor."""
-    return {"kind": "patterns", "name": name, "mapping": dict(mapping)}
+    return {
+        "kind": "patterns",
+        "name": name,
+        "mapping": dict(mapping),
+    }
 
 
-def substitute(field: str, old: str, new: str) -> Callable[[Mapping[str, Any]], DataDecision]:
+def substitute(
+    field: str, old: str, new: str
+) -> Callable[[Mapping[str, Any]], DataDecision]:
     """Create a simple record substitution transform."""
+
     def apply(record: Mapping[str, Any]) -> DataDecision:
-        value = str(record.get(field, ""))
-        updated = dict(record)
-        updated[field] = value.replace(old, new)
+        updated = _copy_record(record)
+        updated[field] = _record_text(record, field).replace(old, new)
         return data_update(updated, reason=f"substitute:{field}")
+
     return apply
 
 
-def classify(field: str, labels: Mapping[str, str]) -> Callable[[Mapping[str, Any]], DataDecision]:
+def classify(
+    field: str, labels: Mapping[str, str]
+) -> Callable[[Mapping[str, Any]], DataDecision]:
     """Classify a record by substring labels."""
-    def apply(record: Mapping[str, Any]) -> DataDecision:
-        text = str(record.get(field, ""))
-        updated = dict(record)
-        for label, needle in labels.items():
-            if needle in text:
-                updated["label"] = label
-                return data_update(updated, reason=f"classify:{label}")
-        return data_keep(record)
-    return apply
 
-
-def predicate(fn: Callable[[Mapping[str, Any]], bool], reason: str = "predicate") -> Callable[[Mapping[str, Any]], DataDecision]:
-    """Create a filtering predicate returning DataDecision."""
     def apply(record: Mapping[str, Any]) -> DataDecision:
-        if fn(record):
+        text = _record_text(record, field)
+        label = _first_matching_label(text, labels)
+
+        if label is None:
             return data_keep(record)
-        return data_drop(reason)
+
+        updated = _copy_record(record)
+        updated["label"] = label
+        return data_update(updated, reason=f"classify:{label}")
+
     return apply
 
 
-def threshold(field: str, minimum: float | None = None, maximum: float | None = None) -> Callable[[Mapping[str, Any]], DataDecision]:
+def predicate(
+    fn: Callable[[Mapping[str, Any]], bool], reason: str = "predicate"
+) -> Callable[[Mapping[str, Any]], DataDecision]:
+    """Create a filtering predicate returning DataDecision."""
+
+    def apply(record: Mapping[str, Any]) -> DataDecision:
+        return data_keep(record) if fn(record) else data_drop(reason)
+
+    return apply
+
+
+def threshold(
+    field: str, minimum: float | None = None, maximum: float | None = None
+) -> Callable[[Mapping[str, Any]], DataDecision]:
     """Create a numeric threshold filter."""
+
     def apply(record: Mapping[str, Any]) -> DataDecision:
         value = float(record[field])
-        if minimum is not None and value < minimum:
+
+        if _below_minimum(value, minimum):
             return data_drop(f"{field}<minimum")
-        if maximum is not None and value > maximum:
+
+        if _above_maximum(value, maximum):
             return data_drop(f"{field}>maximum")
+
         return data_keep(record)
+
     return apply
 
 
-def materialize(records: Iterable[Mapping[str, Any]], stages: Iterable[Callable[[Mapping[str, Any]], DataDecision]]) -> list[Mapping[str, Any]]:
+def materialize(
+    records: Iterable[Mapping[str, Any]],
+    stages: Iterable[Callable[[Mapping[str, Any]], DataDecision]],
+) -> list[Mapping[str, Any]]:
     """Apply record-level stages locally for small Python workflows."""
     output: list[Mapping[str, Any]] = []
+
     for record in records:
-        current: Mapping[str, Any] | None = dict(record)
-        for stage in stages:
-            if current is None:
-                break
-            decision = stage(current)
-            if decision.action == "drop":
-                current = None
-            elif decision.action in {"keep", "update"}:
-                current = decision.record
-            else:
-                current = decision.record
-        if current is not None:
-            output.append(current)
+        materialized = _materialize_record(record, stages)
+        if materialized is not None:
+            output.append(materialized)
+
     return output
+
+
+def _materialize_record(
+    record: Mapping[str, Any],
+    stages: Iterable[Callable[[Mapping[str, Any]], DataDecision]],
+) -> Mapping[str, Any] | None:
+    current: Mapping[str, Any] | None = dict(record)
+
+    for stage in stages:
+        if current is None:
+            return None
+
+        current = _apply_materialize_decision(stage(current), current)
+
+    return current
+
+
+def _apply_materialize_decision(
+    decision: DataDecision,
+    current: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    if decision.action == "drop":
+        return None
+
+    if decision.action in {"keep", "update"}:
+        return decision.record
+
+    return decision.record
+
+
+def _copy_record(record: Mapping[str, Any]) -> MutableRecord:
+    return dict(record)
+
+
+def _record_text(record: Mapping[str, Any], field: str) -> str:
+    return str(record.get(field, ""))
+
+
+def _first_matching_label(text: str, labels: Mapping[str, str]) -> str | None:
+    for label, needle in labels.items():
+        if needle in text:
+            return label
+
+    return None
+
+
+def _below_minimum(value: float, minimum: float | None) -> bool:
+    return minimum is not None and value < minimum
+
+
+def _above_maximum(value: float, maximum: float | None) -> bool:
+    return maximum is not None and value > maximum
 
 
 __all__ = [

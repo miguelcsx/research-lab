@@ -19,7 +19,9 @@ class ExternalCommand:
     def validate(self) -> None:
         """Validate command shape before it crosses the Rust boundary."""
         if not self.args or not str(self.args[0]).strip():
-            raise AdapterValidationError("external command requires at least one program argument")
+            raise AdapterValidationError(
+                "external command requires at least one program argument"
+            )
         if self.timeout_seconds is not None and self.timeout_seconds <= 0:
             raise AdapterValidationError("timeout_seconds must be positive")
 
@@ -80,11 +82,21 @@ class BaseAdapter:
         ctx.artifact_root.mkdir(parents=True, exist_ok=True)
 
     def command(self, ctx: AdapterContext) -> ExternalCommand:
-        raise AdapterValidationError(f"{type(self).__name__}.command(ctx) must be implemented")
+        raise AdapterValidationError(
+            f"{type(self).__name__}.command(ctx) must be implemented"
+        )
 
     def external_output_dirs(self, ctx: AdapterContext) -> dict[str, str]:
         self.prepare(ctx)
         return dict(self.output_dirs)
 
 
-__all__ = ["AdapterContext", "AdapterResult", "AdapterValidationError", "BaseAdapter", "ExternalCommand", "ExternalEvaluation", "ExternalResult"]
+__all__ = [
+    "AdapterContext",
+    "AdapterResult",
+    "AdapterValidationError",
+    "BaseAdapter",
+    "ExternalCommand",
+    "ExternalEvaluation",
+    "ExternalResult",
+]

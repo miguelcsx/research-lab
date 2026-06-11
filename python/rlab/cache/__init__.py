@@ -25,7 +25,13 @@ def list_cache(root: str | Path = ".") -> list[CacheEntry]:
     entries: list[CacheEntry] = []
     for path in base.rglob("*"):
         if path.is_file():
-            entries.append(CacheEntry(path=path, size_bytes=path.stat().st_size, kind=path.suffix.lstrip(".") or "file"))
+            entries.append(
+                CacheEntry(
+                    path=path,
+                    size_bytes=path.stat().st_size,
+                    kind=path.suffix.lstrip(".") or "file",
+                )
+            )
     return entries
 
 

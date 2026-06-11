@@ -46,7 +46,10 @@ class LicenseCompatibilitySummary:
 
 
 def redact_secrets(env: Mapping[str, str]) -> dict[str, str]:
-    return {key: ("<redacted>" if _is_secret_key(key) else value) for key, value in env.items()}
+    return {
+        key: ("<redacted>" if _is_secret_key(key) else value)
+        for key, value in env.items()
+    }
 
 
 def scan_for_secrets(text: str) -> list[SecretHit]:
@@ -59,12 +62,20 @@ def scan_for_secrets(text: str) -> list[SecretHit]:
 
 
 def scan_for_pii(text: str) -> list[PiiHit]:
-    hits = [PiiHit("email", value) for value in re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)]
-    hits.extend(PiiHit("ip_address", value) for value in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text))
+    hits = [
+        PiiHit("email", value)
+        for value in re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
+    ]
+    hits.extend(
+        PiiHit("ip_address", value)
+        for value in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)
+    )
     return hits
 
 
-def check_compatibility(manifests: tuple[LicenseManifest, ...]) -> LicenseCompatibilitySummary:
+def check_compatibility(
+    manifests: tuple[LicenseManifest, ...],
+) -> LicenseCompatibilitySummary:
     warnings = []
     for manifest in manifests:
         license_text = manifest.license.lower()
@@ -72,7 +83,9 @@ def check_compatibility(manifests: tuple[LicenseManifest, ...]) -> LicenseCompat
             warnings.append(f"{manifest.name} uses a non-commercial license")
         if not license_text or license_text == "unknown":
             warnings.append(f"{manifest.name} has an unknown license")
-    return LicenseCompatibilitySummary(compatible=not warnings, warnings=tuple(warnings))
+    return LicenseCompatibilitySummary(
+        compatible=not warnings, warnings=tuple(warnings)
+    )
 
 
 def _is_secret_key(key: str) -> bool:
@@ -83,11 +96,35 @@ def _is_secret_key(key: str) -> bool:
 class LabPolicy:
     """Small project policy object for Python-side preflight checks."""
 
-    def __init__(self, forbidden_env_patterns: tuple[str, ...] = ("TOKEN", "SECRET", "PASSWORD", "KEY")) -> None:
+    def __init__(
+        self,
+        forbidden_env_patterns: tuple[str, ...] = (
+            "TOKEN",
+            "SECRET",
+            "PASSWORD",
+            "KEY",
+        ),
+    ) -> None:
         self.forbidden_env_patterns = forbidden_env_patterns
 
     def check_env(self, env: Mapping[str, str]) -> list[str]:
-        return [key for key in env if any(pattern in key.upper() for pattern in self.forbidden_env_patterns)]
+        return [
+            key
+            for key in env
+            if any(pattern in key.upper() for pattern in self.forbidden_env_patterns)
+        ]
 
 
-__all__ = ["Assumption", "Threat", "LabPolicy", "LicenseCompatibilitySummary", "LicenseManifest", "PiiHit", "SecretHit", "check_compatibility", "redact_secrets", "scan_for_pii", "scan_for_secrets"]
+__all__ = [
+    "Assumption",
+    "Threat",
+    "LabPolicy",
+    "LicenseCompatibilitySummary",
+    "LicenseManifest",
+    "PiiHit",
+    "SecretHit",
+    "check_compatibility",
+    "redact_secrets",
+    "scan_for_pii",
+    "scan_for_secrets",
+]
