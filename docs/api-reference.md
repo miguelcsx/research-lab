@@ -77,13 +77,17 @@ rlab.WorkflowStep
 rlab.ExternalStep
 rlab.define_workflow
 rlab.ExternalCommand
-rlab.ExternalEvaluation
 rlab.ExternalResult
+rlab.ExternalCommandError
+rlab.ExternalPath
+rlab.ExternalWorkspace
 rlab.BaseAdapter
 rlab.AdapterContext
-rlab.AdapterResult
 rlab.AdapterValidationError
 ```
+
+`RuntimeContext` exposes resolved `run_dir`, `cache_dir`, `output_dir`,
+`external_workspace(name, spec, params)`, and `run_external(name, command)`.
 
 ## Benchmarks and evaluations
 

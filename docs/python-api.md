@@ -75,6 +75,43 @@ ctx.save_artifact("checkpoint", "outputs/model.pt")
 ctx.save_table("summary", [{"metric": "loss", "value": 0.2}])
 ```
 
+`ctx.output_dir` is the framework-owned location for files produced by user
+code. Files written there are registered as run artifacts automatically.
+
+Run external tools through the framework:
+
+```python
+result = ctx.run_external(
+    "trainer",
+    rlab.ExternalCommand(
+        args=("python", "train.py"),
+        cwd=ctx.project_root,
+        timeout_seconds=3600,
+    ),
+)
+```
+
+Stdout and stderr are captured under the run directory. Nonzero exits raise
+`rlab.ExternalCommandError`.
+
+Adapters that require a mutable external checkout declare its layout while
+rlab owns the physical run and cache paths:
+
+```python
+class ToolAdapter(rlab.BaseAdapter):
+    workspace = rlab.ExternalWorkspace(
+        source_param="repo_dir",
+        default_source="external/tool",
+        cached=(rlab.ExternalPath("data", "data"),),
+        outputs=(rlab.ExternalPath("results", "results"),),
+    )
+```
+
+Evaluation code asks `ctx.external_workspace(...)` for an `AdapterContext`,
+builds the adapter's `ExternalCommand`, and executes it with `ctx.run_external`.
+An external command may declare `output_root` and artifact glob patterns; rlab
+registers matching files only after the command succeeds.
+
 ## Results
 
 Return a dictionary for simple results:

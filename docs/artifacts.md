@@ -2,6 +2,9 @@
 
 Artifacts are promoted outputs. They are stored in a content-addressed artifact store.
 
+Run artifacts are staged under `.rlab/runs/<run-id>/artifacts`.
+`rlab runs show <run-id>` lists their references.
+
 ## Promote an artifact
 
 ```bash

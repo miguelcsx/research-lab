@@ -60,6 +60,16 @@ Default path:
 .rlab/runs
 ```
 
+## External evaluation failed
+
+```bash
+rlab runs show <run-id>
+rlab errors <run-id>
+```
+
+External stdout and stderr are captured under the run's `external/` directory
+and registered as run artifacts.
+
 ## Artifact promotion fails
 
 Common causes:

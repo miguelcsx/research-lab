@@ -22,6 +22,8 @@ The transport is JSON Lines over stdin/stdout.
     "name": "sweep"
   },
   "run_id": "run_01HX...",
+  "run_dir": "/abs/project/.rlab/runs/run_01HX...",
+  "cache_dir": "/abs/project/.rlab/cache",
   "params": {},
   "seed": null,
   "strict": false,
@@ -113,3 +115,5 @@ batch
 ```
 
 Python never writes final run state directly. Rust owns final persistence and status transitions.
+`run_dir` and `cache_dir` are resolved by Rust. Python project code does not
+construct storage roots.

@@ -27,6 +27,9 @@ Run:
 rlab evaluate project.quick --model model:project.constant
 ```
 
+Successful evaluations print their metrics and an inspection command. A
+nonzero external command exit fails the run.
+
 ## Metric naming
 
 Evaluation task metrics should use:

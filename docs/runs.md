@@ -71,3 +71,6 @@ rlab runs show <run-id>
 rlab errors <run-id>
 rlab table <run-id>
 ```
+
+`rlab runs show` includes the manifest, metric summary, result payload, logs,
+error text, and registered artifact references.

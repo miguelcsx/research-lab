@@ -98,6 +98,8 @@ rlab runs show <run-id>
 rlab runs show <run-id> --json
 ```
 
+`runs show` includes metrics, results, logs, errors, and artifact references.
+
 ## Artifacts
 
 ```bash
