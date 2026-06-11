@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping, Any
+from typing import Any, Mapping
 
 class EffectiveConfig:
     @property
@@ -11,7 +11,18 @@ class EffectiveConfig:
     def to_json(self) -> str: ...
 
 class RegistryRecord:
-    def __init__(self, kind: str, name: str, version: str, module: str, qualname: str, source: Path, tags: list[str] | None = None, description: str = "", metadata: str | None = None) -> None: ...
+    def __init__(
+        self,
+        kind: str,
+        name: str,
+        version: str,
+        module: str,
+        qualname: str,
+        source: Path,
+        tags: list[str] | None = None,
+        description: str = "",
+        metadata: str | None = None,
+    ) -> None: ...
     @property
     def kind(self) -> str: ...
     @property
@@ -24,7 +35,13 @@ class Registry:
     def to_json(self) -> str: ...
 
 class Metric:
-    def __init__(self, name: str, value: float, unit: str | None = None, direction: str | None = None) -> None: ...
+    def __init__(
+        self,
+        name: str,
+        value: float,
+        unit: str | None = None,
+        direction: str | None = None,
+    ) -> None: ...
     @property
     def name(self) -> str: ...
     @property
@@ -50,7 +67,9 @@ class ArtifactManifest:
 
 class ArtifactStore:
     def __init__(self, root: Path) -> None: ...
-    def promote(self, source: Path, kind: str, name: str, version: str) -> ArtifactManifest: ...
+    def promote(
+        self, source: Path, kind: str, name: str, version: str
+    ) -> ArtifactManifest: ...
 
 class ProductionPolicy:
     def __init__(self, strict: bool) -> None: ...

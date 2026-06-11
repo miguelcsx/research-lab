@@ -23,4 +23,8 @@ class Study:
     schema_version: int = 1
 
     def to_dict(self) -> dict:
-        return {"schema_version": self.schema_version, "name": self.name, "plan": self.plan.to_dict()}
+        return {
+            "schema_version": self.schema_version,
+            "name": self.name,
+            "plan": self.plan.to_dict(),
+        }

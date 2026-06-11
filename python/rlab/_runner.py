@@ -6,11 +6,22 @@ import json
 import os
 import shutil
 import traceback
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ._loader import load_modules
-from ._protocol import PROTOCOL_VERSION, HostRequest, base_event, emit_event, read_request
+from ._protocol import (
+    PROTOCOL_VERSION,
+    HostRequest,
+    base_event,
+    emit_event,
+    read_request,
+)
+
+
+def _rfc3339_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 class RuntimeContext:
@@ -24,7 +35,14 @@ class RuntimeContext:
         self._request = request
         self._metrics: dict[str, float] = {}
 
-    def log_metric(self, name: str, value: float, *, unit: str | None = None, direction: str | None = None) -> None:
+    def log_metric(
+        self,
+        name: str,
+        value: float,
+        *,
+        unit: str | None = None,
+        direction: str | None = None,
+    ) -> None:
         """Emit one metric event."""
         metric = {
             "schema_version": 1,
@@ -32,6 +50,7 @@ class RuntimeContext:
             "value": float(value),
             "unit": unit,
             "direction": direction,
+            "timestamp": _rfc3339_now(),
         }
         event = base_event(self._request, "metric")
         event["metric"] = metric
@@ -54,6 +73,7 @@ class RuntimeContext:
                         "value": metric_value,
                         "unit": None,
                         "direction": None,
+                        "timestamp": _rfc3339_now(),
                     },
                 }
             )
@@ -68,7 +88,9 @@ class RuntimeContext:
         event["message"] = str(text)
         emit_event(event)
 
-    def save_artifact(self, name: str, path: str | Path, *, version: str = "1", kind: str = "file") -> Path:
+    def save_artifact(
+        self, name: str, path: str | Path, *, version: str = "1", kind: str = "file"
+    ) -> Path:
         """Emit an artifact event for a user-created file."""
         source = Path(path)
         if not source.is_absolute():
@@ -93,7 +115,14 @@ class RuntimeContext:
         output.write_text(json.dumps(rows, indent=2), encoding="utf-8")
         return self.save_artifact(name, output, kind="table")
 
-    def copy_artifact(self, name: str, source: str | Path, destination: str | Path, *, version: str = "1") -> Path:
+    def copy_artifact(
+        self,
+        name: str,
+        source: str | Path,
+        destination: str | Path,
+        *,
+        version: str = "1",
+    ) -> Path:
         """Copy an artifact to a destination and emit it."""
         src = Path(source)
         dst = Path(destination)
@@ -110,7 +139,9 @@ def main() -> int:
         request = read_request()
         request_id = request.request_id
         os.environ["RLAB_RUNNER_STRICT"] = "1" if request.strict else "0"
-        project = load_modules(request.project_root, request.modules, strict=request.strict)
+        project = load_modules(
+            request.project_root, request.modules, strict=request.strict
+        )
         for record in project.records:
             event = base_event(request, "registry_record")
             event["record"] = record
@@ -157,7 +188,9 @@ def _execute(request: HostRequest, project: Any) -> None:
     emit_event(event)
 
 
-def _execute_workflow(request: HostRequest, project: Any, ctx: RuntimeContext) -> dict[str, Any]:
+def _execute_workflow(
+    request: HostRequest, project: Any, ctx: RuntimeContext
+) -> dict[str, Any]:
     if request.target is None:
         raise ValueError("workflow execution missing target")
     record = project.record("workflow", request.target.name)
@@ -176,7 +209,9 @@ def _execute_workflow(request: HostRequest, project: Any, ctx: RuntimeContext) -
     return {"workflow": request.target.name, "steps": outputs}
 
 
-def _execute_study(request: HostRequest, project: Any, ctx: RuntimeContext) -> dict[str, Any]:
+def _execute_study(
+    request: HostRequest, project: Any, ctx: RuntimeContext
+) -> dict[str, Any]:
     if request.target is None:
         raise ValueError("study execution missing target")
     record = project.record("study", request.target.name)
@@ -196,25 +231,58 @@ def _execute_study(request: HostRequest, project: Any, ctx: RuntimeContext) -> d
     return {"study": request.target.name, "experiments": results}
 
 
-def _execute_dataset(request: HostRequest, project: Any, ctx: RuntimeContext) -> dict[str, Any]:
+def _execute_dataset(
+    request: HostRequest, project: Any, ctx: RuntimeContext
+) -> dict[str, Any]:
     if request.target is None:
         raise ValueError("dataset execution missing target")
-    record = project.record("dataset", request.target.name)
+    target_name = request.target.name
+    record = project.record("dataset", target_name)
     metadata = dict(record.get("metadata", {}))
-    source_ref = _component_ref(metadata.get("source"), "source")
+
+    # Prefer pre-configured runtime callables stored at registration time.
+    try:
+        source_obj = project.resolve("dataset_source", target_name)
+    except KeyError:
+        source_ref = _component_ref(metadata.get("source"), "source")
+        source_obj = _instantiate(project.resolve(*source_ref.split(":", 1)))
+
     pipeline_ref = _component_ref(metadata.get("pipeline"), "pipeline")
-    source_obj = _instantiate(project.resolve(*source_ref.split(":", 1)))
-    records = list(_read_source(source_obj, ctx))
-    pipeline_record = project.record("pipeline", pipeline_ref.split(":", 1)[1])
+    pipeline_name = pipeline_ref.split(":", 1)[1]
+    pipeline_record = project.record("pipeline", pipeline_name)
     stages = pipeline_record.get("metadata", {}).get("stages", [])
+
+    records = list(_read_source(source_obj, ctx))
     records, audit = _apply_pipeline(project, stages, records, ctx)
+
     sink_results = []
-    for sink_value in metadata.get("sinks", []) or []:
-        sink_ref = _component_ref(sink_value, "sink")
-        sink = _instantiate(project.resolve(*sink_ref.split(":", 1)))
-        sink_results.append(_write_sink(sink, records, ctx))
-    ctx.log_metrics({"dataset.records": float(len(records)), "dataset.dropped": float(audit["dropped"])})
-    return {"dataset": request.target.name, "records": len(records), "audit": audit, "sinks": sink_results}
+    sink_index = 0
+    while True:
+        try:
+            sink = project.resolve("dataset_sink", f"{target_name}:{sink_index}")
+            sink_results.append(_write_sink(sink, records, ctx))
+            sink_index += 1
+        except KeyError:
+            break
+    if not sink_results:
+        # Fall back to metadata refs.
+        for sink_value in metadata.get("sinks", []) or []:
+            sink_ref = _component_ref(sink_value, "sink")
+            sink = _instantiate(project.resolve(*sink_ref.split(":", 1)))
+            sink_results.append(_write_sink(sink, records, ctx))
+
+    ctx.log_metrics(
+        {
+            "dataset.records": float(len(records)),
+            "dataset.dropped": float(audit["dropped"]),
+        }
+    )
+    return {
+        "dataset": target_name,
+        "records": len(records),
+        "audit": audit,
+        "sinks": sink_results,
+    }
 
 
 def _component_ref(value: Any, default_kind: str) -> str:
@@ -233,26 +301,51 @@ def _instantiate(value: Any) -> Any:
     return value
 
 
-def _read_source(source: Any, ctx: RuntimeContext) -> list[dict[str, Any]]:
+def _read_source(source: Any, ctx: RuntimeContext) -> list[Any]:
     if hasattr(source, "read"):
-        records = source.read(ctx)
+        try:
+            records = source.read(ctx)
+        except TypeError:
+            records = source.read()
     elif callable(source):
-        records = source(ctx)
+        try:
+            records = source(ctx)
+        except TypeError:
+            records = source()
     else:
         raise ValueError("source must be callable or implement read(ctx)")
-    return [dict(record) for record in records]
+    return list(records)
 
 
-def _apply_pipeline(project: Any, stages: list[Any], records: list[dict[str, Any]], ctx: RuntimeContext) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    current = records
+def _apply_pipeline(
+    project: Any, stages: list[Any], records: list[Any], ctx: RuntimeContext
+) -> tuple[list[Any], dict[str, Any]]:
+    current: list[Any] = records
     dropped = 0
     reasons: dict[str, int] = {}
     stage_counts: list[dict[str, Any]] = []
     for stage_ref_value in stages:
         stage_ref = _component_ref(stage_ref_value, "transform")
         stage_kind, stage_name = stage_ref.split(":", 1)
-        stage = _instantiate(project.resolve(stage_kind, stage_name))
-        next_records: list[dict[str, Any]] = []
+        stage_class = project.resolve(stage_kind, stage_name)
+
+        # Reconstruct configured instance if the stage dict carries field values.
+        if isinstance(stage_ref_value, dict):
+            config = {k: v for k, v in stage_ref_value.items() if k != "ref"}
+            stage = stage_class(**config) if config else _instantiate(stage_class)
+        else:
+            stage = _instantiate(stage_class)
+
+        # Batch stages (dedup, group) receive the whole sequence.
+        if hasattr(stage, "apply") and stage_kind in {"dedup", "group"}:
+            output = list(stage.apply(current))
+            stage_counts.append(
+                {"stage": stage_ref, "input": len(current), "output": len(output)}
+            )
+            current = output
+            continue
+
+        next_records: list[Any] = []
         for record in current:
             decision = _apply_stage(stage, record, ctx)
             action = getattr(decision, "action", None)
@@ -260,11 +353,22 @@ def _apply_pipeline(project: Any, stages: list[Any], records: list[dict[str, Any
                 dropped += 1
                 reason = str(getattr(decision, "reason", None) or stage_name)
                 reasons[reason] = reasons.get(reason, 0) + 1
+            elif action == "boundary":
+                from rlab.data import DataBoundary
+
+                next_records.append(
+                    DataBoundary(
+                        value=getattr(decision, "record", None),
+                        kind=str(getattr(decision, "kind", "") or ""),
+                    )
+                )
             elif action in {"keep", "update"}:
-                next_records.append(dict(getattr(decision, "record", record)))
+                next_records.append(getattr(decision, "record", record))
             else:
-                next_records.append(dict(record))
-        stage_counts.append({"stage": stage_ref, "input": len(current), "output": len(next_records)})
+                next_records.append(record)
+        stage_counts.append(
+            {"stage": stage_ref, "input": len(current), "output": len(next_records)}
+        )
         current = next_records
     return current, {"dropped": dropped, "reasons": reasons, "stages": stage_counts}
 
@@ -297,7 +401,9 @@ def _write_sink(sink: Any, records: list[dict[str, Any]], ctx: RuntimeContext) -
     raise ValueError("sink must be callable or implement write(records, ctx)")
 
 
-def _invoke_target(request: HostRequest, project: Any, callable_obj: Any, ctx: RuntimeContext) -> Any:
+def _invoke_target(
+    request: HostRequest, project: Any, callable_obj: Any, ctx: RuntimeContext
+) -> Any:
     if request.target is None:
         raise ValueError("execute request missing target")
     if request.target.kind == "benchmark":

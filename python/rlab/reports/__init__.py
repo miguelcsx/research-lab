@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping, Any
+from typing import Any, Mapping
 
 
-def write_markdown_report(path: str | Path, title: str, fields: Mapping[str, Any]) -> Path:
+def write_markdown_report(
+    path: str | Path, title: str, fields: Mapping[str, Any]
+) -> Path:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"# {title}", ""]

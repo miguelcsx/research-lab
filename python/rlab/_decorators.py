@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,14 +23,14 @@ class DataDecision:
     kind: str | None = None
 
 
-def data_keep(record: Mapping[str, Any]) -> DataDecision:
+def data_keep(record: Any) -> DataDecision:
     """Keep a record unchanged."""
-    return DataDecision(action="keep", record=dict(record))
+    return DataDecision(action="keep", record=record)
 
 
-def data_update(record: Mapping[str, Any], reason: str | None = None) -> DataDecision:
+def data_update(record: Any, reason: str | None = None) -> DataDecision:
     """Keep an updated record."""
-    return DataDecision(action="update", record=dict(record), reason=reason)
+    return DataDecision(action="update", record=record, reason=reason)
 
 
 def data_drop(reason: str) -> DataDecision:
@@ -43,10 +43,14 @@ def data_boundary(value: Any, kind: str) -> DataDecision:
     return DataDecision(action="boundary", record=value, kind=kind)
 
 
-def decorator_factory(project: Any, kind: str, name: str, metadata: dict[str, Any]) -> Callable[[Any], Any]:
+def decorator_factory(
+    project: Any, kind: str, name: str, metadata: dict[str, Any]
+) -> Callable[[Any], Any]:
     """Create a normal Python decorator that records declaration metadata."""
 
     def decorate(obj: Any) -> Any:
+        if isinstance(obj, type):
+            obj.__rlab_ref__ = f"{kind}:{name}"
         project._register(kind=kind, name=name, obj=obj, metadata=metadata)
         return obj
 

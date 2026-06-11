@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import inspect
 import json
-from dataclasses import asdict, is_dataclass
 import os
 import threading
 from contextlib import contextmanager
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -35,7 +35,9 @@ class Project:
     project even if user modules construct their own ``Project()`` instance.
     """
 
-    def __new__(cls, name: str | None = None, root: str | Path | None = None) -> "Project":
+    def __new__(
+        cls, name: str | None = None, root: str | Path | None = None
+    ) -> "Project":
         with _LOCK:
             if _PIN_STACK:
                 return _PIN_STACK[-1]
@@ -90,14 +92,20 @@ class Project:
 
     def experiment_from_spec(self, name: str, spec: Any):
         """Register an experiment from a reusable spec object."""
-        return decorator_factory(self, "experiment", name, {"spec": _jsonable_spec(spec)})
+        return decorator_factory(
+            self, "experiment", name, {"spec": _jsonable_spec(spec)}
+        )
 
     def external_evaluation(self, name: str, **metadata: Any):
         """Register an external-command evaluation declaration."""
+
         def decorate(obj: Any = None) -> Any:
             target = obj if obj is not None else _SentinelCallable(name)
-            self._register(kind="external_evaluation", name=name, obj=target, metadata=metadata)
+            self._register(
+                kind="external_evaluation", name=name, obj=target, metadata=metadata
+            )
             return target
+
         return decorate
 
     def adapter(self, name: str, **metadata: Any):
@@ -136,9 +144,21 @@ class Project:
         """Register a dataset metric."""
         return decorator_factory(self, "metric", name, metadata)
 
-    def pipeline(self, name: str, *stages: Any, version: str = "1", tags: list[str] | tuple[str, ...] = (), description: str | None = None):
+    def pipeline(
+        self,
+        name: str,
+        *stages: Any,
+        version: str = "1",
+        tags: list[str] | tuple[str, ...] = (),
+        description: str | None = None,
+    ):
         """Register a pipeline declaration."""
-        metadata = {"stages": [_jsonable_spec(stage) for stage in stages], "version": version, "tags": list(tags), "description": description}
+        metadata = {
+            "stages": [_jsonable_spec(stage) for stage in stages],
+            "version": version,
+            "tags": list(tags),
+            "description": description,
+        }
         sentinel = _SentinelCallable(name)
         self._register(kind="pipeline", name=name, obj=sentinel, metadata=metadata)
         return name
@@ -147,6 +167,18 @@ class Project:
         """Register a dataset declaration."""
         sentinel = _SentinelCallable(name)
         self._register(kind="dataset", name=name, obj=sentinel, metadata=metadata)
+        # Store pre-configured runtime callables so the runner can use them
+        # without deserializing the JSON-spec metadata back to typed objects.
+        source = metadata.get("source")
+        if source is not None and not isinstance(source, str):
+            self._callables[("dataset_source", name)] = source
+        sink = metadata.get("sink")
+        sinks = metadata.get("sinks") or (
+            [sink] if sink is not None and not isinstance(sink, str) else []
+        )
+        for index, s in enumerate(sinks):
+            if s is not None and not isinstance(s, str):
+                self._callables[("dataset_sink", f"{name}:{index}")] = s
         return name
 
     def define_workflow(self, name: str, *, steps: Any):
@@ -185,13 +217,15 @@ class Project:
         """Register a result schema class."""
         return decorator_factory(self, "result_schema", name, metadata)
 
-    def _register(self, *, kind: str, name: str, obj: Any, metadata: dict[str, Any]) -> None:
+    def _register(
+        self, *, kind: str, name: str, obj: Any, metadata: dict[str, Any]
+    ) -> None:
         _validate_identifier(kind, name)
         module = str(getattr(obj, "__module__", ""))
         qualname = str(getattr(obj, "__qualname__", getattr(obj, "__name__", "")))
         try:
             source = inspect.getsourcefile(obj) or ""
-        except TypeError:
+        except (TypeError, OSError):
             source = ""
         description = _first_doc_line(obj)
         if self._is_strict_unstable(kind=kind, qualname=qualname, source=source):
@@ -221,29 +255,55 @@ class Project:
             raise ValueError(f"duplicate registry declaration: {kind}:{name}")
         if kind == "workflow" and isinstance(metadata_copy.get("step"), str):
             step_name = str(metadata_copy["step"])
-            record["metadata"] = {"steps": [_workflow_step_metadata(step_name, record, metadata_copy)]}
+            record["metadata"] = {
+                "steps": [_workflow_step_metadata(step_name, record, metadata_copy)]
+            }
             self._callables[("workflow_step", f"{name}:{step_name}")] = obj
             self._callables[key] = _WorkflowCallable(name)
         else:
             self._callables[key] = obj
         self._records.append(record)
         component_kind = metadata_copy.get("component_kind")
-        if kind == "component" and isinstance(component_kind, str) and component_kind.strip():
+        if (
+            kind == "component"
+            and isinstance(component_kind, str)
+            and component_kind.strip()
+        ):
             self._callables[(component_kind, name)] = obj
 
-    def _append_workflow_step(self, workflow_name: str, step_name: str, obj: Any, metadata: dict[str, Any], record: dict[str, Any]) -> None:
+    def _append_workflow_step(
+        self,
+        workflow_name: str,
+        step_name: str,
+        obj: Any,
+        metadata: dict[str, Any],
+        record: dict[str, Any],
+    ) -> None:
         for existing in self._records:
-            if existing.get("kind") == "workflow" and existing.get("name") == workflow_name:
+            if (
+                existing.get("kind") == "workflow"
+                and existing.get("name") == workflow_name
+            ):
                 existing_metadata = existing.setdefault("metadata", {})
                 steps = existing_metadata.setdefault("steps", [])
                 if not isinstance(steps, list):
-                    raise ValueError(f"workflow {workflow_name} has invalid steps metadata")
-                if any(step.get("name") == step_name for step in steps if isinstance(step, dict)):
-                    raise ValueError(f"duplicate workflow step: {workflow_name}:{step_name}")
+                    raise ValueError(
+                        f"workflow {workflow_name} has invalid steps metadata"
+                    )
+                if any(
+                    step.get("name") == step_name
+                    for step in steps
+                    if isinstance(step, dict)
+                ):
+                    raise ValueError(
+                        f"duplicate workflow step: {workflow_name}:{step_name}"
+                    )
                 steps.append(_workflow_step_metadata(step_name, record, metadata))
                 self._callables[("workflow_step", f"{workflow_name}:{step_name}")] = obj
                 return
-        raise ValueError(f"workflow record not found while adding step: {workflow_name}")
+        raise ValueError(
+            f"workflow record not found while adding step: {workflow_name}"
+        )
 
     def _is_strict_unstable(self, *, kind: str, qualname: str, source: str) -> bool:
         strict = os.environ.get("RLAB_RUNNER_STRICT") == "1"
@@ -305,7 +365,9 @@ def pinned_project(project: Project) -> Iterator[None]:
                 _PIN_STACK.remove(project)
 
 
-def _workflow_step_metadata(step_name: str, record: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+def _workflow_step_metadata(
+    step_name: str, record: dict[str, Any], metadata: dict[str, Any]
+) -> dict[str, Any]:
     values = dict(metadata)
     values.pop("step", None)
     return {
@@ -324,7 +386,9 @@ class _WorkflowCallable:
         self.__module__ = "rlab.generated"
 
     def __call__(self, *_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError("workflow sentinels are declarative and are executed by registered workflow steps")
+        raise RuntimeError(
+            "workflow sentinels are declarative and are executed by registered workflow steps"
+        )
 
 
 class _SentinelCallable:
@@ -344,6 +408,10 @@ def _jsonable_spec(value: Any) -> Any:
         return _jsonable_spec(value.to_dict())
     if hasattr(value, "model_dump"):
         return _jsonable_spec(value.model_dump())
+    rlab_ref = getattr(type(value), "__rlab_ref__", None)
+    if rlab_ref and is_dataclass(value) and not isinstance(value, type):
+        config = {k: _jsonable_spec(v) for k, v in asdict(value).items()}
+        return {"ref": rlab_ref, **config} if config else {"ref": rlab_ref}
     if is_dataclass(value) and not isinstance(value, type):
         return _jsonable_spec(asdict(value))
     if isinstance(value, dict):

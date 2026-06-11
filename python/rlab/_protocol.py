@@ -41,7 +41,11 @@ def read_request() -> HostRequest:
     if version != PROTOCOL_VERSION:
         raise ValueError(f"unsupported protocol version: {version}")
     target_raw = raw.get("target")
-    target = None if target_raw is None else HostTarget(kind=str(target_raw["kind"]), name=str(target_raw["name"]))
+    target = (
+        None
+        if target_raw is None
+        else HostTarget(kind=str(target_raw["kind"]), name=str(target_raw["name"]))
+    )
     return HostRequest(
         protocol_version=version,
         request_id=str(raw["request_id"]),

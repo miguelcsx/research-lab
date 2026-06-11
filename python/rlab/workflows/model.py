@@ -14,7 +14,9 @@ class WorkflowStep:
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
-        value["fn"] = getattr(self.fn, "__qualname__", None) if self.fn is not None else None
+        value["fn"] = (
+            getattr(self.fn, "__qualname__", None) if self.fn is not None else None
+        )
         return value
 
 
@@ -37,4 +39,8 @@ class Workflow:
     schema_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": self.schema_version, "name": self.name, "steps": [step.to_dict() for step in self.steps]}
+        return {
+            "schema_version": self.schema_version,
+            "name": self.name,
+            "steps": [step.to_dict() for step in self.steps],
+        }
