@@ -26,11 +26,17 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
     let mut params = parse_params_public(&command.params)?;
+    // Accept bare component names (`--model my.model`) by prepending the
+    // `model:` kind prefix that `_resolve_component` expects. Users that
+    // want a different kind (e.g. `hf:org/repo`) can still pass the full
+    // `kind:name` form and it will be left untouched.
+    let model_ref = if command.model.contains(':') {
+        command.model.clone()
+    } else {
+        format!("model:{}", command.model)
+    };
     if let serde_json::Value::Object(object) = &mut params {
-        object.insert(
-            "model".to_string(),
-            serde_json::Value::String(command.model.clone()),
-        );
+        object.insert("model".to_string(), serde_json::Value::String(model_ref));
     }
     let session = RunSession::create(
         &paths,
