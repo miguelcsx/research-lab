@@ -1,11 +1,16 @@
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use clap::Args;
 use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, HostCommand, HostEvent,
-    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunSession,
+    config::ProjectPaths, host::validate_event, load_effective_config,
+    registry::load_registry_cache, run::list_runs, EffectiveConfig, Grid, HostCommand, HostEvent,
+    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunDirectory,
+    RunSession, RunStatus,
 };
+use serde_json::Value;
 
+use crate::commands::discover::cache_key_for;
 use crate::host::process::run_python_host;
 use crate::render::{human::print_line, json::print_json};
 const SCHEMA_VERSION: u32 = 1;
@@ -19,15 +24,63 @@ pub struct RunCommand {
     pub params: Vec<String>,
 }
 
+struct RunOutcome {
+    run: RunDirectory,
+    failed: bool,
+}
+
 pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
     let (kind, name) = parse_target_kind(&command.target)?;
-    let params = parse_params_public(&command.params)?;
+    let params = resolve_param_refs(&paths, parse_params_public(&command.params)?)?;
+    let strict = command.strict || config.production.strict;
+
+    // A target that declares a `matrix` (e.g. an experiment) is run once per
+    // grid cell as its own tracked run — comparable via `rlab compare`.
+    let cells = matrix_cells(&config, &paths, strict, &kind, &name)?;
+    if cells.is_empty() {
+        let outcome = execute_run(&config, &paths, &kind, &name, params, strict)?;
+        return report_run(&outcome, json);
+    }
+
+    if !json {
+        print_line(&format!("sweep: {} configs", cells.len()));
+    }
+    let mut outcomes = Vec::with_capacity(cells.len());
+    for cell in &cells {
+        let merged = merge_params(&params, cell);
+        let outcome = execute_run(&config, &paths, &kind, &name, merged, strict)?;
+        if !json {
+            let status = if outcome.failed {
+                "failed"
+            } else {
+                "completed"
+            };
+            print_line(&format!(
+                "  {status} {} -> {}",
+                format_cell(cell),
+                outcome.run.id.as_str()
+            ));
+        }
+        outcomes.push(outcome);
+    }
+    report_sweep(&outcomes, json)
+}
+
+/// Run a single target invocation and finalize its session.
+fn execute_run(
+    config: &EffectiveConfig,
+    paths: &ProjectPaths,
+    kind: &RegistryKind,
+    name: &str,
+    params: Value,
+    strict: bool,
+) -> RlabResult<RunOutcome> {
     let session = RunSession::create(
-        &paths,
+        paths,
         kind.as_str(),
-        &name,
+        name,
         std::env::args().collect(),
         params.clone(),
     )?;
@@ -38,15 +91,15 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
         project_root: config.project.root.clone(),
         modules: config.python.modules.clone(),
         target: Some(HostTarget {
-            kind,
-            name: name.clone(),
+            kind: kind.clone(),
+            name: name.to_string(),
         }),
         run_id: Some(session.directory.id.as_str().to_string()),
         run_dir: Some(session.directory.path.clone()),
         cache_dir: Some(paths.cache.clone()),
         params,
         seed: None,
-        strict: command.strict || config.production.strict,
+        strict,
         environment: serde_json::json!({}),
     };
     let events = run_python_host(
@@ -62,24 +115,138 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
     }
     if let Some(error) = failed {
         let run = session.fail(&error.to_string())?;
-        if json {
-            print_json("run", run)?;
-        } else {
-            print_line(&format!("run failed: {}", run.id.as_str()));
-        }
-        return Ok(1);
+        return Ok(RunOutcome { run, failed: true });
     }
-    let result = match completed {
-        Some(value) => value,
-        None => serde_json::json!({"schema_version": SCHEMA_VERSION, "data": {}}),
-    };
+    let result = completed
+        .unwrap_or_else(|| serde_json::json!({"schema_version": SCHEMA_VERSION, "data": {}}));
     let run = session.complete(result)?;
-    if json {
-        print_json("run", run)?;
-    } else {
-        print_line(&format!("completed run: {}", run.id.as_str()));
+    Ok(RunOutcome { run, failed: false })
+}
+
+/// Expand the target's declared `matrix` metadata into grid cells.
+///
+/// Read from the cached registry only (no Python round-trip), so ordinary runs
+/// pay no overhead. If the registry has not been discovered yet, or the target
+/// declares no matrix, this returns no cells and the target runs once.
+fn matrix_cells(
+    config: &EffectiveConfig,
+    paths: &ProjectPaths,
+    strict: bool,
+    kind: &RegistryKind,
+    name: &str,
+) -> RlabResult<Vec<BTreeMap<String, Value>>> {
+    let cache_key = cache_key_for(config, strict)?;
+    let Some(registry) = load_registry_cache(&paths.registry_cache, &cache_key)? else {
+        return Ok(Vec::new());
+    };
+    let Some(record) = registry.find(kind.clone(), name) else {
+        return Ok(Vec::new());
+    };
+    let Some(matrix) = record.metadata.get("matrix") else {
+        return Ok(Vec::new());
+    };
+    let axes: BTreeMap<String, Vec<Value>> = match serde_json::from_value(matrix.clone()) {
+        Ok(axes) => axes,
+        Err(_) => return Ok(Vec::new()),
+    };
+    if axes.is_empty() {
+        return Ok(Vec::new());
     }
-    Ok(0)
+    Grid::new(axes)?.expand()
+}
+
+fn merge_params(base: &Value, cell: &BTreeMap<String, Value>) -> Value {
+    let mut object = base.as_object().cloned().unwrap_or_default();
+    for (key, value) in cell {
+        object.insert(key.clone(), value.clone());
+    }
+    Value::Object(object)
+}
+
+/// Resolve `@<kind>:<name>[/suffix]` param values to the latest completed run's
+/// output path, so pipeline stages reference each other without pasting run ids.
+fn resolve_param_refs(paths: &ProjectPaths, params: Value) -> RlabResult<Value> {
+    let Value::Object(map) = params else {
+        return Ok(params);
+    };
+    let mut resolved = serde_json::Map::with_capacity(map.len());
+    for (key, value) in map {
+        let value = match &value {
+            Value::String(text) if text.starts_with('@') => {
+                Value::String(resolve_run_reference(paths, text)?)
+            }
+            _ => value,
+        };
+        resolved.insert(key, value);
+    }
+    Ok(Value::Object(resolved))
+}
+
+fn resolve_run_reference(paths: &ProjectPaths, reference: &str) -> RlabResult<String> {
+    let (target, suffix) = match reference[1..].split_once('/') {
+        Some((target, suffix)) => (target, Some(suffix)),
+        None => (&reference[1..], None),
+    };
+    let (kind, name) = target
+        .split_once(':')
+        .ok_or_else(|| RlabError::Validation {
+            message: format!(
+                "invalid run reference '{reference}': expected @<kind>:<name>[/suffix]"
+            ),
+        })?;
+    let latest = list_runs(paths)?
+        .into_iter()
+        .filter(|run| {
+            run.operation == kind && run.name == name && run.status == RunStatus::Completed
+        })
+        .max_by(|left, right| left.id.cmp(&right.id))
+        .ok_or_else(|| RlabError::Validation {
+            message: format!("no completed run for '{kind}:{name}' referenced by '{reference}'"),
+        })?;
+    let mut path = PathBuf::from(latest.path);
+    if let Some(suffix) = suffix {
+        path.push(suffix);
+    }
+    Ok(path.to_string_lossy().into_owned())
+}
+
+fn format_cell(cell: &BTreeMap<String, Value>) -> String {
+    cell.iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn report_run(outcome: &RunOutcome, json: bool) -> RlabResult<u8> {
+    if json {
+        print_json("run", &outcome.run)?;
+    } else if outcome.failed {
+        print_line(&format!("run failed: {}", outcome.run.id.as_str()));
+    } else {
+        print_line(&format!("completed run: {}", outcome.run.id.as_str()));
+    }
+    Ok(u8::from(outcome.failed))
+}
+
+fn report_sweep(outcomes: &[RunOutcome], json: bool) -> RlabResult<u8> {
+    let failures = outcomes.iter().filter(|outcome| outcome.failed).count();
+    if json {
+        let ids: Vec<&str> = outcomes
+            .iter()
+            .map(|outcome| outcome.run.id.as_str())
+            .collect();
+        print_json(
+            "sweep",
+            serde_json::json!({"runs": ids, "failures": failures}),
+        )?;
+    } else {
+        print_line(&format!(
+            "sweep complete: {} runs, {} failed",
+            outcomes.len(),
+            failures
+        ));
+    }
+    Ok(u8::from(failures > 0))
 }
 
 pub fn process_event_public(

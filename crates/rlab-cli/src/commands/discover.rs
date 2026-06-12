@@ -116,7 +116,7 @@ fn render(registry: Registry, json: bool) -> RlabResult<()> {
     }
 }
 
-fn cache_key_for(
+pub fn cache_key_for(
     config: &rlab_core::EffectiveConfig,
     strict: bool,
 ) -> RlabResult<RegistryCacheKey> {
