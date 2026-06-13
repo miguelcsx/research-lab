@@ -33,10 +33,18 @@ rlab run experiment:sweep
     seeds=(0, 1, 2),
 )
 def learning_rate_sweep(ctx):
-    loss = train(lr=ctx.params["lr"], batch_size=ctx.params["batch_size"])
+    loss = train(
+        lr=ctx.params["lr"],
+        batch_size=ctx.params["batch_size"],
+        seed=ctx.seed,
+    )
     ctx.log_metric("val_loss", loss)
     return {"loss": loss}
 ```
+
+`rlab run` creates one durable run for every `matrix × seeds` job. The selected
+seed is available as `ctx.seed`; explicit `--param` values are merged into every
+job and take precedence over matrix values.
 
 ## Matrix helpers
 

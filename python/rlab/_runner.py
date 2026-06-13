@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
 import os
 import shutil
 import traceback
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -493,6 +495,7 @@ def _execute_dataset(
         list(_read_source(source, ctx)),
         ctx,
     )
+    _write_dataset_audit(ctx, audit, records)
     sinks = _write_dataset_sinks(project, target_name, metadata, records, ctx)
     ctx.log_metrics(
         {
@@ -506,6 +509,52 @@ def _execute_dataset(
         "audit": audit,
         "sinks": sinks,
     }
+
+
+def _write_dataset_audit(
+    ctx: RuntimeContext, audit: JsonDict, records: list[Any]
+) -> None:
+    output = ctx.run_dir / "artifacts" / "dataset" / "audit"
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "summary.json").write_text(
+        json.dumps(_jsonable(audit), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _write_csv(
+        output / "drop_reasons.csv",
+        ("reason", "count"),
+        (
+            (reason, count)
+            for reason, count in sorted(dict(audit.get("reasons", {})).items())
+        ),
+    )
+    _write_csv(
+        output / "stage_summary.csv",
+        ("stage", "input", "output"),
+        (
+            (stage["stage"], stage["input"], stage["output"])
+            for stage in audit.get("stages", [])
+        ),
+    )
+    sources = Counter(
+        str(getattr(record, "source"))
+        for record in records
+        if getattr(record, "source", None) is not None
+    )
+    _write_csv(
+        output / "source_summary.csv",
+        ("source", "records"),
+        sorted(sources.items()),
+    )
+
+
+def _write_csv(
+    path: Path, header: tuple[str, ...], rows: Iterable[tuple[Any, ...]]
+) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
 
 
 def _resolve_dataset_source(project: Any, target_name: str, metadata: JsonDict) -> Any:

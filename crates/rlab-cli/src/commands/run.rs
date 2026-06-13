@@ -1,16 +1,15 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::Args;
 use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config,
-    registry::load_registry_cache, run::list_runs, EffectiveConfig, Grid, HostCommand, HostEvent,
-    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunDirectory,
-    RunSession, RunStatus,
+    config::ProjectPaths, host::validate_event, load_effective_config, plan_experiment,
+    run::list_runs, EffectiveConfig, ExperimentJob, ExperimentSpec, HostCommand, HostEvent,
+    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RetryPolicy, RlabError, RlabResult,
+    RunDirectory, RunSession, RunStatus,
 };
 use serde_json::Value;
 
-use crate::commands::discover::cache_key_for;
+use crate::commands::discover::discover_registry;
 use crate::host::process::run_python_host;
 use crate::render::{human::print_line, json::print_json};
 const SCHEMA_VERSION: u32 = 1;
@@ -32,25 +31,24 @@ struct RunOutcome {
 pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
+    paths.ensure_base_dirs()?;
     let (kind, name) = parse_target_kind(&command.target)?;
     let params = resolve_param_refs(&paths, parse_params_public(&command.params)?)?;
     let strict = command.strict || config.production.strict;
 
-    // A target that declares a `matrix` (e.g. an experiment) is run once per
-    // grid cell as its own tracked run — comparable via `rlab compare`.
-    let cells = matrix_cells(&config, &paths, strict, &kind, &name)?;
-    if cells.is_empty() {
-        let outcome = execute_run(&config, &paths, &kind, &name, params, strict)?;
+    let jobs = target_jobs(&config, &paths, strict, &kind, &name)?;
+    if jobs.is_empty() {
+        let outcome = execute_run(&config, &paths, &kind, &name, params, None, strict)?;
         return report_run(&outcome, json);
     }
 
     if !json {
-        print_line(&format!("sweep: {} configs", cells.len()));
+        print_line(&format!("sweep: {} jobs", jobs.len()));
     }
-    let mut outcomes = Vec::with_capacity(cells.len());
-    for cell in &cells {
-        let merged = merge_params(&params, cell);
-        let outcome = execute_run(&config, &paths, &kind, &name, merged, strict)?;
+    let mut outcomes = Vec::with_capacity(jobs.len());
+    for job in &jobs {
+        let merged = merge_params(&params, &job.params);
+        let outcome = execute_run(&config, &paths, &kind, &name, merged, job.seed, strict)?;
         if !json {
             let status = if outcome.failed {
                 "failed"
@@ -59,7 +57,7 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
             };
             print_line(&format!(
                 "  {status} {} -> {}",
-                format_cell(cell),
+                format_job(job),
                 outcome.run.id.as_str()
             ));
         }
@@ -75,8 +73,10 @@ fn execute_run(
     kind: &RegistryKind,
     name: &str,
     params: Value,
+    seed: Option<u64>,
     strict: bool,
 ) -> RlabResult<RunOutcome> {
+    let params = with_seed(params, seed);
     let session = RunSession::create(
         paths,
         kind.as_str(),
@@ -98,7 +98,7 @@ fn execute_run(
         run_dir: Some(session.directory.path.clone()),
         cache_dir: Some(paths.cache.clone()),
         params,
-        seed: None,
+        seed,
         strict,
         environment: serde_json::json!({}),
     };
@@ -123,42 +123,87 @@ fn execute_run(
     Ok(RunOutcome { run, failed: false })
 }
 
-/// Expand the target's declared `matrix` metadata into grid cells.
+/// Expand an experiment declaration into matrix × seed jobs.
 ///
-/// Read from the cached registry only (no Python round-trip), so ordinary runs
-/// pay no overhead. If the registry has not been discovered yet, or the target
-/// declares no matrix, this returns no cells and the target runs once.
-fn matrix_cells(
+/// A valid cached registry avoids a Python round-trip. If no valid cache exists,
+/// discovery runs before planning so an experiment never silently loses its
+/// matrix or seeds.
+fn target_jobs(
     config: &EffectiveConfig,
     paths: &ProjectPaths,
     strict: bool,
     kind: &RegistryKind,
     name: &str,
-) -> RlabResult<Vec<BTreeMap<String, Value>>> {
-    let cache_key = cache_key_for(config, strict)?;
-    let Some(registry) = load_registry_cache(&paths.registry_cache, &cache_key)? else {
+) -> RlabResult<Vec<ExperimentJob>> {
+    if kind != &RegistryKind::Experiment {
         return Ok(Vec::new());
-    };
+    }
+    let registry = discover_registry(config, paths, strict, false)?;
     let Some(record) = registry.find(kind.clone(), name) else {
         return Ok(Vec::new());
     };
-    let Some(matrix) = record.metadata.get("matrix") else {
-        return Ok(Vec::new());
-    };
-    let axes: BTreeMap<String, Vec<Value>> = match serde_json::from_value(matrix.clone()) {
-        Ok(axes) => axes,
-        Err(_) => return Ok(Vec::new()),
-    };
-    if axes.is_empty() {
+    let matrix = record
+        .metadata
+        .get("matrix")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let seeds = record
+        .metadata
+        .get("seeds")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    if matrix.as_object().is_none_or(serde_json::Map::is_empty)
+        && seeds.as_array().is_none_or(Vec::is_empty)
+    {
         return Ok(Vec::new());
     }
-    Grid::new(axes)?.expand()
+    let spec = ExperimentSpec {
+        schema_version: 1,
+        name: name.to_string(),
+        question: record
+            .metadata
+            .get("question")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        hypothesis: record
+            .metadata
+            .get("hypothesis")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        matrix: serde_json::from_value(matrix).map_err(|error| RlabError::Validation {
+            message: format!("invalid experiment matrix for {name}: {error}"),
+        })?,
+        metrics: serde_json::from_value(
+            record
+                .metadata
+                .get("metrics")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|error| RlabError::Validation {
+            message: format!("invalid experiment metrics for {name}: {error}"),
+        })?,
+        seeds: serde_json::from_value(seeds).map_err(|error| RlabError::Validation {
+            message: format!("invalid experiment seeds for {name}: {error}"),
+        })?,
+        retry: RetryPolicy::none(),
+    };
+    Ok(plan_experiment(&spec)?.jobs)
 }
 
-fn merge_params(base: &Value, cell: &BTreeMap<String, Value>) -> Value {
-    let mut object = base.as_object().cloned().unwrap_or_default();
-    for (key, value) in cell {
-        object.insert(key.clone(), value.clone());
+fn merge_params(base: &Value, cell: &std::collections::BTreeMap<String, Value>) -> Value {
+    let mut object =
+        serde_json::Map::from_iter(cell.iter().map(|(key, value)| (key.clone(), value.clone())));
+    if let Some(overrides) = base.as_object() {
+        object.extend(overrides.clone());
+    }
+    Value::Object(object)
+}
+
+fn with_seed(params: Value, seed: Option<u64>) -> Value {
+    let mut object = params.as_object().cloned().unwrap_or_default();
+    if let Some(seed) = seed {
+        object.insert("seed".to_string(), Value::from(seed));
     }
     Value::Object(object)
 }
@@ -210,11 +255,16 @@ fn resolve_run_reference(paths: &ProjectPaths, reference: &str) -> RlabResult<St
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn format_cell(cell: &BTreeMap<String, Value>) -> String {
-    cell.iter()
+fn format_job(job: &ExperimentJob) -> String {
+    let mut fields = job
+        .params
+        .iter()
         .map(|(key, value)| format!("{key}={value}"))
-        .collect::<Vec<_>>()
-        .join(", ")
+        .collect::<Vec<_>>();
+    if let Some(seed) = job.seed {
+        fields.push(format!("seed={seed}"));
+    }
+    fields.join(", ")
 }
 
 fn report_run(outcome: &RunOutcome, json: bool) -> RlabResult<u8> {
@@ -397,19 +447,45 @@ pub fn parse_params_public(params: &[String]) -> RlabResult<serde_json::Value> {
 }
 
 fn parse_param_value(value: &str) -> serde_json::Value {
-    if value == "true" {
-        return serde_json::Value::Bool(true);
+    serde_json::from_str(value).unwrap_or_else(|_| serde_json::Value::String(value.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+
+    use super::{merge_params, parse_param_value, with_seed};
+
+    #[test]
+    fn explicit_params_override_matrix_values() {
+        let cell = BTreeMap::from([
+            ("batch_size".to_string(), json!(16)),
+            ("embedding".to_string(), json!("euclidean")),
+        ]);
+
+        let merged = merge_params(&json!({"batch_size": 32}), &cell);
+
+        assert_eq!(merged["batch_size"], json!(32));
+        assert_eq!(merged["embedding"], json!("euclidean"));
     }
-    if value == "false" {
-        return serde_json::Value::Bool(false);
+
+    #[test]
+    fn seed_is_recorded_in_job_params() {
+        let params = with_seed(json!({"batch_size": 32}), Some(7));
+
+        assert_eq!(params["seed"], json!(7));
+        assert_eq!(params["batch_size"], json!(32));
     }
-    if let Ok(number) = value.parse::<i64>() {
-        return serde_json::Value::Number(number.into());
+
+    #[test]
+    fn explicit_params_accept_structured_json() {
+        assert_eq!(parse_param_value("[]"), json!([]));
+        assert_eq!(
+            parse_param_value(r#"{"warmup":0.1}"#),
+            json!({"warmup": 0.1})
+        );
+        assert_eq!(parse_param_value("causal"), json!("causal"));
     }
-    if let Ok(number) = value.parse::<f64>() {
-        if let Some(json_number) = serde_json::Number::from_f64(number) {
-            return serde_json::Value::Number(json_number);
-        }
-    }
-    serde_json::Value::String(value.to_string())
 }

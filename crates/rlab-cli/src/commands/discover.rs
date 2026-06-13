@@ -33,11 +33,21 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
     let paths = ProjectPaths::from_config(&config)?;
     paths.ensure_base_dirs()?;
     let strict = command.strict || config.production.strict;
-    let cache_key = cache_key_for(&config, strict)?;
-    if !command.refresh && !command.no_cache {
+    let registry = discover_registry(&config, &paths, strict, command.refresh || command.no_cache)?;
+    render(filter_registry(registry, command.kind.as_deref())?, json)?;
+    Ok(0)
+}
+
+pub fn discover_registry(
+    config: &rlab_core::EffectiveConfig,
+    paths: &ProjectPaths,
+    strict: bool,
+    refresh: bool,
+) -> RlabResult<Registry> {
+    let cache_key = cache_key_for(config, strict)?;
+    if !refresh {
         if let Some(registry) = load_registry_cache(&paths.registry_cache, &cache_key)? {
-            render(filter_registry(registry, command.kind.as_deref())?, json)?;
-            return Ok(0);
+            return Ok(registry);
         }
     }
     let request = HostRequest {
@@ -69,8 +79,7 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
         collect_registry_event(event, &mut registry)?;
     }
     save_registry_cache(&paths.registry_cache, registry.clone(), &cache_key)?;
-    render(filter_registry(registry, command.kind.as_deref())?, json)?;
-    Ok(0)
+    Ok(registry)
 }
 
 fn filter_registry(mut registry: Registry, kind: Option<&str>) -> RlabResult<Registry> {
@@ -160,17 +169,34 @@ fn infer_source_paths(root: &Path, modules: &[String]) -> Vec<PathBuf> {
 
 fn module_candidates(root: &Path, module: &str) -> Vec<PathBuf> {
     let rel = module.replace('.', std::path::MAIN_SEPARATOR_STR);
-    vec![
-        root.join(format!("{rel}.py")),
-        root.join(&rel).join("__init__.py"),
-    ]
+    let module_file = root.join(format!("{rel}.py"));
+    let package = root.join(&rel);
+    let mut paths = vec![module_file];
+    collect_python_sources(&package, &mut paths);
+    paths
+}
+
+fn collect_python_sources(directory: &Path, paths: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_python_sources(&path, paths);
+        } else if path.extension().is_some_and(|extension| extension == "py") {
+            paths.push(path);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use rlab_core::{Registry, RegistryKind, RegistryRecord};
 
-    use super::filter_registry;
+    use super::{filter_registry, module_candidates};
 
     fn registry() -> Registry {
         let mut registry = Registry::new();
@@ -229,5 +255,23 @@ mod tests {
         let filtered = filter_registry(registry, Some("studies")).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
         assert_eq!(filtered.records[0].kind, RegistryKind::Study);
+    }
+
+    #[test]
+    fn package_cache_key_includes_nested_python_sources() {
+        let root =
+            std::env::temp_dir().join(format!("rlab-discovery-sources-{}", std::process::id()));
+        let package = root.join("training").join("experiments");
+        fs::create_dir_all(package.join("nested")).expect("create package");
+        fs::write(package.join("__init__.py"), "").expect("write init");
+        fs::write(package.join("catalog.py"), "").expect("write module");
+        fs::write(package.join("nested").join("recipe.py"), "").expect("write nested module");
+
+        let paths = module_candidates(&root, "training.experiments");
+
+        assert!(paths.contains(&package.join("__init__.py")));
+        assert!(paths.contains(&package.join("catalog.py")));
+        assert!(paths.contains(&package.join("nested").join("recipe.py")));
+        fs::remove_dir_all(root).expect("remove package");
     }
 }
