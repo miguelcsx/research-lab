@@ -163,7 +163,7 @@ fn run_data_build(
         project_root: config.project.root.clone(),
         modules: config.python.modules.clone(),
         target: Some(HostTarget {
-            kind: RegistryKind::Dataset,
+            kind: RegistryKind::DATASET,
             name,
         }),
         run_id: Some(session.directory.id.as_str().to_string()),

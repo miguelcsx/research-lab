@@ -4,7 +4,8 @@ from pathlib import Path
 import json
 
 from ._project import Project
-from ._runner import RuntimeContext
+from ._loader import discover_modules
+from .runner import RuntimeContext
 from ._decorators import (
     ComponentUse,
     DataDecision,
@@ -29,6 +30,13 @@ from ._rlab import (
 )
 from .baselines import BaselineEntry, BaselineStore
 from .benchmarks.model import BenchmarkResult, BenchmarkSpec
+from .components import ComponentSpec, Requirements, collect_requirements
+from .checkpoints import (
+    CheckpointManager,
+    CheckpointRecord,
+    CheckpointSerializer,
+    RetentionPolicy,
+)
 from .data import (
     AuditPolicy,
     CheckResult,
@@ -77,6 +85,9 @@ from .results import (
     ResultSchema,
     TableArtifact,
 )
+from .config import diff_configs, list_configs, resolve_config, validate_configs
+from .runs import RunQuery, RunRecord
+from ._typing import JsonObject, JsonValue
 from .external import (
     AdapterContext,
     AdapterValidationError,
@@ -98,7 +109,7 @@ from .governance import (
     scan_for_secrets,
 )
 from .plan import BudgetEstimate, estimate_budget, estimate_required_repetitions
-from .stats.compare import MetricComparison, compare_metric_arrays
+from .stats.compare import MetricComparison, compare_metric_arrays, paired_bootstrap
 from .studies.model import Study, StudyPlan
 from .units.model import Unit, UnitRegistry
 from .workflows.model import ExternalStep, Workflow, WorkflowStep
@@ -106,7 +117,7 @@ from .workflows.model import ExternalStep, Workflow, WorkflowStep
 WorkflowContext = RuntimeContext
 
 
-def define_workflow(name: str, *, steps):
+def define_workflow(name: str, *, steps: list[WorkflowStep | ExternalStep]) -> Workflow:
     """Create a workflow descriptor outside of a project instance."""
     return Workflow(name=name, steps=tuple(steps))
 
@@ -154,6 +165,10 @@ __all__ = [
     "BudgetEstimate",
     "CheckResult",
     "ComponentUse",
+    "ComponentSpec",
+    "CheckpointManager",
+    "CheckpointRecord",
+    "CheckpointSerializer",
     "DataAblation",
     "DataAction",
     "DataBoundary",
@@ -181,6 +196,8 @@ __all__ = [
     "FileArtifact",
     "FigureArtifact",
     "Grid",
+    "JsonObject",
+    "JsonValue",
     "LabPolicy",
     "LicenseManifest",
     "LogArtifact",
@@ -193,8 +210,12 @@ __all__ = [
     "RegistryRecord",
     "ResultBundle",
     "ResultSchema",
+    "Requirements",
+    "RetentionPolicy",
     "RetryPolicy",
     "RunDirectory",
+    "RunQuery",
+    "RunRecord",
     "RuntimeContext",
     "Sample",
     "SinkResult",
@@ -214,19 +235,25 @@ __all__ = [
     "classify",
     "compare_metric_arrays",
     "compare_runs",
+    "diff_configs",
+    "collect_requirements",
     "data_boundary",
     "data_drop",
     "data_keep",
     "data_update",
     "define_workflow",
+    "discover_modules",
     "estimate_budget",
     "estimate_required_repetitions",
     "factor",
     "find_project_root",
     "grid",
     "load_config",
+    "list_configs",
     "log_uniform",
     "materialize",
+    "paired_bootstrap",
+    "resolve_config",
     "patterns",
     "predicate",
     "redact_secrets",
@@ -235,4 +262,5 @@ __all__ = [
     "substitute",
     "threshold",
     "uniform",
+    "validate_configs",
 ]

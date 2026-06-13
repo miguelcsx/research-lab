@@ -17,7 +17,6 @@ pub struct PyRegistryRecord {
 impl PyRegistryRecord {
     #[new]
     #[pyo3(signature = (kind, name, version, module, qualname, source, tags=None, description="", metadata=None))]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         kind: &str,
         name: &str,
@@ -29,17 +28,17 @@ impl PyRegistryRecord {
         description: &str,
         metadata: Option<String>,
     ) -> PyResult<Self> {
-        let record = registry_record_from_python_args(RegistryRecordArgs {
-            kind,
-            name,
-            version,
-            module,
-            qualname,
+        let record = rlab_core::RegistryRecord::from_spec(rlab_core::RegistryRecordSpec {
+            kind: parse_registry_kind(kind)?,
+            name: name.to_owned(),
+            version: version.to_owned(),
+            module: module.to_owned(),
+            qualname: qualname.to_owned(),
             source,
-            tags,
-            description,
-            metadata,
-        })?;
+            tags: tags.unwrap_or_default(),
+            description: description.to_owned(),
+            metadata: parse_metadata(metadata)?,
+        });
 
         validate_record(&record)?;
 
@@ -83,34 +82,6 @@ impl PyRegistry {
     pub fn to_json(&self) -> PyResult<String> {
         to_pretty_json(&self.inner)
     }
-}
-
-struct RegistryRecordArgs<'a> {
-    kind: &'a str,
-    name: &'a str,
-    version: &'a str,
-    module: &'a str,
-    qualname: &'a str,
-    source: PathBuf,
-    tags: Option<Vec<String>>,
-    description: &'a str,
-    metadata: Option<String>,
-}
-
-fn registry_record_from_python_args(
-    args: RegistryRecordArgs<'_>,
-) -> PyResult<rlab_core::RegistryRecord> {
-    Ok(rlab_core::RegistryRecord::new(
-        parse_registry_kind(args.kind)?,
-        args.name.to_owned(),
-        args.version.to_owned(),
-        args.module.to_owned(),
-        args.qualname.to_owned(),
-        args.source,
-        args.tags.unwrap_or_default(),
-        args.description.to_owned(),
-        parse_metadata(args.metadata)?,
-    ))
 }
 
 fn parse_registry_kind(kind: &str) -> PyResult<rlab_core::RegistryKind> {

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from collections.abc import Mapping
+
+from rlab._typing import JsonObject, JsonValue
 
 
 @dataclass(slots=True)
@@ -16,9 +18,9 @@ class FileArtifact:
     path: str | Path
     kind: str = "file"
     version: str = "1"
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
-    def to_event_payload(self) -> dict[str, Any]:
+    def to_event_payload(self) -> JsonObject:
         """Return the protocol payload used by the Python runner."""
         return {
             "schema_version": 1,
@@ -63,6 +65,6 @@ class ResultSchema:
     fields: Mapping[str, str] = field(default_factory=dict)
     version: str = "1"
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Return a JSON-serializable schema description."""
         return asdict(self)

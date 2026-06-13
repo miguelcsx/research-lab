@@ -71,7 +71,7 @@ fn run_study(
     let params = serde_json::json!({});
     let session = RunSession::create(
         paths,
-        RegistryKind::Study.as_str(),
+        RegistryKind::STUDY.as_str(),
         &name,
         std::env::args().collect(),
         params.clone(),
@@ -83,7 +83,7 @@ fn run_study(
         project_root: config.project.root.clone(),
         modules: config.python.modules.clone(),
         target: Some(HostTarget {
-            kind: RegistryKind::Study,
+            kind: RegistryKind::STUDY,
             name,
         }),
         run_id: Some(session.directory.id.as_str().to_string()),

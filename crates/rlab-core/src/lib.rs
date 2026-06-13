@@ -52,6 +52,9 @@ pub use budget::{estimate_budget, estimate_required_repetitions, BudgetEstimate}
 pub use cache::{cache_inspect, cache_list, cache_path, clean_cache, CacheEntry, CacheInspection};
 pub use ci::{ci_compare, ci_reproducibility_check, ci_smoke, CiCheckResult};
 pub use compare::{compare_runs, CompareRow};
+pub use config::{
+    diff_documents, list_documents, resolve_document, validate_documents, ResolvedDocument,
+};
 pub use config::{find_project_root, load_effective_config, EffectiveConfig, ProjectPaths};
 pub use data::{
     data_boundary, data_drop, data_keep, data_update, AuditPolicy, ComponentUse, DataDecision,
@@ -73,7 +76,10 @@ pub use governance::{
     check_compatibility, redact_secrets, scan_for_pii, scan_for_secrets, LabPolicy,
     LicenseCompatibilitySummary, LicenseManifest, PiiHit, PolicyViolation, SecretHit,
 };
-pub use graph::{add_lineage_edge, lineage_for, LineageEdge, LineageReport};
+pub use graph::{
+    add_lineage_edge, add_lineage_edge_at_root, lineage_for, lineage_for_at_root, LineageEdge,
+    LineageReport,
+};
 pub use host::{HostCommand, HostEvent, HostRequest, HostTarget, ProtocolVersion};
 pub use jobs::{cancel_job, job_logs, list_jobs, start_job, JobRecord, JobStatus};
 pub use journal::{
@@ -83,7 +89,7 @@ pub use journal::{
 };
 pub use lint::{lint_project, LintFinding};
 pub use plan::{estimate_cost, estimate_power_repetitions, CostPlan, PowerPlan};
-pub use registry::{Registry, RegistryKind, RegistryRecord};
+pub use registry::{Registry, RegistryKind, RegistryRecord, RegistryRecordSpec};
 pub use reports::{write_compare_report, write_handoff, write_run_report};
 pub use result::{Metric, MetricDirection, ResultBundle};
 pub use run::{RunDirectory, RunId, RunSession, RunStatus};

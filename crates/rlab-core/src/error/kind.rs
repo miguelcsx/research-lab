@@ -43,4 +43,22 @@ impl RlabError {
             message: source.to_string(),
         }
     }
+
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self::Validation {
+            message: message.into(),
+        }
+    }
+
+    pub fn registry(message: impl Into<String>) -> Self {
+        Self::Registry {
+            message: message.into(),
+        }
+    }
+
+    pub fn config(message: impl Into<String>) -> Self {
+        Self::Config {
+            message: message.into(),
+        }
+    }
 }

@@ -60,7 +60,7 @@ pub fn run(command: BenchmarkCommand, root: Option<&Path>, json: bool) -> RlabRe
     }
     let session = RunSession::create(
         &paths,
-        RegistryKind::Benchmark.as_str(),
+        RegistryKind::BENCHMARK.as_str(),
         &command.benchmark_name,
         std::env::args().collect(),
         params.clone(),
@@ -72,7 +72,7 @@ pub fn run(command: BenchmarkCommand, root: Option<&Path>, json: bool) -> RlabRe
         project_root: config.project.root.clone(),
         modules: config.python.modules.clone(),
         target: Some(HostTarget {
-            kind: RegistryKind::Benchmark,
+            kind: RegistryKind::BENCHMARK,
             name: command.benchmark_name.clone(),
         }),
         run_id: Some(session.directory.id.as_str().to_string()),

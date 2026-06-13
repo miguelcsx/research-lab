@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 const LOG_SCHEMA_VERSION: u32 = 1;
 const ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
-use serde_json::{json, Value};
+use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
 use crate::config::ProjectPaths;
@@ -40,22 +40,15 @@ impl RunSession {
         parameters: Value,
     ) -> RlabResult<Self> {
         paths.ensure_base_dirs()?;
+
         let id = RunId::new(operation, name)?;
         let path = paths.runs.join(id.as_str());
-        ensure_dir(&path)?;
-        for dir in [
-            RUN_DIR_LOGS,
-            RUN_DIR_ARTIFACTS,
-            RUN_DIR_TABLES,
-            RUN_DIR_FIGURES,
-            RUN_DIR_RESULTS,
-            RUN_DIR_EXTERNAL,
-            RUN_DIR_REPRODUCIBILITY,
-        ] {
-            ensure_dir(&path.join(dir))?;
-        }
+
+        create_run_dirs(&path)?;
+
         let lock = RunLock::acquire(&path)?;
         let now = OffsetDateTime::now_utc();
+
         let directory = RunDirectory {
             schema_version: RUN_SCHEMA_VERSION,
             id,
@@ -69,64 +62,52 @@ impl RunSession {
             parameters,
             notes: None,
         };
-        write_json_atomic(&path.join(RUN_MANIFEST_FILE), &directory)?;
-        write_yaml_atomic(&path.join(RUN_MANIFEST_YAML_FILE), &directory)?;
-        write_text_atomic(&path.join(STATUS_FILE), RunStatus::Created.as_str())?;
-        write_json_atomic(&path.join(PARAMS_FILE), &directory.parameters)?;
-        write_text_atomic(&path.join(NOTES_FILE), "")?;
+
+        write_initial_run_files(&path, &directory)?;
         capture_reproducibility(paths, &directory)?;
+
         let mut session = Self { directory, lock };
         session.transition(RunStatus::Running)?;
+
         Ok(session)
     }
 
     pub fn append_metric(&self, metric: &Metric) -> RlabResult<()> {
         metric.validate()?;
+
         let line = serde_json::to_string(metric).map_err(RlabError::serialization)?;
-        append_line(&self.directory.path.join(METRICS_FILE), &line)
+        append_line(&self.metric_path(), &line)
     }
 
     pub fn append_log(&self, message: &str) -> RlabResult<()> {
-        let event = json!({"schema_version": LOG_SCHEMA_VERSION, "message": message, "timestamp": OffsetDateTime::now_utc()});
-        append_line(
-            &self.directory.path.join(RUN_DIR_LOGS).join(EVENTS_FILE),
-            &event.to_string(),
-        )
+        append_line(&self.log_events_path(), &event_line("message", message))
     }
 
     pub fn append_note(&self, message: &str) -> RlabResult<()> {
-        let event = json!({"schema_version": LOG_SCHEMA_VERSION, "text": message, "timestamp": OffsetDateTime::now_utc()});
-        append_line(&self.directory.path.join(NOTES_FILE), &event.to_string())
+        append_line(&self.notes_path(), &event_line("text", message))
     }
 
     pub fn save_artifact_reference(&self, artifact: &Value) -> RlabResult<()> {
         let staged = self.stage_artifact(artifact)?;
-        append_line(
-            &self
-                .directory
-                .path
-                .join(RUN_DIR_ARTIFACTS)
-                .join(ARTIFACTS_FILE),
-            &staged.to_string(),
-        )
+
+        append_line(&self.artifacts_manifest_path(), &staged.to_string())
     }
 
     pub fn complete(mut self, result: Value) -> RlabResult<RunDirectory> {
-        write_json_atomic(&self.directory.path.join(RESULTS_FILE), &result)?;
+        write_json_atomic(&self.results_path(), &result)?;
         self.write_metric_summary()?;
         self.transition(RunStatus::Completed)?;
         self.write_report()?;
+
         Ok(self.directory)
     }
 
     pub fn fail(mut self, message: &str) -> RlabResult<RunDirectory> {
-        write_text_atomic(
-            &self.directory.path.join(RUN_DIR_LOGS).join(ERROR_FILE),
-            message,
-        )?;
+        write_text_atomic(&self.error_path(), message)?;
         self.write_metric_summary()?;
         self.transition(RunStatus::Failed)?;
         self.write_report()?;
+
         Ok(self.directory)
     }
 
@@ -144,60 +125,28 @@ impl RunSession {
                 ),
             });
         }
+
         self.directory.status = next;
         self.directory.updated_at = OffsetDateTime::now_utc();
-        write_json_atomic(
-            &self.directory.path.join(RUN_MANIFEST_FILE),
-            &self.directory,
-        )?;
-        write_yaml_atomic(
-            &self.directory.path.join(RUN_MANIFEST_YAML_FILE),
-            &self.directory,
-        )?;
-        write_text_atomic(&self.directory.path.join(STATUS_FILE), next.as_str())
+
+        self.write_manifest()?;
+        write_text_atomic(&self.status_path(), next.as_str())
     }
 
     fn stage_artifact(&self, artifact: &Value) -> RlabResult<Value> {
-        let source_text = artifact
-            .get("path")
-            .and_then(Value::as_str)
-            .ok_or_else(|| RlabError::Artifact {
-                message: "artifact event is missing path".to_string(),
-            })?;
-        let source = PathBuf::from(source_text);
-        if !source.is_file() {
-            return Err(RlabError::Artifact {
-                message: format!("artifact path is not a file: {}", source.display()),
-            });
-        }
-        let name = artifact
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| RlabError::Artifact {
-                message: "artifact event is missing name".to_string(),
-            })?;
-        let kind = match artifact.get("kind").and_then(Value::as_str) {
-            Some(value) if !value.trim().is_empty() => value,
-            _ => "file",
-        };
+        let source = artifact_source(artifact)?;
+        let name = artifact_name(artifact)?;
+        let kind = artifact_kind(artifact);
         let file_name = safe_artifact_file_name(name, &source)?;
-        let target_dir = self.directory.path.join(RUN_DIR_ARTIFACTS).join(kind);
+        let target_dir = self.artifact_dir().join(kind);
+
         ensure_dir(&target_dir)?;
+
         let target = target_dir.join(file_name);
+
         fs::copy(&source, &target).map_err(|error| RlabError::io(&target, error))?;
-        let mut staged = artifact.clone();
-        if let Some(object) = staged.as_object_mut() {
-            object.insert(
-                "staged_path".to_string(),
-                Value::String(target.display().to_string()),
-            );
-            object.insert(
-                "schema_version".to_string(),
-                Value::Number(ARTIFACT_SCHEMA_VERSION.into()),
-            );
-        }
-        Ok(staged)
+
+        Ok(staged_artifact(artifact, &target))
     }
 
     fn write_metric_summary(&self) -> RlabResult<()> {
@@ -212,24 +161,170 @@ impl RunSession {
             name = self.directory.name,
             status = self.directory.status.as_str(),
         );
-        write_text_atomic(&self.directory.path.join("report.md"), &report)
+
+        write_text_atomic(&self.report_path(), &report)
+    }
+
+    fn write_manifest(&self) -> RlabResult<()> {
+        write_json_atomic(&self.manifest_path(), &self.directory)?;
+        write_yaml_atomic(&self.manifest_yaml_path(), &self.directory)
     }
 
     pub fn lock_path_exists(&self) -> bool {
         let _held = &self.lock;
+
         self.directory.path.join(RUN_LOCK_FILE).exists()
+    }
+
+    fn manifest_path(&self) -> PathBuf {
+        self.directory.path.join(RUN_MANIFEST_FILE)
+    }
+
+    fn manifest_yaml_path(&self) -> PathBuf {
+        self.directory.path.join(RUN_MANIFEST_YAML_FILE)
+    }
+
+    fn status_path(&self) -> PathBuf {
+        self.directory.path.join(STATUS_FILE)
+    }
+
+    fn metric_path(&self) -> PathBuf {
+        self.directory.path.join(METRICS_FILE)
+    }
+
+    fn notes_path(&self) -> PathBuf {
+        self.directory.path.join(NOTES_FILE)
+    }
+
+    fn results_path(&self) -> PathBuf {
+        self.directory.path.join(RESULTS_FILE)
+    }
+
+    fn report_path(&self) -> PathBuf {
+        self.directory.path.join("report.md")
+    }
+
+    fn log_events_path(&self) -> PathBuf {
+        self.directory.path.join(RUN_DIR_LOGS).join(EVENTS_FILE)
+    }
+
+    fn error_path(&self) -> PathBuf {
+        self.directory.path.join(RUN_DIR_LOGS).join(ERROR_FILE)
+    }
+
+    fn artifacts_manifest_path(&self) -> PathBuf {
+        self.artifact_dir().join(ARTIFACTS_FILE)
     }
 }
 
+fn create_run_dirs(path: &Path) -> RlabResult<()> {
+    ensure_dir(path)?;
+
+    for dir in [
+        RUN_DIR_LOGS,
+        RUN_DIR_ARTIFACTS,
+        RUN_DIR_TABLES,
+        RUN_DIR_FIGURES,
+        RUN_DIR_RESULTS,
+        RUN_DIR_EXTERNAL,
+        RUN_DIR_REPRODUCIBILITY,
+    ] {
+        ensure_dir(&path.join(dir))?;
+    }
+
+    Ok(())
+}
+
+fn write_initial_run_files(path: &Path, directory: &RunDirectory) -> RlabResult<()> {
+    write_json_atomic(&path.join(RUN_MANIFEST_FILE), directory)?;
+    write_yaml_atomic(&path.join(RUN_MANIFEST_YAML_FILE), directory)?;
+    write_text_atomic(&path.join(STATUS_FILE), RunStatus::Created.as_str())?;
+    write_json_atomic(&path.join(PARAMS_FILE), &directory.parameters)?;
+    write_text_atomic(&path.join(NOTES_FILE), "")
+}
+
+fn event_line(field: &str, message: &str) -> String {
+    let mut event = Map::with_capacity(3);
+
+    event.insert(
+        "schema_version".to_string(),
+        Value::Number(LOG_SCHEMA_VERSION.into()),
+    );
+    event.insert(field.to_string(), Value::String(message.to_string()));
+    event.insert(
+        "timestamp".to_string(),
+        Value::String(OffsetDateTime::now_utc().to_string()),
+    );
+
+    Value::Object(event).to_string()
+}
+
+fn artifact_source(artifact: &Value) -> RlabResult<PathBuf> {
+    let source_text = artifact
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RlabError::Artifact {
+            message: "artifact event is missing path".to_string(),
+        })?;
+
+    let source = PathBuf::from(source_text);
+
+    if source.is_file() {
+        return Ok(source);
+    }
+
+    Err(RlabError::Artifact {
+        message: format!("artifact path is not a file: {}", source.display()),
+    })
+}
+
+fn artifact_name(artifact: &Value) -> RlabResult<&str> {
+    artifact
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| RlabError::Artifact {
+            message: "artifact event is missing name".to_string(),
+        })
+}
+
+fn artifact_kind(artifact: &Value) -> &str {
+    match artifact.get("kind").and_then(Value::as_str) {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => "file",
+    }
+}
+
+fn staged_artifact(artifact: &Value, target: &Path) -> Value {
+    let mut staged = artifact.clone();
+
+    if let Some(object) = staged.as_object_mut() {
+        object.insert(
+            "staged_path".to_string(),
+            Value::String(target.display().to_string()),
+        );
+        object.insert(
+            "schema_version".to_string(),
+            Value::Number(ARTIFACT_SCHEMA_VERSION.into()),
+        );
+    }
+
+    staged
+}
+
 fn safe_artifact_file_name(name: &str, source: &Path) -> RlabResult<String> {
-    if name.contains(std::path::MAIN_SEPARATOR) || name.contains('/') || name.contains('\\') {
+    if contains_path_separator(name) {
         return Err(RlabError::Artifact {
             message: format!("artifact name must not contain path separators: {name}"),
         });
     }
-    let extension = source.extension().and_then(|value| value.to_str());
-    match extension {
-        Some(ext) if !ext.trim().is_empty() => Ok(format!("{name}.{ext}")),
+
+    match source.extension().and_then(|value| value.to_str()) {
+        Some(extension) if !extension.trim().is_empty() => Ok(format!("{name}.{extension}")),
         _ => Ok(name.to_string()),
     }
+}
+
+fn contains_path_separator(value: &str) -> bool {
+    value.contains(std::path::MAIN_SEPARATOR) || value.contains('/') || value.contains('\\')
 }

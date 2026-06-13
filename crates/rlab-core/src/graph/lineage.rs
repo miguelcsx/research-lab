@@ -1,9 +1,17 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
 
 use crate::config::ProjectPaths;
 use crate::error::RlabResult;
 use crate::journal::append::{append_jsonl, read_jsonl};
+
 const SCHEMA_VERSION: u32 = 1;
+const LINEAGE_PATH: &str = ".rlab/cache/lineage.jsonl";
+
+fn lineage_file(root: &Path) -> PathBuf {
+    root.join(LINEAGE_PATH)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LineageEdge {
@@ -38,7 +46,31 @@ pub fn add_lineage_edge(
 }
 
 pub fn lineage_for(paths: &ProjectPaths, reference: &str) -> RlabResult<LineageReport> {
-    let edges: Vec<LineageEdge> = read_jsonl(&paths.cache.join("lineage.jsonl"))?;
+    lineage_from_file(&paths.cache.join("lineage.jsonl"), reference)
+}
+
+pub fn add_lineage_edge_at_root(
+    root: &Path,
+    from: &str,
+    to: &str,
+    reason: Option<String>,
+) -> RlabResult<LineageEdge> {
+    let edge = LineageEdge {
+        schema_version: SCHEMA_VERSION,
+        from: from.to_string(),
+        to: to.to_string(),
+        reason,
+    };
+    append_jsonl(&lineage_file(root), &edge)?;
+    Ok(edge)
+}
+
+pub fn lineage_for_at_root(root: &Path, reference: &str) -> RlabResult<LineageReport> {
+    lineage_from_file(&lineage_file(root), reference)
+}
+
+fn lineage_from_file(path: &Path, reference: &str) -> RlabResult<LineageReport> {
+    let edges: Vec<LineageEdge> = read_jsonl(path)?;
     let upstream = edges
         .iter()
         .filter(|edge| edge.to == reference)

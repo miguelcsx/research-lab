@@ -88,12 +88,19 @@ mod tests {
             RunStatus::Completed,
             RunStatus::Failed,
         ] {
-            assert_eq!(RunStatus::parse(status.as_str()).unwrap(), status);
+            assert_eq!(expect_ok(RunStatus::parse(status.as_str())), status);
         }
     }
 
     #[test]
     fn parse_unknown_fails() {
         assert!(RunStatus::parse("unknown_status").is_err());
+    }
+
+    fn expect_ok<T>(result: RlabResult<T>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected Ok(..), got Err({error})"),
+        }
     }
 }

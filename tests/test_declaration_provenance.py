@@ -11,9 +11,13 @@ def test_imperative_declarations_keep_their_source_file(tmp_path: Path) -> None:
 
     records = {record["kind"]: record for record in project.records}
     expected = Path(__file__).resolve()
+    pipeline_source = records["pipeline"]["source"]
+    dataset_source = records["dataset"]["source"]
+    assert isinstance(pipeline_source, str)
+    assert isinstance(dataset_source, str)
 
-    assert Path(records["pipeline"]["source"]).resolve() == expected
-    assert Path(records["dataset"]["source"]).resolve() == expected
+    assert Path(pipeline_source).resolve() == expected
+    assert Path(dataset_source).resolve() == expected
 
 
 def test_decorators_are_project_bound() -> None:

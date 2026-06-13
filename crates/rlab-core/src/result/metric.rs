@@ -42,23 +42,40 @@ impl Metric {
     }
 
     pub fn validate(&self) -> RlabResult<()> {
-        if self.schema_version != METRIC_SCHEMA_VERSION {
-            return Err(RlabError::Validation {
-                message: "unsupported metric schema_version".to_string(),
-            });
-        }
-        if self.name.trim().is_empty() {
-            return Err(RlabError::Validation {
-                message: "metric name cannot be empty".to_string(),
-            });
-        }
-        if !self.value.is_finite() {
-            return Err(RlabError::Validation {
-                message: format!("metric {} value must be finite", self.name),
-            });
-        }
-        Ok(())
+        validate_schema_version(self.schema_version)?;
+        validate_name(&self.name)?;
+        validate_value(&self.name, self.value)
     }
+}
+
+fn validate_schema_version(schema_version: u32) -> RlabResult<()> {
+    if schema_version == METRIC_SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    validation_error("unsupported metric schema_version")
+}
+
+fn validate_name(name: &str) -> RlabResult<()> {
+    if !name.trim().is_empty() {
+        return Ok(());
+    }
+
+    validation_error("metric name cannot be empty")
+}
+
+fn validate_value(name: &str, value: f64) -> RlabResult<()> {
+    if value.is_finite() {
+        return Ok(());
+    }
+
+    validation_error(format!("metric {name} value must be finite"))
+}
+
+fn validation_error<T>(message: impl Into<String>) -> RlabResult<T> {
+    Err(RlabError::Validation {
+        message: message.into(),
+    })
 }
 
 #[cfg(test)]
@@ -67,38 +84,52 @@ mod tests {
 
     #[test]
     fn valid_metric_passes() {
-        let m = Metric::new(
+        let metric = Metric::new(
             "loss".to_string(),
             0.42,
             None,
             Some(MetricDirection::Minimize),
         );
-        assert!(m.validate().is_ok());
+
+        assert!(metric.validate().is_ok());
     }
 
     #[test]
     fn empty_name_fails() {
-        let m = Metric::new("  ".to_string(), 1.0, None, None);
-        assert!(m.validate().is_err());
+        let metric = Metric::new("  ".to_string(), 1.0, None, None);
+
+        assert!(metric.validate().is_err());
     }
 
     #[test]
     fn nan_value_fails() {
-        let m = Metric::new("loss".to_string(), f64::NAN, None, None);
-        assert!(m.validate().is_err());
+        let metric = Metric::new("loss".to_string(), f64::NAN, None, None);
+
+        assert!(metric.validate().is_err());
     }
 
     #[test]
     fn infinite_value_fails() {
-        let m = Metric::new("loss".to_string(), f64::INFINITY, None, None);
-        assert!(m.validate().is_err());
+        let metric = Metric::new("loss".to_string(), f64::INFINITY, None, None);
+
+        assert!(metric.validate().is_err());
     }
 
     #[test]
     fn direction_serde_roundtrip() {
-        let json = serde_json::to_string(&MetricDirection::Minimize).unwrap();
+        let json = expect_ok(serde_json::to_string(&MetricDirection::Minimize));
+
         assert_eq!(json, r#""minimize""#);
-        let back: MetricDirection = serde_json::from_str(&json).unwrap();
+
+        let back: MetricDirection = expect_ok(serde_json::from_str(&json));
+
         assert_eq!(back, MetricDirection::Minimize);
+    }
+
+    fn expect_ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected Ok(..), got Err({error})"),
+        }
     }
 }

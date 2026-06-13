@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -8,9 +9,11 @@ use crate::config::ProjectPaths;
 use crate::error::{RlabError, RlabResult};
 
 use super::directory::RunDirectory;
+use super::store::{
+    ARTIFACTS_FILE, ERROR_FILE, EVENTS_FILE, METRICS_SUMMARY_FILE, RESULTS_FILE, RUN_DIR_ARTIFACTS,
+    RUN_DIR_LOGS, RUN_MANIFEST_FILE,
+};
 use super::{RunId, RunStatus};
-
-const RUN_METADATA_FILE: &str = "run.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunSummary {
@@ -44,20 +47,19 @@ pub fn list_runs(paths: &ProjectPaths) -> RlabResult<Vec<RunSummary>> {
 
 pub fn show_run(paths: &ProjectPaths, id: &str) -> RlabResult<RunDirectory> {
     let run_id = RunId::parse(id.to_owned())?;
+
     read_run(&run_path(paths, run_id.as_str()))
 }
 
 pub fn inspect_run(paths: &ProjectPaths, id: &str) -> RlabResult<RunDetails> {
     let run = show_run(paths, id)?;
+
     Ok(RunDetails {
-        metrics: read_json_or_default(
-            &run.path.join("metrics_summary.json"),
-            Value::Object(Default::default()),
-        )?,
-        results: read_json_or_default(&run.path.join("results.json"), Value::Null)?,
-        artifacts: read_json_lines(&run.path.join("artifacts").join("artifacts.jsonl"))?,
-        logs: read_json_lines(&run.path.join("logs").join("events.jsonl"))?,
-        error: read_optional_text(&run.path.join("logs").join("error.txt"))?,
+        metrics: read_json_or_default(&run.path.join(METRICS_SUMMARY_FILE), empty_object())?,
+        results: read_json_or_default(&run.path.join(RESULTS_FILE), Value::Null)?,
+        artifacts: read_json_lines(&run.path.join(RUN_DIR_ARTIFACTS).join(ARTIFACTS_FILE))?,
+        logs: read_json_lines(&run.path.join(RUN_DIR_LOGS).join(EVENTS_FILE))?,
+        error: read_optional_text(&run.path.join(RUN_DIR_LOGS).join(ERROR_FILE))?,
         run,
     })
 }
@@ -69,27 +71,22 @@ fn read_run_summaries(runs_dir: &Path) -> RlabResult<Vec<RunSummary>> {
         let entry = entry.map_err(|error| RlabError::io(runs_dir, error))?;
         let path = entry.path();
 
-        if !path.is_dir() {
-            continue;
-        }
-
-        if let Some(summary) = read_run_summary_if_valid(&path) {
-            runs.push(summary);
+        if path.is_dir() {
+            push_run_summary_if_valid(&mut runs, &path);
         }
     }
 
     Ok(runs)
 }
 
-fn read_dir_entries(path: &Path) -> RlabResult<fs::ReadDir> {
-    fs::read_dir(path).map_err(|error| RlabError::io(path, error))
+fn push_run_summary_if_valid(runs: &mut Vec<RunSummary>, path: &Path) {
+    if let Ok(run) = read_run(path) {
+        runs.push(run_summary(run, path));
+    }
 }
 
-fn read_run_summary_if_valid(path: &Path) -> Option<RunSummary> {
-    match read_run(path) {
-        Ok(run) => Some(run_summary(run, path)),
-        Err(_) => None,
-    }
+fn read_dir_entries(path: &Path) -> RlabResult<fs::ReadDir> {
+    fs::read_dir(path).map_err(|error| RlabError::io(path, error))
 }
 
 fn run_summary(run: RunDirectory, path: &Path) -> RunSummary {
@@ -115,18 +112,23 @@ fn read_run(path: &Path) -> RlabResult<RunDirectory> {
 }
 
 fn run_metadata_path(path: &Path) -> PathBuf {
-    path.join(RUN_METADATA_FILE)
+    path.join(RUN_MANIFEST_FILE)
 }
 
 fn read_run_file(path: &Path) -> RlabResult<RunDirectory> {
     let content = fs::read_to_string(path).map_err(|error| RlabError::io(path, error))?;
-    serde_json::from_str(&content).map_err(RlabError::serialization)
+    let run: RunDirectory = serde_json::from_str(&content).map_err(RlabError::serialization)?;
+
+    run.validate_schema()?;
+
+    Ok(run)
 }
 
 fn read_json_or_default(path: &Path, default: Value) -> RlabResult<Value> {
     if !path.exists() {
         return Ok(default);
     }
+
     let content = fs::read_to_string(path).map_err(|error| RlabError::io(path, error))?;
     serde_json::from_str(&content).map_err(RlabError::serialization)
 }
@@ -135,21 +137,36 @@ fn read_json_lines(path: &Path) -> RlabResult<Vec<Value>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(path).map_err(|error| RlabError::io(path, error))?;
-    content
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).map_err(RlabError::serialization))
-        .collect()
+
+    let file = fs::File::open(path).map_err(|error| RlabError::io(path, error))?;
+    let reader = BufReader::new(file);
+    let mut values = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|error| RlabError::io(path, error))?;
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        values.push(serde_json::from_str(&line).map_err(RlabError::serialization)?);
+    }
+
+    Ok(values)
 }
 
 fn read_optional_text(path: &Path) -> RlabResult<Option<String>> {
     if !path.exists() {
         return Ok(None);
     }
+
     fs::read_to_string(path)
         .map(Some)
         .map_err(|error| RlabError::io(path, error))
+}
+
+fn empty_object() -> Value {
+    Value::Object(Default::default())
 }
 
 #[cfg(test)]
@@ -172,39 +189,52 @@ mod tests {
             cache: root.join(".rlab/cache"),
             registry_cache: root.join(".rlab/cache/registry.json"),
         };
-        let session = RunSession::create(
+
+        let session = expect_ok(RunSession::create(
             &paths,
             "evaluation",
             "quick",
             vec!["rlab".to_string()],
             json!({}),
-        )
-        .unwrap();
-        let id = session.directory.id.as_str().to_string();
-        session
-            .append_metric(&crate::result::Metric {
-                schema_version: 1,
-                name: "score".to_string(),
-                value: 0.75,
-                unit: None,
-                direction: None,
-                timestamp: time::OffsetDateTime::now_utc(),
-            })
-            .unwrap();
-        session.complete(json!({"data": {"score": 0.75}})).unwrap();
+        ));
 
-        let details = inspect_run(&paths, &id).unwrap();
+        let id = session.directory.id.as_str().to_string();
+
+        expect_ok(session.append_metric(&crate::result::Metric {
+            schema_version: 1,
+            name: "score".to_string(),
+            value: 0.75,
+            unit: None,
+            direction: None,
+            timestamp: time::OffsetDateTime::now_utc(),
+        }));
+
+        expect_ok(session.complete(json!({"data": {"score": 0.75}})));
+
+        let details = expect_ok(inspect_run(&paths, &id));
+
         assert_eq!(details.metrics["score"], 0.75);
         assert_eq!(details.results["data"]["score"], 0.75);
         assert_eq!(details.error, None);
-        fs::remove_dir_all(root).unwrap();
+
+        expect_ok(fs::remove_dir_all(root).map_err(|error| RlabError::Run {
+            message: format!("failed to remove temporary run directory: {error}"),
+        }));
     }
 
     fn temp_root(label: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos(),
+            Err(error) => panic!("system clock is before UNIX_EPOCH: {error}"),
+        };
+
         std::env::temp_dir().join(format!("rlab-{label}-{nonce}"))
+    }
+
+    fn expect_ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected Ok(..), got Err({error})"),
+        }
     }
 }

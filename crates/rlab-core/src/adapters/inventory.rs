@@ -15,7 +15,7 @@ pub struct AdapterInventory {
 
 pub fn adapter_inventory(registry: &Registry) -> RlabResult<AdapterInventory> {
     let mut adapters = Vec::new();
-    for record in registry.records_by_kind(RegistryKind::Adapter) {
+    for record in registry.records_by_kind(RegistryKind::ADAPTER) {
         let declared_capabilities = record
             .metadata
             .get("capabilities")

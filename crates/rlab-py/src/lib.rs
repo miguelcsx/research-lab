@@ -7,6 +7,7 @@ mod py_artifact;
 mod py_cli;
 mod py_config;
 mod py_external;
+mod py_lineage;
 mod py_project;
 mod py_registry;
 mod py_result;

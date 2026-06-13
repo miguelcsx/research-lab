@@ -10,10 +10,32 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Miguel Cardenas" }]
+dependencies = ["pyyaml>=6,<7"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Rust",
 ]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.19,<2",
+  "pytest>=9,<10",
+  "ruff>=0.14,<1",
+  "types-pyyaml>=6,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+follow_untyped_imports = true
 
 [project.scripts]
 rlab = "rlab.__main__:main"

@@ -194,28 +194,28 @@ fn collect_python_sources(directory: &Path, paths: &mut Vec<PathBuf>) {
 mod tests {
     use std::fs;
 
-    use rlab_core::{Registry, RegistryKind, RegistryRecord};
+    use rlab_core::{Registry, RegistryKind, RegistryRecord, RegistryRecordSpec};
 
     use super::{filter_registry, module_candidates};
 
     fn registry() -> Registry {
         let mut registry = Registry::new();
         for (kind, name) in [
-            (RegistryKind::Experiment, "train"),
-            (RegistryKind::Dataset, "corpus"),
+            (RegistryKind::EXPERIMENT, "train"),
+            (RegistryKind::DATASET, "corpus"),
         ] {
             registry
-                .insert(RegistryRecord::new(
+                .insert(RegistryRecord::from_spec(RegistryRecordSpec {
                     kind,
-                    name.to_string(),
-                    "1".to_string(),
-                    "project".to_string(),
-                    name.to_string(),
-                    "project.py".into(),
-                    Vec::new(),
-                    String::new(),
-                    Default::default(),
-                ))
+                    name: name.to_string(),
+                    version: "1".to_string(),
+                    module: "project".to_string(),
+                    qualname: name.to_string(),
+                    source: "project.py".into(),
+                    tags: Vec::new(),
+                    description: String::new(),
+                    metadata: Default::default(),
+                }))
                 .expect("valid registry record");
         }
         registry
@@ -225,36 +225,36 @@ mod tests {
     fn filters_by_singular_kind() {
         let filtered = filter_registry(registry(), Some("experiment")).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
-        assert_eq!(filtered.records[0].kind, RegistryKind::Experiment);
+        assert_eq!(filtered.records[0].kind, RegistryKind::EXPERIMENT);
     }
 
     #[test]
     fn filters_by_plural_kind() {
         let filtered = filter_registry(registry(), Some("datasets")).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
-        assert_eq!(filtered.records[0].kind, RegistryKind::Dataset);
+        assert_eq!(filtered.records[0].kind, RegistryKind::DATASET);
     }
 
     #[test]
     fn filters_studies_by_plural_kind() {
         let mut registry = registry();
         registry
-            .insert(RegistryRecord::new(
-                RegistryKind::Study,
-                "comparison".to_string(),
-                "1".to_string(),
-                "project".to_string(),
-                "comparison".to_string(),
-                "project.py".into(),
-                Vec::new(),
-                String::new(),
-                Default::default(),
-            ))
+            .insert(RegistryRecord::from_spec(RegistryRecordSpec {
+                kind: RegistryKind::STUDY,
+                name: "comparison".to_string(),
+                version: "1".to_string(),
+                module: "project".to_string(),
+                qualname: "comparison".to_string(),
+                source: "project.py".into(),
+                tags: Vec::new(),
+                description: String::new(),
+                metadata: Default::default(),
+            }))
             .expect("valid registry record");
 
         let filtered = filter_registry(registry, Some("studies")).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
-        assert_eq!(filtered.records[0].kind, RegistryKind::Study);
+        assert_eq!(filtered.records[0].kind, RegistryKind::STUDY);
     }
 
     #[test]
@@ -265,13 +265,13 @@ mod tests {
         fs::create_dir_all(package.join("nested")).expect("create package");
         fs::write(package.join("__init__.py"), "").expect("write init");
         fs::write(package.join("catalog.py"), "").expect("write module");
-        fs::write(package.join("nested").join("recipe.py"), "").expect("write nested module");
+        fs::write(package.join("nested").join("component.py"), "").expect("write nested module");
 
         let paths = module_candidates(&root, "training.experiments");
 
         assert!(paths.contains(&package.join("__init__.py")));
         assert!(paths.contains(&package.join("catalog.py")));
-        assert!(paths.contains(&package.join("nested").join("recipe.py")));
+        assert!(paths.contains(&package.join("nested").join("component.py")));
         fs::remove_dir_all(root).expect("remove package");
     }
 }

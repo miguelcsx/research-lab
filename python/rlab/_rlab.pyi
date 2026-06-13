@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 class EffectiveConfig:
     @property
@@ -79,6 +79,16 @@ class ProductionPolicy:
 def cli_main() -> int: ...
 def find_project_root(path: Path) -> Path: ...
 def load_config(root: Path | None = None) -> EffectiveConfig: ...
+def resolve_config_document(
+    root: Path,
+    name: str,
+    overrides_json: str = "{}",
+    suffix: str = ".yaml",
+    require_explicit_paths: bool = True,
+) -> str: ...
+def list_config_documents(root: Path, suffix: str = ".yaml") -> list[str]: ...
+def validate_config_documents(root: Path, suffix: str = ".yaml") -> str: ...
+def diff_config_documents(left_json: str, right_json: str) -> str: ...
 def bundle_from_metrics(metrics: Mapping[str, float]) -> ResultBundle: ...
 def run_external_command(
     args: list[str],
@@ -88,3 +98,13 @@ def run_external_command(
     stdout_path: Path | None = None,
     stderr_path: Path | None = None,
 ) -> str: ...
+def add_lineage_edge(
+    root: Path,
+    source: str,
+    target: str,
+    reason: str | None = None,
+) -> None: ...
+def lineage_for(
+    root: Path,
+    reference: str,
+) -> dict[str, list[str]]: ...

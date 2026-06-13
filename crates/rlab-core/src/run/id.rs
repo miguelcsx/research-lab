@@ -11,35 +11,41 @@ impl RunId {
         let formatted = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .map_err(RlabError::serialization)?;
-        let timestamp: String = formatted
-            .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
-            .collect();
-        let safe_name: String = name
-            .chars()
-            .map(|ch| {
-                if matches!(ch, '/' | '\\' | ' ') {
-                    '_'
-                } else {
-                    ch
-                }
-            })
-            .collect();
+        let timestamp = compact_timestamp(&formatted);
+        let safe_name = safe_id_component(name);
+
         Ok(Self(format!("{operation}_{safe_name}_{timestamp}")))
     }
 
     pub fn parse(value: String) -> RlabResult<Self> {
-        if value.trim().is_empty() {
-            return Err(RlabError::Run {
-                message: "run id cannot be empty".to_string(),
-            });
+        if !value.trim().is_empty() {
+            return Ok(Self(value));
         }
-        Ok(Self(value))
+
+        Err(RlabError::Run {
+            message: "run id cannot be empty".to_string(),
+        })
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+fn compact_timestamp(value: &str) -> String {
+    value.chars().filter(char::is_ascii_alphanumeric).collect()
+}
+
+fn safe_id_component(value: &str) -> String {
+    value.chars().map(safe_id_character).collect()
+}
+
+fn safe_id_character(character: char) -> char {
+    if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+        return character;
+    }
+
+    '_'
 }
 
 #[cfg(test)]
@@ -48,26 +54,36 @@ mod tests {
 
     #[test]
     fn new_contains_operation_and_name() {
-        let id = RunId::new("experiment", "my_exp").unwrap();
+        let id = expect_ok(RunId::new("experiment", "my_exp"));
+
         assert!(id.as_str().starts_with("experiment_my_exp_"));
     }
 
     #[test]
     fn new_sanitizes_path_separators() {
-        let id = RunId::new("run", "a/b c").unwrap();
+        let id = expect_ok(RunId::new("run", "a/b c"));
+
         assert!(!id.as_str().contains('/'));
         assert!(!id.as_str().contains(' '));
     }
 
     #[test]
     fn parse_empty_fails() {
-        assert!(RunId::parse("".to_string()).is_err());
+        assert!(RunId::parse(String::new()).is_err());
         assert!(RunId::parse("   ".to_string()).is_err());
     }
 
     #[test]
     fn parse_nonempty_succeeds() {
-        let id = RunId::parse("experiment_foo_20240101".to_string()).unwrap();
+        let id = expect_ok(RunId::parse("experiment_foo_20240101".to_string()));
+
         assert_eq!(id.as_str(), "experiment_foo_20240101");
+    }
+
+    fn expect_ok<T>(result: RlabResult<T>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected Ok(..), got Err({error})"),
+        }
     }
 }

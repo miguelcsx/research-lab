@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
+
+from rlab._typing import JsonObject
 
 
 @dataclass(slots=True)
@@ -12,8 +14,13 @@ class StudyPlan:
     outcomes: tuple[str, ...] = ()
     schema_version: int = 1
 
-    def to_dict(self) -> dict:
-        return asdict(self)
+    def to_dict(self) -> JsonObject:
+        return {
+            "question": self.question,
+            "experiments": list(self.experiments),
+            "outcomes": list(self.outcomes),
+            "schema_version": self.schema_version,
+        }
 
 
 @dataclass(slots=True)
@@ -22,7 +29,7 @@ class Study:
     plan: StudyPlan
     schema_version: int = 1
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> JsonObject:
         return {
             "schema_version": self.schema_version,
             "name": self.name,

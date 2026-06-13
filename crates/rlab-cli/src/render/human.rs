@@ -28,59 +28,7 @@ pub fn print_registry(registry: &Registry) -> RlabResult<()> {
 }
 
 fn registry_reference(record: &rlab_core::registry::RegistryRecord) -> String {
-    if record.kind == rlab_core::registry::RegistryKind::Component {
-        if let Some(component_kind) = record
-            .metadata
-            .get("component_kind")
-            .and_then(serde_json::Value::as_str)
-        {
-            return format!("{component_kind}:{}", record.name);
-        }
-    }
     format!("{}:{}", record.kind.as_str(), record.name)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-    use std::path::PathBuf;
-
-    use rlab_core::{RegistryKind, RegistryRecord};
-    use serde_json::json;
-
-    use super::registry_reference;
-
-    fn record(kind: RegistryKind, name: &str) -> RegistryRecord {
-        RegistryRecord::new(
-            kind,
-            name.to_string(),
-            "1".to_string(),
-            "project.module".to_string(),
-            name.to_string(),
-            PathBuf::from("project/module.py"),
-            Vec::new(),
-            String::new(),
-            BTreeMap::new(),
-        )
-    }
-
-    #[test]
-    fn renders_standard_registry_reference() {
-        assert_eq!(
-            registry_reference(&record(RegistryKind::Dataset, "project.clean")),
-            "dataset:project.clean"
-        );
-    }
-
-    #[test]
-    fn renders_component_reference_using_component_kind() {
-        let mut record = record(RegistryKind::Component, "bpe");
-        record
-            .metadata
-            .insert("component_kind".to_string(), json!("tokenizer"));
-
-        assert_eq!(registry_reference(&record), "tokenizer:bpe");
-    }
 }
 
 pub fn print_runs(runs: &[RunSummary]) -> RlabResult<()> {
@@ -114,5 +62,47 @@ pub fn print_findings(findings: &[DiagnosticFinding]) {
             DiagnosticLevel::Error => "error",
         };
         print_line(&format!("{level}: {}", finding.message));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    use super::registry_reference;
+    use rlab_core::{RegistryKind, RegistryRecord, RegistryRecordSpec};
+
+    fn record(kind: RegistryKind, name: &str) -> RegistryRecord {
+        RegistryRecord::from_spec(RegistryRecordSpec {
+            kind,
+            name: name.to_string(),
+            version: "1".to_string(),
+            module: "project.module".to_string(),
+            qualname: name.to_string(),
+            source: PathBuf::from("project/module.py"),
+            tags: Vec::new(),
+            description: String::new(),
+            metadata: BTreeMap::new(),
+        })
+    }
+
+    #[test]
+    fn renders_standard_registry_reference() {
+        assert_eq!(
+            registry_reference(&record(RegistryKind::DATASET, "project.clean")),
+            "dataset:project.clean"
+        );
+    }
+
+    #[test]
+    fn renders_namespaced_component_reference() {
+        assert_eq!(
+            registry_reference(&record(
+                RegistryKind::parse("tokenizer").expect("custom kind"),
+                "bpe"
+            )),
+            "tokenizer:bpe"
+        );
     }
 }

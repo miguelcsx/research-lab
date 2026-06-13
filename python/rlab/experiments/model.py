@@ -2,163 +2,220 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass, field
-from typing import Any, TypeAlias
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
+from itertools import product
+from typing import Final, TypeAlias, cast
 
-JsonDict: TypeAlias = dict[str, Any]
-AxisMap: TypeAlias = Mapping[str, list[Any]]
-MutableAxisMap: TypeAlias = dict[str, list[Any]]
-ExpandedRow: TypeAlias = dict[str, Any]
+from rlab._typing import JsonObject, JsonValue
+
+AxisMap: TypeAlias = Mapping[str, list[JsonValue]]
+MutableAxisMap: TypeAlias = dict[str, list[JsonValue]]
+ExpandedRow: TypeAlias = dict[str, JsonValue]
+
+SCHEMA_VERSION: Final = 1
+DEFAULT_VERSION: Final = "1"
+DEFAULT_DELAY_SECONDS: Final = 0.0
+DEFAULT_SEED: Final = 0
+
+KIND_CHOICE: Final = "choice"
+KIND_UNIFORM: Final = "uniform"
+KIND_LOG_UNIFORM: Final = "log_uniform"
+
+KEY_SCHEMA_VERSION: Final = "schema_version"
+KEY_MAX_ATTEMPTS: Final = "max_attempts"
+KEY_ON: Final = "on"
+KEY_DELAY_SECONDS: Final = "delay_seconds"
+KEY_NAME: Final = "name"
+KEY_QUESTION: Final = "question"
+KEY_HYPOTHESIS: Final = "hypothesis"
+KEY_MATRIX: Final = "matrix"
+KEY_METRICS: Final = "metrics"
+KEY_SEEDS: Final = "seeds"
+KEY_RETRY: Final = "retry"
+KEY_DATA: Final = "data"
+KEY_AXES: Final = "axes"
+KEY_KIND: Final = "kind"
+KEY_VALUES: Final = "values"
+KEY_LOW: Final = "low"
+KEY_HIGH: Final = "high"
+KEY_SPACE: Final = "space"
+KEY_N: Final = "n"
+KEY_SEED: Final = "seed"
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class RetryPolicy:
     """Retry policy for transient experiment failures."""
 
     max_attempts: int = 1
     on: tuple[str, ...] = ()
-    delay_seconds: float = 0.0
-    schema_version: int = 1
+    delay_seconds: float = DEFAULT_DELAY_SECONDS
+    schema_version: int = SCHEMA_VERSION
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self) -> JsonObject:
+        return {
+            KEY_MAX_ATTEMPTS: self.max_attempts,
+            KEY_ON: list(self.on),
+            KEY_DELAY_SECONDS: self.delay_seconds,
+            KEY_SCHEMA_VERSION: self.schema_version,
+        }
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Experiment:
     """Declarative experiment specification."""
 
     name: str
     question: str | None = None
     hypothesis: str | None = None
-    matrix: Mapping[str, list[Any]] = field(default_factory=dict)
+    matrix: AxisMap = field(default_factory=dict)
     metrics: tuple[str, ...] = ()
     seeds: tuple[int, ...] = ()
     retry: RetryPolicy = field(default_factory=RetryPolicy)
-    schema_version: int = 1
+    schema_version: int = SCHEMA_VERSION
 
-    def to_dict(self) -> dict[str, Any]:
-        value = asdict(self)
-        value["matrix"] = dict(self.matrix)
-        return value
+    def to_dict(self) -> JsonObject:
+        return {
+            KEY_NAME: self.name,
+            KEY_QUESTION: self.question,
+            KEY_HYPOTHESIS: self.hypothesis,
+            KEY_MATRIX: cast(JsonValue, _axes_to_dict(self.matrix)),
+            KEY_METRICS: list(self.metrics),
+            KEY_SEEDS: list(self.seeds),
+            KEY_RETRY: self.retry.to_dict(),
+            KEY_SCHEMA_VERSION: self.schema_version,
+        }
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ExperimentResult:
     """Normalized experiment result returned by user code or runner code."""
 
     metrics: dict[str, float] = field(default_factory=dict)
-    data: dict[str, Any] = field(default_factory=dict)
-    schema_version: int = 1
+    data: JsonObject = field(default_factory=dict)
+    schema_version: int = SCHEMA_VERSION
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self) -> JsonObject:
+        return {
+            KEY_METRICS: _metrics(self.metrics),
+            KEY_DATA: dict(self.data),
+            KEY_SCHEMA_VERSION: self.schema_version,
+        }
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Grid:
-    axes: Mapping[str, list[Any]]
+    axes: AxisMap
 
-    def where(self, predicate: Callable[[dict[str, Any]], bool]) -> "Grid":
+    def where(self, predicate: Callable[[JsonObject], bool]) -> "Grid":
         filtered = _empty_axes_like(self.axes)
 
-        for row in _expand(dict(self.axes)):
+        for row in _expanded_rows(self.axes):
             if predicate(row):
                 _append_unique_axis_values(filtered, row)
 
         return Grid(filtered)
 
-    def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": 1, "axes": dict(self.axes)}
-
-
-@dataclass(slots=True)
-class Distribution:
-    kind: str
-    values: tuple[Any, ...] = ()
-    low: float | None = None
-    high: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class Sample:
-    space: Mapping[str, Distribution]
-    n: int
-    seed: int = 0
-    schema_version: int = 1
-
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         return {
-            "schema_version": self.schema_version,
-            "space": _distribution_space_to_dict(self.space),
-            "n": self.n,
-            "seed": self.seed,
+            KEY_SCHEMA_VERSION: SCHEMA_VERSION,
+            KEY_AXES: cast(JsonValue, _axes_to_dict(self.axes)),
         }
 
 
-def factor(values: list[Any] | tuple[Any, ...]) -> list[Any]:
+@dataclass(frozen=True, slots=True)
+class Distribution:
+    kind: str
+    values: tuple[JsonValue, ...] = ()
+    low: float | None = None
+    high: float | None = None
+
+    def to_dict(self) -> JsonObject:
+        return {
+            KEY_KIND: self.kind,
+            KEY_VALUES: list(self.values),
+            KEY_LOW: self.low,
+            KEY_HIGH: self.high,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Sample:
+    space: Mapping[str, Distribution]
+    n: int
+    seed: int = DEFAULT_SEED
+    schema_version: int = SCHEMA_VERSION
+
+    def to_dict(self) -> JsonObject:
+        return {
+            KEY_SCHEMA_VERSION: self.schema_version,
+            KEY_SPACE: _distribution_space_to_dict(self.space),
+            KEY_N: self.n,
+            KEY_SEED: self.seed,
+        }
+
+
+def factor(values: list[JsonValue] | tuple[JsonValue, ...]) -> list[JsonValue]:
     """Return an explicit matrix factor."""
     return list(values)
 
 
-def grid(axes: Mapping[str, list[Any]]) -> Grid:
+def grid(axes: AxisMap) -> Grid:
     """Create a grid-search matrix helper."""
-    return Grid(dict(axes))
+    return Grid(_axes_to_dict(axes))
 
 
-def choice(values: list[Any] | tuple[Any, ...]) -> Distribution:
+def choice(values: list[JsonValue] | tuple[JsonValue, ...]) -> Distribution:
     """Create a discrete sampling distribution."""
-    return Distribution(kind="choice", values=tuple(values))
+    return Distribution(kind=KIND_CHOICE, values=tuple(values))
 
 
 def uniform(low: float, high: float) -> Distribution:
     """Create a uniform sampling distribution."""
-    return _bounded_distribution("uniform", low, high)
+    return _bounded_distribution(KIND_UNIFORM, low, high)
 
 
 def log_uniform(low: float, high: float) -> Distribution:
     """Create a log-uniform sampling distribution."""
-    return _bounded_distribution("log_uniform", low, high)
+    return _bounded_distribution(KIND_LOG_UNIFORM, low, high)
 
 
 def _bounded_distribution(kind: str, low: float, high: float) -> Distribution:
     return Distribution(kind=kind, low=float(low), high=float(high))
 
 
-def _distribution_space_to_dict(space: Mapping[str, Distribution]) -> dict[str, Any]:
-    return {key: value.to_dict() for key, value in space.items()}
+def _distribution_space_to_dict(space: Mapping[str, Distribution]) -> JsonObject:
+    return {key: distribution.to_dict() for key, distribution in space.items()}
+
+
+def _axes_to_dict(axes: AxisMap) -> MutableAxisMap:
+    return {key: list(values) for key, values in axes.items()}
 
 
 def _empty_axes_like(axes: AxisMap) -> MutableAxisMap:
     return {key: [] for key in axes}
 
 
-def _append_unique_axis_values(axes: MutableAxisMap, row: Mapping[str, Any]) -> None:
+def _append_unique_axis_values(
+    axes: MutableAxisMap,
+    row: Mapping[str, JsonValue],
+) -> None:
     for key, value in row.items():
-        if value not in axes[key]:
-            axes[key].append(value)
+        values = axes[key]
+        if value not in values:
+            values.append(value)
 
 
-def _expand(axes: dict[str, list[Any]]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = [{}]
+def _expanded_rows(axes: AxisMap) -> Iterator[ExpandedRow]:
+    if not axes:
+        yield {}
+        return
 
-    for key, values in axes.items():
-        rows = _expand_axis(rows, key, values)
-
-    return rows
-
-
-def _expand_axis(
-    rows: Iterable[ExpandedRow],
-    key: str,
-    values: Iterable[Any],
-) -> list[ExpandedRow]:
-    return [_with_axis_value(row, key, value) for row in rows for value in values]
+    keys = tuple(axes)
+    for values in product(*(axes[key] for key in keys)):
+        yield dict(zip(keys, values, strict=True))
 
 
-def _with_axis_value(row: Mapping[str, Any], key: str, value: Any) -> ExpandedRow:
-    return {**row, key: value}
+def _metrics(metrics: Mapping[str, float]) -> JsonObject:
+    return dict(metrics)

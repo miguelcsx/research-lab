@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::error::{RlabError, RlabResult};
@@ -28,22 +29,36 @@ pub const RUN_DIR_REPRODUCIBILITY: &str = "reproducibility";
 
 pub fn read_metrics(run_dir: &Path) -> RlabResult<Vec<Metric>> {
     let path = run_dir.join(METRICS_FILE);
+
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(&path).map_err(|error| RlabError::io(&path, error))?;
-    content
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str::<Metric>(line).map_err(RlabError::serialization))
-        .collect()
+
+    let file = fs::File::open(&path).map_err(|error| RlabError::io(&path, error))?;
+    let reader = BufReader::new(file);
+    let mut metrics = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|error| RlabError::io(&path, error))?;
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        metrics.push(serde_json::from_str::<Metric>(&line).map_err(RlabError::serialization)?);
+    }
+
+    Ok(metrics)
 }
 
 pub fn write_metric_summary(run_dir: &Path) -> RlabResult<BTreeMap<String, f64>> {
     let mut summary = BTreeMap::new();
+
     for metric in read_metrics(run_dir)? {
         summary.insert(metric.name, metric.value);
     }
+
     write_json_atomic(&run_dir.join(METRICS_SUMMARY_FILE), &summary)?;
+
     Ok(summary)
 }

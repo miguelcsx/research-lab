@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{RlabError, RlabResult};
+
 const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,21 +32,32 @@ impl RetryPolicy {
     }
 
     pub fn validate(&self) -> RlabResult<()> {
-        if self.schema_version != 1 {
-            return Err(RlabError::Validation {
-                message: "unsupported retry policy schema_version".to_string(),
-            });
-        }
-        if self.max_attempts == 0 {
-            return Err(RlabError::Validation {
-                message: "retry max_attempts must be at least 1".to_string(),
-            });
-        }
-        if !self.delay_seconds.is_finite() || self.delay_seconds < 0.0 {
-            return Err(RlabError::Validation {
-                message: "retry delay_seconds must be finite and non-negative".to_string(),
-            });
-        }
-        Ok(())
+        validate_schema_version(self.schema_version)?;
+        validate_max_attempts(self.max_attempts)?;
+        validate_delay_seconds(self.delay_seconds)
     }
+}
+
+fn validate_schema_version(schema_version: u32) -> RlabResult<()> {
+    if schema_version == SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    Err(RlabError::validation("unsupported retry policy schema_version"))
+}
+
+fn validate_max_attempts(max_attempts: u32) -> RlabResult<()> {
+    if max_attempts > 0 {
+        return Ok(());
+    }
+
+    Err(RlabError::validation("retry max_attempts must be at least 1"))
+}
+
+fn validate_delay_seconds(delay_seconds: f64) -> RlabResult<()> {
+    if delay_seconds.is_finite() && delay_seconds >= 0.0 {
+        return Ok(());
+    }
+
+    Err(RlabError::validation("retry delay_seconds must be finite and non-negative"))
 }

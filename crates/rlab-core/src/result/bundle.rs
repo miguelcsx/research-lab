@@ -24,10 +24,12 @@ impl ResultBundle {
     }
 
     pub fn from_metric_map(metrics: BTreeMap<String, f64>) -> Self {
-        let metric_values = metrics
-            .into_iter()
-            .map(|(name, value)| Metric::new(name, value, None, None))
-            .collect();
+        let mut metric_values = Vec::with_capacity(metrics.len());
+
+        for (name, value) in metrics {
+            metric_values.push(Metric::new(name, value, None, None));
+        }
+
         Self {
             schema_version: RESULT_BUNDLE_SCHEMA_VERSION,
             metrics: metric_values,

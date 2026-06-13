@@ -29,11 +29,12 @@ pub struct RunDirectory {
 
 impl RunDirectory {
     pub fn validate_schema(&self) -> RlabResult<()> {
-        if self.schema_version != RUN_SCHEMA_VERSION {
-            return Err(RlabError::Run {
-                message: format!("unsupported run schema version: {}", self.schema_version),
-            });
+        if self.schema_version == RUN_SCHEMA_VERSION {
+            return Ok(());
         }
-        Ok(())
+
+        Err(RlabError::Run {
+            message: format!("unsupported run schema version: {}", self.schema_version),
+        })
     }
 }

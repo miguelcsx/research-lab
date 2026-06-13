@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -9,11 +10,10 @@ use crate::error::{RlabError, RlabResult};
 use super::schema::REGISTRY_SCHEMA_VERSION;
 use super::validate::validate_registry_record;
 
-const UNKNOWN_REGISTRY_KIND_PREFIX: &str = "unknown registry kind";
+const INVALID_REGISTRY_KIND_PREFIX: &str = "invalid registry kind";
 const DUPLICATE_REGISTRY_RECORD_PREFIX: &str = "duplicate registry record";
 
 const KIND_EXPERIMENT: &str = "experiment";
-const KIND_COMPONENT: &str = "component";
 const KIND_BENCHMARK: &str = "benchmark";
 const KIND_WORKFLOW: &str = "workflow";
 const KIND_EVALUATION: &str = "evaluation";
@@ -34,87 +34,80 @@ const KIND_ADAPTER: &str = "adapter";
 const KIND_LOADER: &str = "loader";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RegistryKind {
-    Experiment,
-    Component,
-    Benchmark,
-    Workflow,
-    Evaluation,
-    ExternalEvaluation,
-    ResultSchema,
-    Study,
-    Source,
-    Transform,
-    Filter,
-    Group,
-    Dedup,
-    Sink,
-    Check,
-    Metric,
-    Pipeline,
-    Dataset,
-    Adapter,
-    Loader,
-}
+#[serde(transparent)]
+pub struct RegistryKind(Cow<'static, str>);
 
 impl RegistryKind {
+    pub const EXPERIMENT: Self = Self::constant(KIND_EXPERIMENT);
+    pub const BENCHMARK: Self = Self::constant(KIND_BENCHMARK);
+    pub const WORKFLOW: Self = Self::constant(KIND_WORKFLOW);
+    pub const EVALUATION: Self = Self::constant(KIND_EVALUATION);
+    pub const EXTERNAL_EVALUATION: Self = Self::constant(KIND_EXTERNAL_EVALUATION);
+    pub const RESULT_SCHEMA: Self = Self::constant(KIND_RESULT_SCHEMA);
+    pub const STUDY: Self = Self::constant(KIND_STUDY);
+    pub const SOURCE: Self = Self::constant(KIND_SOURCE);
+    pub const TRANSFORM: Self = Self::constant(KIND_TRANSFORM);
+    pub const FILTER: Self = Self::constant(KIND_FILTER);
+    pub const GROUP: Self = Self::constant(KIND_GROUP);
+    pub const DEDUP: Self = Self::constant(KIND_DEDUP);
+    pub const SINK: Self = Self::constant(KIND_SINK);
+    pub const CHECK: Self = Self::constant(KIND_CHECK);
+    pub const METRIC: Self = Self::constant(KIND_METRIC);
+    pub const PIPELINE: Self = Self::constant(KIND_PIPELINE);
+    pub const DATASET: Self = Self::constant(KIND_DATASET);
+    pub const ADAPTER: Self = Self::constant(KIND_ADAPTER);
+    pub const LOADER: Self = Self::constant(KIND_LOADER);
+
+    const fn constant(value: &'static str) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+
     pub fn parse(value: &str) -> RlabResult<Self> {
-        registry_kind_from_str(value).ok_or_else(|| RlabError::Registry {
-            message: format!("{UNKNOWN_REGISTRY_KIND_PREFIX}: {value}"),
+        validate_kind(value)?;
+
+        Ok(match value {
+            KIND_EXPERIMENT => Self::EXPERIMENT,
+            KIND_BENCHMARK => Self::BENCHMARK,
+            KIND_WORKFLOW => Self::WORKFLOW,
+            KIND_EVALUATION => Self::EVALUATION,
+            KIND_EXTERNAL_EVALUATION => Self::EXTERNAL_EVALUATION,
+            KIND_RESULT_SCHEMA => Self::RESULT_SCHEMA,
+            KIND_STUDY => Self::STUDY,
+            KIND_SOURCE => Self::SOURCE,
+            KIND_TRANSFORM => Self::TRANSFORM,
+            KIND_FILTER => Self::FILTER,
+            KIND_GROUP => Self::GROUP,
+            KIND_DEDUP => Self::DEDUP,
+            KIND_SINK => Self::SINK,
+            KIND_CHECK => Self::CHECK,
+            KIND_METRIC => Self::METRIC,
+            KIND_PIPELINE => Self::PIPELINE,
+            KIND_DATASET => Self::DATASET,
+            KIND_ADAPTER => Self::ADAPTER,
+            KIND_LOADER => Self::LOADER,
+            _ => Self(Cow::Owned(value.to_string())),
         })
     }
 
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Experiment => KIND_EXPERIMENT,
-            Self::Component => KIND_COMPONENT,
-            Self::Benchmark => KIND_BENCHMARK,
-            Self::Workflow => KIND_WORKFLOW,
-            Self::Evaluation => KIND_EVALUATION,
-            Self::ExternalEvaluation => KIND_EXTERNAL_EVALUATION,
-            Self::ResultSchema => KIND_RESULT_SCHEMA,
-            Self::Study => KIND_STUDY,
-            Self::Source => KIND_SOURCE,
-            Self::Transform => KIND_TRANSFORM,
-            Self::Filter => KIND_FILTER,
-            Self::Group => KIND_GROUP,
-            Self::Dedup => KIND_DEDUP,
-            Self::Sink => KIND_SINK,
-            Self::Check => KIND_CHECK,
-            Self::Metric => KIND_METRIC,
-            Self::Pipeline => KIND_PIPELINE,
-            Self::Dataset => KIND_DATASET,
-            Self::Adapter => KIND_ADAPTER,
-            Self::Loader => KIND_LOADER,
-        }
+    pub fn validate(&self) -> RlabResult<()> {
+        validate_kind(self.as_str())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-fn registry_kind_from_str(value: &str) -> Option<RegistryKind> {
-    match value {
-        KIND_EXPERIMENT => Some(RegistryKind::Experiment),
-        KIND_COMPONENT => Some(RegistryKind::Component),
-        KIND_BENCHMARK => Some(RegistryKind::Benchmark),
-        KIND_WORKFLOW => Some(RegistryKind::Workflow),
-        KIND_EVALUATION => Some(RegistryKind::Evaluation),
-        KIND_EXTERNAL_EVALUATION => Some(RegistryKind::ExternalEvaluation),
-        KIND_RESULT_SCHEMA => Some(RegistryKind::ResultSchema),
-        KIND_STUDY => Some(RegistryKind::Study),
-        KIND_SOURCE => Some(RegistryKind::Source),
-        KIND_TRANSFORM => Some(RegistryKind::Transform),
-        KIND_FILTER => Some(RegistryKind::Filter),
-        KIND_GROUP => Some(RegistryKind::Group),
-        KIND_DEDUP => Some(RegistryKind::Dedup),
-        KIND_SINK => Some(RegistryKind::Sink),
-        KIND_CHECK => Some(RegistryKind::Check),
-        KIND_METRIC => Some(RegistryKind::Metric),
-        KIND_PIPELINE => Some(RegistryKind::Pipeline),
-        KIND_DATASET => Some(RegistryKind::Dataset),
-        KIND_ADAPTER => Some(RegistryKind::Adapter),
-        KIND_LOADER => Some(RegistryKind::Loader),
-        _ => None,
+fn validate_kind(value: &str) -> RlabResult<()> {
+    if value.is_empty() || !value.chars().all(is_valid_kind_character) {
+        return Err(RlabError::registry(format!("{INVALID_REGISTRY_KIND_PREFIX}: {value}")));
     }
+
+    Ok(())
+}
+
+fn is_valid_kind_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '_'
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -132,73 +125,36 @@ pub struct RegistryRecord {
 }
 
 impl RegistryRecord {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        kind: RegistryKind,
-        name: String,
-        version: String,
-        module: String,
-        qualname: String,
-        source: PathBuf,
-        tags: Vec<String>,
-        description: String,
-        metadata: BTreeMap<String, Value>,
-    ) -> Self {
-        Self::from_args(RegistryRecordArgs {
-            kind,
-            name,
-            version,
-            module,
-            qualname,
-            source,
-            tags,
-            description,
-            metadata,
-        })
-    }
-
-    fn from_args(args: RegistryRecordArgs) -> Self {
+    pub fn from_spec(spec: RegistryRecordSpec) -> Self {
         Self {
             schema_version: REGISTRY_SCHEMA_VERSION,
-            kind: args.kind,
-            name: args.name,
-            version: args.version,
-            module: args.module,
-            qualname: args.qualname,
-            source: args.source,
-            tags: args.tags,
-            description: args.description,
-            metadata: args.metadata,
+            kind: spec.kind,
+            name: spec.name,
+            version: spec.version,
+            module: spec.module,
+            qualname: spec.qualname,
+            source: spec.source,
+            tags: spec.tags,
+            description: spec.description,
+            metadata: spec.metadata,
         }
     }
 
     fn has_identity(&self, kind: &RegistryKind, name: &str) -> bool {
         self.kind == *kind && self.name == name
     }
-
-    fn identity(&self) -> RegistryRecordIdentity<'_> {
-        RegistryRecordIdentity {
-            kind: &self.kind,
-            name: &self.name,
-        }
-    }
 }
 
-struct RegistryRecordArgs {
-    kind: RegistryKind,
-    name: String,
-    version: String,
-    module: String,
-    qualname: String,
-    source: PathBuf,
-    tags: Vec<String>,
-    description: String,
-    metadata: BTreeMap<String, Value>,
-}
-
-struct RegistryRecordIdentity<'a> {
-    kind: &'a RegistryKind,
-    name: &'a str,
+pub struct RegistryRecordSpec {
+    pub kind: RegistryKind,
+    pub name: String,
+    pub version: String,
+    pub module: String,
+    pub qualname: String,
+    pub source: PathBuf,
+    pub tags: Vec<String>,
+    pub description: String,
+    pub metadata: BTreeMap<String, Value>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -220,7 +176,11 @@ impl Registry {
 
         match self.find_existing(&record) {
             Some(existing) if existing == &record => Ok(()),
-            Some(_) => Err(duplicate_record_error(record.identity())),
+            Some(_) => Err(RlabError::registry(format!(
+                "{DUPLICATE_REGISTRY_RECORD_PREFIX}: {}:{}",
+                record.kind.as_str(),
+                record.name
+            ))),
             None => {
                 self.records.push(record);
                 Ok(())
@@ -229,6 +189,10 @@ impl Registry {
     }
 
     pub fn validate(&self) -> RlabResult<()> {
+        if self.schema_version != REGISTRY_SCHEMA_VERSION {
+            return Err(RlabError::registry("unsupported registry schema version"));
+        }
+
         for record in &self.records {
             validate_registry_record(record)?;
         }
@@ -237,38 +201,28 @@ impl Registry {
     }
 
     pub fn find(&self, kind: RegistryKind, name: &str) -> Option<&RegistryRecord> {
-        self.find_by_identity(&kind, name)
+        self.find_ref(&kind, name)
+    }
+
+    pub fn find_ref(&self, kind: &RegistryKind, name: &str) -> Option<&RegistryRecord> {
+        self.records
+            .iter()
+            .find(|record| record.has_identity(kind, name))
     }
 
     pub fn records_by_kind(&self, kind: RegistryKind) -> Vec<&RegistryRecord> {
         self.records_by_kind_ref(&kind)
     }
 
-    fn find_existing(&self, record: &RegistryRecord) -> Option<&RegistryRecord> {
-        self.find_by_identity(&record.kind, &record.name)
-    }
-
-    fn find_by_identity(&self, kind: &RegistryKind, name: &str) -> Option<&RegistryRecord> {
-        self.records
-            .iter()
-            .find(|record| record.has_identity(kind, name))
-    }
-
-    fn records_by_kind_ref(&self, kind: &RegistryKind) -> Vec<&RegistryRecord> {
+    pub fn records_by_kind_ref(&self, kind: &RegistryKind) -> Vec<&RegistryRecord> {
         self.records
             .iter()
             .filter(|record| record.kind == *kind)
             .collect()
     }
-}
 
-fn duplicate_record_error(identity: RegistryRecordIdentity<'_>) -> RlabError {
-    RlabError::Registry {
-        message: format!(
-            "{DUPLICATE_REGISTRY_RECORD_PREFIX}: {}:{}",
-            identity.kind.as_str(),
-            identity.name
-        ),
+    fn find_existing(&self, record: &RegistryRecord) -> Option<&RegistryRecord> {
+        self.find_ref(&record.kind, &record.name)
     }
 }
 
@@ -282,17 +236,17 @@ mod tests {
     const PYTHON_EXTENSION: &str = "py";
 
     fn make_record(kind: RegistryKind, name: &str) -> RegistryRecord {
-        RegistryRecord::new(
+        RegistryRecord::from_spec(RegistryRecordSpec {
             kind,
-            name.to_owned(),
-            TEST_VERSION.to_owned(),
-            TEST_MODULE.to_owned(),
-            name.to_owned(),
-            source_path(name),
-            Vec::new(),
-            String::new(),
-            BTreeMap::new(),
-        )
+            name: name.to_owned(),
+            version: TEST_VERSION.to_owned(),
+            module: TEST_MODULE.to_owned(),
+            qualname: name.to_owned(),
+            source: source_path(name),
+            tags: Vec::new(),
+            description: String::new(),
+            metadata: BTreeMap::new(),
+        })
     }
 
     fn source_path(name: &str) -> PathBuf {
@@ -309,18 +263,21 @@ mod tests {
     #[test]
     fn insert_and_find() {
         let mut registry = Registry::new();
-        let record = make_record(RegistryKind::Experiment, "exp1");
+        let record = make_record(RegistryKind::EXPERIMENT, "exp1");
 
         expect_ok(registry.insert(record));
 
-        assert!(registry.find(RegistryKind::Experiment, "exp1").is_some());
-        assert!(registry.find(RegistryKind::Experiment, "other").is_none());
+        assert!(registry.find(RegistryKind::EXPERIMENT, "exp1").is_some());
+        assert!(registry
+            .find_ref(&RegistryKind::EXPERIMENT, "exp1")
+            .is_some());
+        assert!(registry.find(RegistryKind::EXPERIMENT, "other").is_none());
     }
 
     #[test]
     fn insert_duplicate_identical_is_idempotent() {
         let mut registry = Registry::new();
-        let record = make_record(RegistryKind::Benchmark, "bench1");
+        let record = make_record(RegistryKind::BENCHMARK, "bench1");
 
         expect_ok(registry.insert(record.clone()));
 
@@ -332,9 +289,9 @@ mod tests {
     fn insert_duplicate_different_fails() {
         let mut registry = Registry::new();
 
-        expect_ok(registry.insert(make_record(RegistryKind::Experiment, "exp1")));
+        expect_ok(registry.insert(make_record(RegistryKind::EXPERIMENT, "exp1")));
 
-        let mut conflicting = make_record(RegistryKind::Experiment, "exp1");
+        let mut conflicting = make_record(RegistryKind::EXPERIMENT, "exp1");
         conflicting.version = CONFLICTING_VERSION.to_owned();
 
         assert!(registry.insert(conflicting).is_err());
@@ -344,31 +301,35 @@ mod tests {
     fn registry_kind_parse_valid() {
         assert_eq!(
             expect_ok(RegistryKind::parse(KIND_EXPERIMENT)),
-            RegistryKind::Experiment
+            RegistryKind::EXPERIMENT
         );
         assert_eq!(
             expect_ok(RegistryKind::parse(KIND_BENCHMARK)),
-            RegistryKind::Benchmark
+            RegistryKind::BENCHMARK
         );
         assert_eq!(
             expect_ok(RegistryKind::parse(KIND_DATASET)),
-            RegistryKind::Dataset
+            RegistryKind::DATASET
         );
     }
 
     #[test]
     fn registry_kind_parse_invalid() {
-        assert!(RegistryKind::parse("unknown_kind").is_err());
         assert!(RegistryKind::parse("").is_err());
+        assert!(RegistryKind::parse("not-valid").is_err());
+        assert_eq!(
+            expect_ok(RegistryKind::parse("attention")).as_str(),
+            "attention"
+        );
     }
 
     #[test]
     fn registry_kind_as_str_roundtrip() {
         for kind in [
-            RegistryKind::Experiment,
-            RegistryKind::Benchmark,
-            RegistryKind::Study,
-            RegistryKind::Dataset,
+            RegistryKind::EXPERIMENT,
+            RegistryKind::BENCHMARK,
+            RegistryKind::STUDY,
+            RegistryKind::DATASET,
         ] {
             assert_eq!(expect_ok(RegistryKind::parse(kind.as_str())), kind);
         }
@@ -378,15 +339,15 @@ mod tests {
     fn records_by_kind_returns_matching_records() {
         let mut registry = Registry::new();
 
-        expect_ok(registry.insert(make_record(RegistryKind::Experiment, "exp1")));
-        expect_ok(registry.insert(make_record(RegistryKind::Experiment, "exp2")));
-        expect_ok(registry.insert(make_record(RegistryKind::Benchmark, "bench1")));
+        expect_ok(registry.insert(make_record(RegistryKind::EXPERIMENT, "exp1")));
+        expect_ok(registry.insert(make_record(RegistryKind::EXPERIMENT, "exp2")));
+        expect_ok(registry.insert(make_record(RegistryKind::BENCHMARK, "bench1")));
 
-        let experiments = registry.records_by_kind(RegistryKind::Experiment);
+        let experiments = registry.records_by_kind_ref(&RegistryKind::EXPERIMENT);
 
         assert_eq!(experiments.len(), 2);
         assert!(experiments
             .iter()
-            .all(|record| record.kind == RegistryKind::Experiment));
+            .all(|record| record.kind == RegistryKind::EXPERIMENT));
     }
 }

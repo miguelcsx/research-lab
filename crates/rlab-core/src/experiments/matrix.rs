@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{RlabError, RlabResult};
+
 const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,73 +43,57 @@ pub struct Sample {
 
 impl Grid {
     pub fn new(axes: BTreeMap<String, Vec<Value>>) -> RlabResult<Self> {
-        let grid = Self {
+        Self::validate_axes(&axes)?;
+
+        Ok(Self {
             schema_version: SCHEMA_VERSION,
             axes,
-        };
-        grid.validate()?;
-        Ok(grid)
+        })
     }
 
     pub fn validate(&self) -> RlabResult<()> {
-        if self.schema_version != 1 {
-            return Err(RlabError::Validation {
-                message: "unsupported grid schema_version".to_string(),
-            });
-        }
-        for (name, values) in &self.axes {
-            if name.trim().is_empty() {
-                return Err(RlabError::Validation {
-                    message: "matrix axis name cannot be empty".to_string(),
-                });
-            }
+        validate_schema_version("grid", self.schema_version)?;
+        Self::validate_axes(&self.axes)
+    }
+
+    pub fn validate_axes(axes: &BTreeMap<String, Vec<Value>>) -> RlabResult<()> {
+        for (name, values) in axes {
+            validate_axis_name("matrix", name)?;
+
             if values.is_empty() {
-                return Err(RlabError::Validation {
-                    message: format!("matrix axis {name} has no values"),
-                });
+                return Err(RlabError::validation(format!("matrix axis {name} has no values")));
             }
         }
+
         Ok(())
     }
 
     pub fn expand(&self) -> RlabResult<Vec<BTreeMap<String, Value>>> {
         self.validate()?;
-        let mut rows = vec![BTreeMap::new()];
-        for (axis, values) in &self.axes {
-            let mut next_rows = Vec::new();
-            for row in &rows {
-                for value in values {
-                    let mut next = row.clone();
-                    next.insert(axis.clone(), value.clone());
-                    next_rows.push(next);
-                }
-            }
-            rows = next_rows;
-        }
-        Ok(rows)
+        expand_axes(&self.axes)
+    }
+
+    pub fn expand_axes(
+        axes: &BTreeMap<String, Vec<Value>>,
+    ) -> RlabResult<Vec<BTreeMap<String, Value>>> {
+        Self::validate_axes(axes)?;
+        expand_axes(axes)
     }
 }
 
 impl Sample {
     pub fn validate(&self) -> RlabResult<()> {
-        if self.schema_version != 1 {
-            return Err(RlabError::Validation {
-                message: "unsupported sample schema_version".to_string(),
-            });
-        }
+        validate_schema_version("sample", self.schema_version)?;
+
         if self.n == 0 {
-            return Err(RlabError::Validation {
-                message: "sample size must be greater than zero".to_string(),
-            });
+            return Err(RlabError::validation("sample size must be greater than zero"));
         }
+
         for (name, distribution) in &self.space {
-            if name.trim().is_empty() {
-                return Err(RlabError::Validation {
-                    message: "sample axis name cannot be empty".to_string(),
-                });
-            }
+            validate_axis_name("sample", name)?;
             distribution.validate()?;
         }
+
         Ok(())
     }
 }
@@ -116,23 +101,90 @@ impl Sample {
 impl Distribution {
     pub fn validate(&self) -> RlabResult<()> {
         match self {
-            Self::Choice { values } if values.is_empty() => Err(RlabError::Validation {
-                message: "choice distribution requires at least one value".to_string(),
-            }),
-            Self::Uniform { low, high } | Self::LogUniform { low, high } => {
-                if !low.is_finite() || !high.is_finite() || low >= high {
-                    return Err(RlabError::Validation {
-                        message: "distribution bounds must be finite and low < high".to_string(),
-                    });
+            Self::Choice { values } => validate_choice(values),
+            Self::Uniform { low, high } => validate_bounds(*low, *high),
+            Self::LogUniform { low, high } => {
+                validate_bounds(*low, *high)?;
+
+                if *low <= 0.0 {
+                    return Err(RlabError::validation("log_uniform low bound must be positive"));
                 }
-                if matches!(self, Self::LogUniform { .. }) && *low <= 0.0 {
-                    return Err(RlabError::Validation {
-                        message: "log_uniform low bound must be positive".to_string(),
-                    });
-                }
+
                 Ok(())
             }
-            _ => Ok(()),
         }
+    }
+}
+
+fn expand_axes(axes: &BTreeMap<String, Vec<Value>>) -> RlabResult<Vec<BTreeMap<String, Value>>> {
+    let capacity = grid_size(axes)?;
+    let mut rows = Vec::with_capacity(capacity);
+    rows.push(BTreeMap::new());
+
+    for (axis, values) in axes {
+        let next_capacity =
+            checked_product(rows.len(), values.len(), "matrix expansion is too large")?;
+        let mut next_rows = Vec::with_capacity(next_capacity);
+
+        for row in &rows {
+            for value in values {
+                let mut next = row.clone();
+                next.insert(axis.clone(), value.clone());
+                next_rows.push(next);
+            }
+        }
+
+        rows = next_rows;
+    }
+
+    Ok(rows)
+}
+
+fn validate_schema_version(kind: &str, schema_version: u32) -> RlabResult<()> {
+    if schema_version == SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    Err(RlabError::validation(format!("unsupported {kind} schema_version")))
+}
+
+fn validate_axis_name(kind: &str, name: &str) -> RlabResult<()> {
+    if !name.trim().is_empty() {
+        return Ok(());
+    }
+
+    Err(RlabError::validation(format!("{kind} axis name cannot be empty")))
+}
+
+fn validate_choice(values: &[Value]) -> RlabResult<()> {
+    if !values.is_empty() {
+        return Ok(());
+    }
+
+    Err(RlabError::validation("choice distribution requires at least one value"))
+}
+
+fn validate_bounds(low: f64, high: f64) -> RlabResult<()> {
+    if low.is_finite() && high.is_finite() && low < high {
+        return Ok(());
+    }
+
+    Err(RlabError::validation("distribution bounds must be finite and low < high"))
+}
+
+fn grid_size(axes: &BTreeMap<String, Vec<Value>>) -> RlabResult<usize> {
+    let mut size = 1usize;
+
+    for values in axes.values() {
+        size = checked_product(size, values.len(), "matrix expansion is too large")?;
+    }
+
+    Ok(size)
+}
+
+fn checked_product(left: usize, right: usize, message: &'static str) -> RlabResult<usize> {
+    match left.checked_mul(right) {
+        Some(value) => Ok(value),
+        None => Err(RlabError::validation(message)),
     }
 }
