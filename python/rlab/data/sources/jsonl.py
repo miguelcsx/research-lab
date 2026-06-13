@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from rlab._typing import JsonObject, JsonValue
+from rlab._typing import JsonObject, coerce_json_object
 
 ENCODING: Final = "utf-8"
 READ_MODE: Final = "r"
@@ -40,24 +40,4 @@ def _json_object_from_line(line: str, line_number: int) -> JsonObject:
     value = json.loads(line)
     if not isinstance(value, dict):
         raise ValueError(ERROR_RECORD_NOT_OBJECT.format(line_number=line_number))
-
-    return {str(key): _json_value(item) for key, item in value.items()}
-
-
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str):
-        return value
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, int | float):
-        return value
-
-    if isinstance(value, list):
-        return [_json_value(item) for item in value]
-
-    if isinstance(value, dict):
-        return {str(key): _json_value(item) for key, item in value.items()}
-
-    raise TypeError(ERROR_VALUE_NOT_JSON)
+    return coerce_json_object(value)

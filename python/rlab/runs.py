@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ._typing import JsonObject, JsonValue
+from ._typing import JsonObject, coerce_json_value
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,17 +73,7 @@ def _read_object(path: Path) -> JsonObject:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"expected JSON object: {path}")
-    return {str(key): _json_value(item) for key, item in value.items()}
-
-
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, bool | int | float | str):
-        return value
-    if isinstance(value, list):
-        return [_json_value(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _json_value(item) for key, item in value.items()}
-    raise TypeError("run value is not JSON-compatible")
+    return {str(key): coerce_json_value(item) for key, item in value.items()}
 
 
 def _target(record: RunRecord) -> str:

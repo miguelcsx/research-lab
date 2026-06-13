@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, is_dataclass
-from typing import Generic, cast
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Generic
 
-from ._typing import JsonObject, JsonValue, ParamsT
+from ._typing import JsonObject, JsonValue, ParamsT, coerce_json_value
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +46,7 @@ class ComponentSpec(Generic[ParamsT]):
         )
 
     def to_dict(self) -> JsonObject:
-        params = _json_value(self.params)
+        params = coerce_json_value(self.params)
         if not isinstance(params, dict):
             raise TypeError("component params must serialize to an object")
         return {"ref": self.ref, "params": params}
@@ -90,24 +90,6 @@ def collect_requirements(values: list[Requirements]) -> Requirements:
 
 def _union(left: tuple[str, ...], right: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys((*left, *right)))
-
-
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if is_dataclass(value) and not isinstance(value, type):
-        return _json_value(asdict(value))
-    if isinstance(value, Mapping):
-        return {str(key): _json_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_value(item) for item in value]
-    to_dict = getattr(value, "to_dict", None)
-    if callable(to_dict):
-        return _json_value(cast(Callable[[], object], to_dict)())
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        return _json_value(cast(Callable[[], object], model_dump)())
-    raise TypeError(f"value is not JSON serializable: {type(value).__name__}")
 
 
 __all__ = ["ComponentSpec", "Requirements", "collect_requirements"]

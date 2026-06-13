@@ -87,7 +87,7 @@ from .results import (
 )
 from .config import diff_configs, list_configs, resolve_config, validate_configs
 from .runs import RunQuery, RunRecord
-from ._typing import JsonObject, JsonValue
+from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
 from .external import (
     AdapterContext,
     AdapterValidationError,
@@ -234,6 +234,8 @@ __all__ = [
     "choice",
     "classify",
     "compare_metric_arrays",
+    "coerce_json_object",
+    "coerce_json_value",
     "compare_runs",
     "diff_configs",
     "collect_requirements",

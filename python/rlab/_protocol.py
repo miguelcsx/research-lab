@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias, cast
 
-from ._typing import JsonObject, JsonValue
+from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
 
 PROTOCOL_VERSION: Final = 1
 
@@ -75,7 +75,7 @@ def read_request() -> HostRequest:
     if not line:
         raise ValueError("runner received no request")
 
-    raw = _json_object(json.loads(line))
+    raw = coerce_json_object(json.loads(line))
     version = _required_int(
         raw.get(KEY_PROTOCOL_VERSION, DEFAULT_PROTOCOL_VERSION),
         KEY_PROTOCOL_VERSION,
@@ -97,10 +97,10 @@ def read_request() -> HostRequest:
         run_id=_optional_str(raw.get(KEY_RUN_ID)),
         run_dir=_optional_str(raw.get(KEY_RUN_DIR)),
         cache_dir=_optional_str(raw.get(KEY_CACHE_DIR)),
-        params=_json_object(raw.get(KEY_PARAMS, DEFAULT_PARAMS)),
+        params=coerce_json_object(raw.get(KEY_PARAMS, DEFAULT_PARAMS)),
         seed=seed,
         strict=bool(raw.get(KEY_STRICT, DEFAULT_STRICT)),
-        environment=_json_object(raw.get(KEY_ENVIRONMENT, DEFAULT_ENVIRONMENT)),
+        environment=coerce_json_object(raw.get(KEY_ENVIRONMENT, DEFAULT_ENVIRONMENT)),
     )
 
 
@@ -125,7 +125,7 @@ def _target(value: object) -> HostTarget | None:
     if value is None:
         return None
 
-    target = _json_object(value)
+    target = coerce_json_object(value)
     return HostTarget(kind=str(target[KEY_KIND]), name=str(target[KEY_NAME]))
 
 
@@ -161,26 +161,3 @@ def _string_list(value: object, label: str) -> list[str]:
     return [str(item) for item in value]
 
 
-def _json_object(value: object) -> JsonObject:
-    if not isinstance(value, dict):
-        raise TypeError("protocol value must be a JSON object")
-    return {str(key): _json_value(item) for key, item in value.items()}
-
-
-def _json_value(value: object) -> JsonValue:
-    if value is None or isinstance(value, str):
-        return value
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, int | float):
-        return value
-
-    if isinstance(value, list):
-        return [_json_value(item) for item in value]
-
-    if isinstance(value, dict):
-        return {str(key): _json_value(item) for key, item in value.items()}
-
-    raise TypeError("protocol value is not JSON-compatible")
