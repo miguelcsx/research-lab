@@ -27,14 +27,13 @@ class ComponentSpec(Generic[ParamsT]):
         return self.ref.split(":", 1)[0] if ":" in self.ref else None
 
     @classmethod
-    def from_value(
-        cls,
-        value: str | Mapping[str, JsonValue] | "ComponentSpec[JsonObject]",
-    ) -> "ComponentSpec[JsonObject]":
+    def from_value(cls, value: object) -> "ComponentSpec[JsonObject]":
         if isinstance(value, ComponentSpec):
             return value
         if isinstance(value, str):
             return cls.empty(value)
+        if not isinstance(value, Mapping):
+            raise TypeError(f"component spec must be a string or mapping, got {type(value).__name__}")
         name = value.get("ref", value.get("name"))
         params = value.get("params", {})
         if not isinstance(name, str) or not name:
@@ -42,7 +41,7 @@ class ComponentSpec(Generic[ParamsT]):
         if not isinstance(params, Mapping):
             raise TypeError("component spec params must be a mapping")
         return ComponentSpec(
-            ref=name, params=dict(cast(Mapping[str, JsonValue], params))
+            ref=name, params={str(k): coerce_json_value(v) for k, v in params.items()}
         )
 
     def to_dict(self) -> JsonObject:
