@@ -6,6 +6,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::{json, Value};
 
+use rlab_core::host::{HostEvent, LogEvent, ProtocolVersion};
+
 use crate::convert::json::{from_json_str, to_json};
 use crate::error::to_py_error;
 use crate::py_external::{PyExternalCommand, PyExternalResult, PyExternalWorkspace};
@@ -298,6 +300,36 @@ impl PyRuntimeContext {
 
     pub fn log(&mut self, text: &str) {
         self.note(text);
+    }
+
+    #[pyo3(signature = (message, kind = "info"))]
+    pub fn emit_progress(&self, py: Python<'_>, message: &str, kind: &str) -> PyResult<()> {
+        let request_id = self.run_id.as_deref().unwrap_or("unknown");
+        let event = match kind {
+            "warn" | "warning" => HostEvent::Warning(LogEvent {
+                protocol_version: ProtocolVersion::current(),
+                request_id: request_id.to_string(),
+                message: message.to_string(),
+            }),
+            "error" => HostEvent::Error(LogEvent {
+                protocol_version: ProtocolVersion::current(),
+                request_id: request_id.to_string(),
+                message: message.to_string(),
+            }),
+            _ => HostEvent::Log(LogEvent {
+                protocol_version: ProtocolVersion::current(),
+                request_id: request_id.to_string(),
+                message: message.to_string(),
+            }),
+        };
+        let line = serde_json::to_string(&event).map_err(|error| {
+            pyo3::exceptions::PyValueError::new_err(error.to_string())
+        })?;
+        let sys = py.import_bound("sys")?;
+        let stdout = sys.getattr("stdout")?;
+        stdout.call_method1("write", (format!("{line}\n"),))?;
+        stdout.call_method0("flush")?;
+        Ok(())
     }
 
     #[pyo3(signature = (name_or_command, command=None))]
