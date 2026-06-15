@@ -97,6 +97,19 @@ class RuntimeContext:
             return value
         raise TypeError(ERROR_PARAM_INT.format(name=name))
 
+    def optional_int_param(self, name: str) -> int | None:
+        return None if self.params.get(name) is None else self.int_param(name)
+
+    def number_param(
+        self,
+        name: str,
+        default: float | None = None,
+    ) -> float:
+        value = self.params.get(name, default)
+        if not isinstance(value, bool) and isinstance(value, int | float):
+            return float(value)
+        raise TypeError(f"parameter {name!r} must be numeric")
+
     def path_param(self, name: str, default: str | Path | None = None) -> Path:
         value = self.params.get(name, default)
         if isinstance(value, str | Path):

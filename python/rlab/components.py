@@ -4,15 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Generic
+from importlib import import_module
+from typing import Any, Generic, cast
 
-from ._typing import JsonObject, JsonValue, ParamsT, coerce_json_value
+from ._typing import JsonObject, ParamsT, coerce_json_value
 
 
 @dataclass(frozen=True, slots=True)
 class ComponentSpec(Generic[ParamsT]):
     ref: str
     params: ParamsT
+
+    @classmethod
+    def __class_getitem__(cls, _item: object) -> type["ComponentSpec[object]"]:
+        return cls
 
     @classmethod
     def empty(cls, ref: str) -> "ComponentSpec[JsonObject]":
@@ -49,6 +54,21 @@ class ComponentSpec(Generic[ParamsT]):
         if not isinstance(params, dict):
             raise TypeError("component params must serialize to an object")
         return {"ref": self.ref, "params": params}
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        _source_type: Any,
+        _handler: Any,
+    ) -> Any:
+        core_schema = cast(Any, import_module("pydantic_core")).core_schema
+
+        return core_schema.no_info_plain_validator_function(
+            cls.from_value,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda value: value.to_dict()
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
