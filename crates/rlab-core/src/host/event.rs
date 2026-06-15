@@ -15,6 +15,7 @@ pub enum HostEvent {
     Log(LogEvent),
     Warning(LogEvent),
     Error(LogEvent),
+    Progress(ProgressEvent),
     Completed {
         protocol_version: ProtocolVersion,
         request_id: String,
@@ -30,6 +31,22 @@ pub enum HostEvent {
         request_id: String,
         events: Vec<HostEvent>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProgressEvent {
+    pub protocol_version: ProtocolVersion,
+    pub request_id: String,
+    pub phase: String,
+    #[serde(default)]
+    pub component: String,
+    pub state: String,
+    #[serde(default)]
+    pub processed: u64,
+    #[serde(default)]
+    pub total: Option<u64>,
+    #[serde(default)]
+    pub detail: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

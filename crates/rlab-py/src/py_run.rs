@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::{json, Value};
 
-use rlab_core::host::{HostEvent, LogEvent, ProtocolVersion};
+use rlab_core::host::{HostEvent, ProgressEvent, ProtocolVersion};
 
 use crate::convert::json::{from_json_str, to_json};
 use crate::error::to_py_error;
@@ -302,26 +302,28 @@ impl PyRuntimeContext {
         self.note(text);
     }
 
-    #[pyo3(signature = (message, kind = "info"))]
-    pub fn emit_progress(&self, py: Python<'_>, message: &str, kind: &str) -> PyResult<()> {
+    #[pyo3(signature = (phase, component = "", state = "running", processed = 0, total = None, detail = ""))]
+    pub fn report_progress(
+        &self,
+        py: Python<'_>,
+        phase: &str,
+        component: &str,
+        state: &str,
+        processed: u64,
+        total: Option<u64>,
+        detail: &str,
+    ) -> PyResult<()> {
         let request_id = self.run_id.as_deref().unwrap_or("unknown");
-        let event = match kind {
-            "warn" | "warning" => HostEvent::Warning(LogEvent {
-                protocol_version: ProtocolVersion::current(),
-                request_id: request_id.to_string(),
-                message: message.to_string(),
-            }),
-            "error" => HostEvent::Error(LogEvent {
-                protocol_version: ProtocolVersion::current(),
-                request_id: request_id.to_string(),
-                message: message.to_string(),
-            }),
-            _ => HostEvent::Log(LogEvent {
-                protocol_version: ProtocolVersion::current(),
-                request_id: request_id.to_string(),
-                message: message.to_string(),
-            }),
-        };
+        let event = HostEvent::Progress(ProgressEvent {
+            protocol_version: ProtocolVersion::current(),
+            request_id: request_id.to_string(),
+            phase: phase.to_string(),
+            component: component.to_string(),
+            state: state.to_string(),
+            processed,
+            total,
+            detail: detail.to_string(),
+        });
         let line = serde_json::to_string(&event).map_err(|error| {
             pyo3::exceptions::PyValueError::new_err(error.to_string())
         })?;

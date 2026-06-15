@@ -23,6 +23,7 @@ pub fn validate_event(event: &HostEvent) -> RlabResult<()> {
         HostEvent::Log(value) | HostEvent::Warning(value) | HostEvent::Error(value) => {
             validate_protocol(value.protocol_version.0)
         }
+        HostEvent::Progress(value) => validate_protocol(value.protocol_version.0),
         HostEvent::Completed {
             protocol_version, ..
         }

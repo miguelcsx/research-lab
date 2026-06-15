@@ -156,7 +156,7 @@ pub fn process_event(
             }
             Ok(())
         }
-        HostEvent::RegistryRecord(_) => Ok(()),
+        HostEvent::RegistryRecord(_) | HostEvent::Progress(_) => Ok(()),
     }
 }
 

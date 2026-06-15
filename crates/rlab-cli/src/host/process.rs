@@ -56,6 +56,9 @@ pub fn run_python_host(
                 HostEvent::Log(log) => logger::info(&log.message),
                 HostEvent::Warning(log) => logger::warn(&log.message),
                 HostEvent::Error(log) => logger::error(&log.message),
+                HostEvent::Progress(p) => {
+                    logger::progress(&p.phase, &p.component, &p.state, &p.detail);
+                }
                 _ => {}
             }
             events.push(event);

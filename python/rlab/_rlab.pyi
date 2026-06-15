@@ -295,7 +295,15 @@ class RuntimeContext:
     def save_table(self, name: str, rows: object) -> Path: ...
     def note(self, text: str) -> None: ...
     def log(self, text: str) -> None: ...
-    def emit_progress(self, message: str, kind: str = "info") -> None: ...
+    def report_progress(
+        self,
+        phase: str,
+        component: str = "",
+        state: str = "running",
+        processed: int = 0,
+        total: int | None = None,
+        detail: str = "",
+    ) -> None: ...
     def run_external(
         self,
         name_or_command: str | ExternalCommand,

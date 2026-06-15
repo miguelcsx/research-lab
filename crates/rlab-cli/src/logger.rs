@@ -37,6 +37,19 @@ pub fn debug(message: impl AsRef<str>) {
     log(LogLevel::Debug, message);
 }
 
+pub fn progress(phase: &str, component: &str, state: &str, detail: &str) {
+    let tag = if component.is_empty() {
+        format!("[{phase}]")
+    } else {
+        format!("[{phase}.{component}]")
+    };
+    let level = match state {
+        "running" => LogLevel::Debug,
+        _ => LogLevel::Info,
+    };
+    log(level, format!("{tag} {detail}"));
+}
+
 fn log(level: LogLevel, message: impl AsRef<str>) {
     if (level as u8) <= LEVEL.load(Ordering::Relaxed) {
         eprintln!("rlab {} {}", label(level), message.as_ref());
