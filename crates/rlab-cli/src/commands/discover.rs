@@ -160,11 +160,13 @@ fn detect_python_version(executable: &str) -> String {
 }
 
 fn infer_source_paths(root: &Path, modules: &[String]) -> Vec<PathBuf> {
-    modules
+    let mut paths: Vec<PathBuf> = modules
         .iter()
         .flat_map(|module| module_candidates(root, module))
         .filter(|path| path.exists())
-        .collect()
+        .collect();
+    collect_declaration_documents(&root.join("configs"), &mut paths);
+    paths
 }
 
 fn module_candidates(root: &Path, module: &str) -> Vec<PathBuf> {
@@ -190,13 +192,31 @@ fn collect_python_sources(directory: &Path, paths: &mut Vec<PathBuf>) {
     }
 }
 
+fn collect_declaration_documents(directory: &Path, paths: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_declaration_documents(&path, paths);
+        } else if path.extension().is_some_and(is_declaration_extension) {
+            paths.push(path);
+        }
+    }
+}
+
+fn is_declaration_extension(extension: &std::ffi::OsStr) -> bool {
+    matches!(extension.to_str(), Some("json" | "toml" | "yaml" | "yml"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use rlab_core::{Registry, RegistryKind, RegistryRecord, RegistryRecordSpec};
 
-    use super::{filter_registry, module_candidates};
+    use super::{filter_registry, infer_source_paths, module_candidates};
 
     fn registry() -> Registry {
         let mut registry = Registry::new();
@@ -273,5 +293,19 @@ mod tests {
         assert!(paths.contains(&package.join("catalog.py")));
         assert!(paths.contains(&package.join("nested").join("component.py")));
         fs::remove_dir_all(root).expect("remove package");
+    }
+
+    #[test]
+    fn cache_key_includes_declarative_config_documents() {
+        let root =
+            std::env::temp_dir().join(format!("rlab-discovery-configs-{}", std::process::id()));
+        let configs = root.join("configs").join("experiments");
+        fs::create_dir_all(&configs).expect("create configs");
+        fs::write(configs.join("baseline.yaml"), "model: {}\n").expect("write config");
+
+        let paths = infer_source_paths(&root, &[]);
+
+        assert!(paths.contains(&configs.join("baseline.yaml")));
+        fs::remove_dir_all(root).expect("remove configs");
     }
 }

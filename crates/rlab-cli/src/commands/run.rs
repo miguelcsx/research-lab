@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 use clap::Args;
 use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, plan_experiment,
-    run::list_runs, EffectiveConfig, ExperimentJob, ExperimentSpec, HostCommand, HostEvent,
-    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RetryPolicy, RlabError, RlabResult,
-    RunDirectory, RunSession, RunStatus,
+    config::ProjectPaths, host::validate_event, load_effective_config, plan_record_experiment,
+    run::list_runs, EffectiveConfig, ExperimentJob, HostCommand, HostEvent, HostRequest,
+    HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunDirectory, RunSession,
+    RunStatus,
 };
 use serde_json::Value;
 
@@ -27,9 +27,9 @@ pub struct RunCommand {
     pub params: Vec<String>,
 }
 
-struct RunOutcome {
-    run: RunDirectory,
-    failed: bool,
+pub(crate) struct RunOutcome {
+    pub(crate) run: RunDirectory,
+    pub(crate) failed: bool,
 }
 
 pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
@@ -68,7 +68,7 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
 }
 
 /// Run a single target invocation and finalize its session.
-fn execute_run(
+pub(crate) fn execute_run(
     config: &EffectiveConfig,
     paths: &ProjectPaths,
     kind: &RegistryKind,
@@ -143,7 +143,7 @@ fn empty_result() -> Value {
 /// A valid cached registry avoids a Python round-trip. If no valid cache exists,
 /// discovery runs before planning so an experiment never silently loses its
 /// matrix or seeds.
-fn target_jobs(
+pub(crate) fn target_jobs(
     config: &EffectiveConfig,
     paths: &ProjectPaths,
     strict: bool,
@@ -160,76 +160,13 @@ fn target_jobs(
         return Ok(Vec::new());
     };
 
-    let matrix = match record.metadata.get("matrix") {
-        Some(value) => value.clone(),
-        None => Value::Object(serde_json::Map::new()),
-    };
-
-    let seeds = match record.metadata.get("seeds") {
-        Some(value) => value.clone(),
-        None => Value::Array(Vec::new()),
-    };
-
-    if value_is_empty_object(&matrix) && value_is_empty_array(&seeds) {
-        return Ok(Vec::new());
-    }
-
-    let params = match record.metadata.get("params") {
-        Some(value) => value.clone(),
-        None => Value::Object(serde_json::Map::new()),
-    };
-
-    let metrics = match record.metadata.get("metrics") {
-        Some(value) => value.clone(),
-        None => Value::Array(Vec::new()),
-    };
-
-    let spec = ExperimentSpec {
-        schema_version: SCHEMA_VERSION,
-        name: name.to_string(),
-        question: record
-            .metadata
-            .get("question")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        hypothesis: record
-            .metadata
-            .get("hypothesis")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        params: serde_json::from_value(params).map_err(|error| RlabError::Validation {
-            message: format!("invalid experiment params for {name}: {error}"),
-        })?,
-        matrix: serde_json::from_value(matrix).map_err(|error| RlabError::Validation {
-            message: format!("invalid experiment matrix for {name}: {error}"),
-        })?,
-        metrics: serde_json::from_value(metrics).map_err(|error| RlabError::Validation {
-            message: format!("invalid experiment metrics for {name}: {error}"),
-        })?,
-        seeds: serde_json::from_value(seeds).map_err(|error| RlabError::Validation {
-            message: format!("invalid experiment seeds for {name}: {error}"),
-        })?,
-        retry: RetryPolicy::none(),
-    };
-
-    Ok(plan_experiment(&spec)?.jobs)
+    plan_record_experiment(record)
 }
 
-fn value_is_empty_object(value: &Value) -> bool {
-    match value.as_object() {
-        Some(object) => object.is_empty(),
-        None => true,
-    }
-}
-
-fn value_is_empty_array(value: &Value) -> bool {
-    match value.as_array() {
-        Some(array) => array.is_empty(),
-        None => true,
-    }
-}
-
-fn merge_params(base: &Value, cell: &std::collections::BTreeMap<String, Value>) -> Value {
+pub(crate) fn merge_params(
+    base: &Value,
+    cell: &std::collections::BTreeMap<String, Value>,
+) -> Value {
     let mut object = serde_json::Map::new();
     object.extend(cell.iter().map(|(k, v)| (k.clone(), v.clone())));
     if let Some(base_obj) = base.as_object() {
@@ -253,7 +190,7 @@ fn with_seed(params: Value, seed: Option<u64>) -> Value {
 
 /// Resolve `@<kind>:<name>[/suffix]` param values to the latest completed run's
 /// output path, so pipeline stages reference each other without pasting run ids.
-fn resolve_param_refs(paths: &ProjectPaths, params: Value) -> RlabResult<Value> {
+pub(crate) fn resolve_param_refs(paths: &ProjectPaths, params: Value) -> RlabResult<Value> {
     let Value::Object(map) = params else {
         return Ok(params);
     };

@@ -67,7 +67,8 @@ pub use evaluations::{
     BaselineEntry, BaselineStore, EvaluationResult, EvaluationSuite, EvaluationTask,
 };
 pub use experiments::{
-    plan_experiment, ExperimentJob, ExperimentPlan, ExperimentSpec, Grid, RetryPolicy,
+    plan_experiment, plan_record_experiment, ExperimentJob, ExperimentPlan, ExperimentSpec, Grid,
+    RetryPolicy,
 };
 pub use external::{
     run_external_command, safe_environment, ExternalCommand, ExternalResult, ExternalRunnerKind,
@@ -113,4 +114,7 @@ pub use stats::{
     compare_metric_arrays, compare_samples, describe_array, DescriptiveStats, MetricComparison,
     SampleComparison,
 };
-pub use study::{plan_study, Study, StudyExecutionPlan, StudyOutcome, StudyPlan};
+pub use study::{
+    plan_registry_study, plan_study, RegistryStudyPlan, Study, StudyExecutionPlan, StudyMode,
+    StudyOutcome, StudyPlan,
+};

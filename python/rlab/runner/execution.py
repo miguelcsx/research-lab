@@ -9,11 +9,11 @@ from typing import cast
 from rlab._loader import load_modules
 from rlab._project import Project
 from rlab._protocol import HostRequest, read_request
-from rlab._typing import JsonObject, JsonValue
+from rlab._typing import JsonObject
 
 from .constants import *
 from .context import RuntimeContext
-from .dataset import execute_dataset, instantiate, resolve_optional, split_ref
+from .dataset import execute_dataset, resolve_optional, split_ref
 from .events import emit_completed, emit_failure, emit_registry_records
 from .serde import is_finite_number, jsonable
 
@@ -68,7 +68,6 @@ def execute_target(
 
     handlers: Mapping[str, Callable[[HostRequest, Project, RuntimeContext], object]] = {
         KIND_DATASET: execute_dataset,
-        KIND_STUDY: execute_study,
         KIND_WORKFLOW: execute_workflow,
     }
     handler = handlers.get(request.target.kind)
@@ -149,45 +148,6 @@ def execute_workflow_step(
     callable_obj = project.resolve(KIND_WORKFLOW_STEP, f"{workflow_name}:{name}")
     result = cast(Callable[[RuntimeContext], object], callable_obj)(ctx)
     return {KEY_NAME: name, KEY_INDEX: index, KEY_RESULT: jsonable(result)}
-
-
-def execute_study(
-    request: HostRequest, project: Project, ctx: RuntimeContext
-) -> JsonObject:
-    if request.target is None:
-        raise ValueError(ERROR_STUDY_TARGET)
-
-    study_name = request.target.name
-    experiments = study_experiments(project.record(KIND_STUDY, study_name))
-    if not experiments:
-        raise ValueError(ERROR_STUDY_EXPERIMENTS.format(name=study_name))
-
-    return {
-        KEY_STUDY: study_name,
-        KEY_EXPERIMENTS: [
-            execute_experiment(project, ctx, name) for name in experiments
-        ],
-    }
-
-
-def study_experiments(record: JsonObject) -> list[JsonValue]:
-    metadata = record.get(KEY_METADATA, {})
-    nested = metadata.get("spec") if isinstance(metadata, dict) else None
-    spec = nested if isinstance(nested, dict) else metadata
-    experiments = spec.get(KEY_EXPERIMENTS, []) if isinstance(spec, dict) else []
-    return experiments if isinstance(experiments, list) else []
-
-
-def execute_experiment(
-    project: Project, ctx: RuntimeContext, experiment_name: object
-) -> JsonObject:
-    if not isinstance(experiment_name, str) or not experiment_name.strip():
-        raise ValueError(ERROR_STUDY_EXPERIMENT_NAME)
-
-    ctx.note(f"running study experiment {experiment_name}")
-    callable_obj = project.resolve(KIND_EXPERIMENT, experiment_name)
-    result = cast(Callable[[RuntimeContext], object], callable_obj)(ctx)
-    return {KEY_EXPERIMENT: experiment_name, KEY_RESULT: jsonable(result)}
 
 
 def invoke_target(

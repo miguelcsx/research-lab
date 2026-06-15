@@ -111,6 +111,16 @@ impl RunSession {
         Ok(self.directory)
     }
 
+    pub fn fail_with_result(mut self, message: &str, result: Value) -> RlabResult<RunDirectory> {
+        write_json_atomic(&self.results_path(), &result)?;
+        write_text_atomic(&self.error_path(), message)?;
+        self.write_metric_summary()?;
+        self.transition(RunStatus::Failed)?;
+        self.write_report()?;
+
+        Ok(self.directory)
+    }
+
     pub fn artifact_dir(&self) -> PathBuf {
         self.directory.path.join(RUN_DIR_ARTIFACTS)
     }

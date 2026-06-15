@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{RlabError, RlabResult};
 
 use super::model::Study;
+
 const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,23 +15,17 @@ pub struct StudyExecutionPlan {
 }
 
 pub fn plan_study(study: &Study) -> RlabResult<StudyExecutionPlan> {
-    if study.schema_version != 1 || study.plan.schema_version != 1 {
-        return Err(RlabError::Validation {
-            message: "unsupported study schema version".to_string(),
-        });
+    if study.schema_version != SCHEMA_VERSION || study.plan.schema_version != SCHEMA_VERSION {
+        return Err(RlabError::validation("unsupported study schema version"));
     }
     if study.name.trim().is_empty() {
-        return Err(RlabError::Validation {
-            message: "study name cannot be empty".to_string(),
-        });
+        return Err(RlabError::validation("study name cannot be empty"));
     }
     if study.plan.experiments.is_empty() {
-        return Err(RlabError::Validation {
-            message: format!(
-                "study {} must reference at least one experiment",
-                study.name
-            ),
-        });
+        return Err(RlabError::validation(format!(
+            "study {} must reference at least one experiment",
+            study.name
+        )));
     }
     let outcome_metrics = study
         .plan
