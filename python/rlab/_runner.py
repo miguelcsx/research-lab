@@ -120,7 +120,7 @@ def _invoke_workflow_step(
 
 def _invoke_dataset(project: Any, name: str, ctx: RuntimeContext) -> dict[str, Any]:
     metadata = _metadata(project.record("dataset", name))
-    ctx.report_progress("dataset", name, "running", 0, None, "")
+    ctx.report_progress("dataset", name, "running", 0, None, "building dataset")
     result = cast(
         dict[str, Any],
         json.loads(
@@ -133,7 +133,8 @@ def _invoke_dataset(project: Any, name: str, ctx: RuntimeContext) -> dict[str, A
             )
         ),
     )
-    ctx.report_progress("dataset", name, "completed", result.get("records", 0), None, "")
+    records = result.get("records", 0)
+    ctx.report_progress("dataset", name, "completed", records, None, f"{records} records")
     return result
 
 
