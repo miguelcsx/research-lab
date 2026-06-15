@@ -14,6 +14,7 @@ from rlab._decorators import (
     data_keep,
     data_update,
 )
+from rlab._rlab import materialize_records
 from rlab._typing import JsonObject, JsonValue
 
 Record: TypeAlias = Mapping[str, JsonValue]
@@ -23,8 +24,6 @@ RecordStage: TypeAlias = Callable[[Record], DataDecision]
 DEFAULT_VERSION: Final = "1"
 DEFAULT_DESCRIPTION: Final = ""
 ACTION_DROP: Final = "drop"
-ACTION_KEEP: Final = "keep"
-ACTION_UPDATE: Final = "update"
 FIELD_LABEL: Final = "label"
 
 KIND_PATTERNS: Final = "patterns"
@@ -38,8 +37,6 @@ REASON_CLASSIFY: Final = "classify:{label}"
 REASON_NOT_NUMERIC: Final = "{field}:not_numeric"
 REASON_BELOW_MINIMUM: Final = "{field}<minimum"
 REASON_ABOVE_MAXIMUM: Final = "{field}>maximum"
-
-ERROR_DECISION_RECORD_MAPPING: Final = "data decision record must be a mapping"
 
 __all__ = [
     "AuditPolicy",
@@ -260,48 +257,8 @@ def materialize(
     records: Iterable[Record],
     stages: Iterable[RecordStage],
 ) -> list[Record]:
-    """Apply record-level stages locally for small Python workflows."""
-    return [
-        materialized
-        for record in records
-        if (materialized := _materialize_record(record, stages)) is not None
-    ]
-
-
-def _materialize_record(
-    record: Record,
-    stages: Iterable[RecordStage],
-) -> Record | None:
-    current: Record | None = dict(record)
-
-    for stage in stages:
-        if current is None:
-            return None
-        current = _apply_materialize_decision(stage(current), current)
-
-    return current
-
-
-def _apply_materialize_decision(
-    decision: DataDecision,
-    current: Record,
-) -> Record | None:
-    if decision.action == ACTION_DROP:
-        return None
-
-    if decision.action in (ACTION_KEEP, ACTION_UPDATE):
-        return _decision_record(decision.record)
-
-    if decision.record is None:
-        return current
-
-    return _decision_record(decision.record)
-
-
-def _decision_record(value: object) -> Record:
-    if not isinstance(value, Mapping):
-        raise TypeError(ERROR_DECISION_RECORD_MAPPING)
-    return cast(Record, value)
+    """Apply record-level stages through the native rlab data engine."""
+    return cast(list[Record], list(materialize_records(list(records), list(stages))))
 
 
 def _copy_record(record: Record) -> MutableRecord:

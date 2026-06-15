@@ -3,15 +3,14 @@ use std::path::{Path, PathBuf};
 
 use clap::Args;
 use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, plan_record_experiment,
-    run::list_runs, EffectiveConfig, ExperimentJob, HostCommand, HostEvent, HostRequest,
-    HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunDirectory, RunSession,
-    RunStatus,
+    config::ProjectPaths, load_effective_config, plan_record_experiment, run::list_runs,
+    EffectiveConfig, ExperimentJob, HostEvent, Registry, RegistryKind, RlabError, RlabResult,
+    RunDirectory, RunSession, RunStatus,
 };
 use serde_json::Value;
 
 use crate::commands::discover::discover_registry;
-use crate::host::process::run_python_host;
+use crate::host::execution::{self, ExecutionRequest};
 use crate::render::{human::print_line, json::print_json};
 
 const SCHEMA_VERSION: u32 = 1;
@@ -23,7 +22,7 @@ pub struct RunCommand {
     #[arg(long)]
     pub strict: bool,
 
-    #[arg(long = "param")]
+    #[arg(long = "param", alias = "params")]
     pub params: Vec<String>,
 }
 
@@ -37,10 +36,10 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
     let paths = ProjectPaths::from_config(&config)?;
     paths.ensure_base_dirs()?;
 
-    let (kind, name) = parse_target_kind(&command.target)?;
+    let strict = command.strict || config.production.strict;
+    let (kind, name) = resolve_run_target(&config, &paths, strict, &command.target)?;
     let params = parse_params_public(&command.params)
         .and_then(|params| resolve_param_refs(&paths, params))?;
-    let strict = command.strict || config.production.strict;
 
     let jobs = target_jobs(&config, &paths, strict, &kind, &name)?;
     if jobs.is_empty() {
@@ -77,58 +76,22 @@ pub(crate) fn execute_run(
     seed: Option<u64>,
     strict: bool,
 ) -> RlabResult<RunOutcome> {
-    let params = with_seed(params, seed);
-    let args = std::env::args().collect();
-
-    let session = RunSession::create(paths, kind.as_str(), name, args, params.clone())?;
-
-    let run_id = session.directory.id.as_str().to_string();
-
-    let request = HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: run_id.clone(),
-        command: HostCommand::Execute,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: Some(HostTarget {
-            kind: kind.clone(),
-            name: name.to_string(),
-        }),
-        run_id: Some(run_id),
-        run_dir: Some(session.directory.path.clone()),
-        cache_dir: Some(paths.cache.clone()),
+    let outcome = execution::execute_run(ExecutionRequest {
+        config,
+        paths,
+        operation: kind.as_str(),
+        name,
+        target_kind: kind.clone(),
+        target_name: name,
         params,
         seed,
         strict,
-        environment: Value::Object(serde_json::Map::new()),
-    };
-
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-
-    let mut completed = None;
-    let mut failed = None;
-
-    for event in &events {
-        validate_event(event)?;
-        process_event_public(&session, event, &mut completed, &mut failed)?;
-    }
-
-    if let Some(error) = failed {
-        let run = session.fail(&error.to_string())?;
-        return Ok(RunOutcome { run, failed: true });
-    }
-
-    let result = match completed {
-        Some(result) => result,
-        None => empty_result(),
-    };
-
-    let run = session.complete(result)?;
-    Ok(RunOutcome { run, failed: false })
+        default_result: empty_result(),
+    })?;
+    Ok(RunOutcome {
+        run: outcome.run,
+        failed: outcome.failed,
+    })
 }
 
 fn empty_result() -> Value {
@@ -172,19 +135,6 @@ pub(crate) fn merge_params(
     if let Some(base_obj) = base.as_object() {
         object.extend(base_obj.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
-    Value::Object(object)
-}
-
-fn with_seed(params: Value, seed: Option<u64>) -> Value {
-    let mut object = match params {
-        Value::Object(object) => object,
-        _ => serde_json::Map::new(),
-    };
-
-    if let Some(seed) = seed {
-        object.insert("seed".to_string(), Value::from(seed));
-    }
-
     Value::Object(object)
 }
 
@@ -325,29 +275,7 @@ pub fn process_event_public(
     completed: &mut Option<serde_json::Value>,
     failed: &mut Option<serde_json::Value>,
 ) -> RlabResult<()> {
-    match event {
-        HostEvent::Metric(value) => session.append_metric(&value.metric),
-        HostEvent::Artifact(value) => session.save_artifact_reference(&value.artifact),
-        HostEvent::Log(value) | HostEvent::Warning(value) | HostEvent::Error(value) => {
-            session.append_log(&value.message)
-        }
-        HostEvent::Completed { result, .. } => {
-            *completed = Some(result.clone());
-            Ok(())
-        }
-        HostEvent::Failed { error, .. } => {
-            *failed = Some(error.clone());
-            Ok(())
-        }
-        HostEvent::Batch { events, .. } => {
-            for nested in events {
-                process_event_public(session, nested, completed, failed)?;
-            }
-
-            Ok(())
-        }
-        HostEvent::RegistryRecord(_) => Ok(()),
-    }
+    execution::process_event(session, event, completed, failed)
 }
 
 pub struct ParsedTarget {
@@ -447,14 +375,61 @@ fn parse_target_kind(value: &str) -> RlabResult<(RegistryKind, String)> {
     Ok((RegistryKind::parse(&parsed.kind_str)?, parsed.name))
 }
 
+fn resolve_run_target(
+    config: &EffectiveConfig,
+    paths: &ProjectPaths,
+    strict: bool,
+    value: &str,
+) -> RlabResult<(RegistryKind, String)> {
+    if value.contains(':') || looks_like_path(value) {
+        return parse_target_kind(value);
+    }
+
+    let registry = discover_registry(config, paths, strict, false)?;
+    match unique_bare_target(&registry, value)? {
+        Some(target) => Ok(target),
+        None => Err(RlabError::Reference {
+            message: format!(
+                "no registry target named '{value}' — use <kind>:<name> or run 'rlab discover'"
+            ),
+        }),
+    }
+}
+
+fn unique_bare_target(
+    registry: &Registry,
+    name: &str,
+) -> RlabResult<Option<(RegistryKind, String)>> {
+    let matches = registry
+        .records
+        .iter()
+        .filter(|record| record.name == name)
+        .map(|record| (record.kind.clone(), record.name.clone()))
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [] => Ok(None),
+        [(kind, name)] => Ok(Some((kind.clone(), name.clone()))),
+        _ => Err(RlabError::Reference {
+            message: format!(
+                "ambiguous target '{name}' — use one of: {}",
+                matches
+                    .iter()
+                    .map(|(kind, name)| format!("{}:{name}", kind.as_str()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }),
+    }
+}
+
 pub fn parse_params_public(params: &[String]) -> RlabResult<serde_json::Value> {
     let mut object = serde_json::Map::new();
 
     for param in params {
         let Some((key, raw_value)) = param.split_once('=') else {
-            return Err(RlabError::Validation {
-                message: format!("parameter must be key=value: {param}"),
-            });
+            merge_json_params(&mut object, param)?;
+            continue;
         };
 
         if key.trim().is_empty() {
@@ -469,6 +444,24 @@ pub fn parse_params_public(params: &[String]) -> RlabResult<serde_json::Value> {
     Ok(serde_json::Value::Object(object))
 }
 
+fn merge_json_params(
+    object: &mut serde_json::Map<String, serde_json::Value>,
+    raw: &str,
+) -> RlabResult<()> {
+    match serde_json::from_str::<serde_json::Value>(raw) {
+        Ok(serde_json::Value::Object(values)) => {
+            object.extend(values);
+            Ok(())
+        }
+        Ok(_) => Err(RlabError::Validation {
+            message: format!("parameter JSON must be an object: {raw}"),
+        }),
+        Err(_) => Err(RlabError::Validation {
+            message: format!("parameter must be key=value or a JSON object: {raw}"),
+        }),
+    }
+}
+
 fn parse_param_value(value: &str) -> serde_json::Value {
     match serde_json::from_str(value) {
         Ok(parsed) => parsed,
@@ -479,10 +472,15 @@ fn parse_param_value(value: &str) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
 
     use serde_json::json;
 
-    use super::{merge_params, parse_param_value, with_seed};
+    use rlab_core::{Registry, RegistryKind, RegistryRecord, RegistryRecordSpec};
+
+    use crate::host::execution::with_seed;
+
+    use super::{merge_params, parse_param_value, parse_params_public, unique_bare_target};
 
     #[test]
     fn explicit_params_override_matrix_values() {
@@ -513,5 +511,62 @@ mod tests {
             json!({"warmup": 0.1})
         );
         assert_eq!(parse_param_value("causal"), json!("causal"));
+    }
+
+    #[test]
+    fn explicit_params_accept_json_object() {
+        assert_eq!(
+            parse_params_public(&[r#"{"config":"ablation","seed":7}"#.to_string()]).unwrap(),
+            json!({"config": "ablation", "seed": 7})
+        );
+    }
+
+    #[test]
+    fn bare_target_resolves_when_unique() {
+        let registry = registry_with([
+            (RegistryKind::WORKFLOW, "training.compile_plan"),
+            (RegistryKind::DATASET, "babylm.curation.smoke"),
+        ]);
+
+        let (kind, name) = unique_bare_target(&registry, "training.compile_plan")
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(kind, RegistryKind::WORKFLOW);
+        assert_eq!(name, "training.compile_plan");
+    }
+
+    #[test]
+    fn bare_target_rejects_ambiguous_names() {
+        let registry = registry_with([
+            (RegistryKind::WORKFLOW, "smoke"),
+            (RegistryKind::DATASET, "smoke"),
+        ]);
+
+        let error = unique_bare_target(&registry, "smoke").unwrap_err();
+
+        assert!(error.to_string().contains("ambiguous target"));
+    }
+
+    fn registry_with<const N: usize>(records: [(RegistryKind, &str); N]) -> Registry {
+        let mut registry = Registry::new();
+        for (kind, name) in records {
+            registry.insert(record(kind, name)).unwrap();
+        }
+        registry
+    }
+
+    fn record(kind: RegistryKind, name: &str) -> RegistryRecord {
+        RegistryRecord::from_spec(RegistryRecordSpec {
+            kind,
+            name: name.to_string(),
+            version: "1".to_string(),
+            module: "tests".to_string(),
+            qualname: name.to_string(),
+            source: PathBuf::from("tests.py"),
+            tags: Vec::new(),
+            description: String::new(),
+            metadata: BTreeMap::new(),
+        })
     }
 }

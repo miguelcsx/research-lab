@@ -2,16 +2,12 @@ use std::path::Path;
 
 use clap::Args;
 use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, HostCommand, HostEvent,
-    HostRequest, HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunDirectory,
-    RunSession,
+    config::ProjectPaths, load_effective_config, RegistryKind, RlabError, RlabResult, RunDirectory,
 };
 use serde_json::Value;
 
-use crate::commands::run::{
-    parse_params_public, parse_target, process_event_public, ParseTargetError, ParsedTarget,
-};
-use crate::host::process::run_python_host;
+use crate::commands::run::{parse_params_public, parse_target, ParseTargetError, ParsedTarget};
+use crate::host::execution::{self, ExecutionRequest};
 use crate::render::{human::print_line, json::print_json};
 
 const SCHEMA_VERSION: u32 = 1;
@@ -30,7 +26,7 @@ pub struct EvaluateCommand {
     #[arg(long)]
     pub strict: bool,
 
-    #[arg(long = "param")]
+    #[arg(long = "param", alias = "params")]
     pub params: Vec<String>,
 }
 
@@ -42,48 +38,25 @@ pub fn run(command: EvaluateCommand, root: Option<&Path>, json: bool) -> RlabRes
     let target_ref = format!("{kind_str}:{name}");
     let params = evaluation_params(&command.params, target_ref)?;
 
-    let session = RunSession::create(
-        &paths,
-        RegistryKind::EVALUATION.as_str(),
-        &command.suite,
-        std::env::args().collect(),
-        params.clone(),
-    )?;
-
-    let request = evaluation_request(
-        &config,
-        &paths,
-        &session,
-        &command.suite,
+    let outcome = execution::execute_run(ExecutionRequest {
+        config: &config,
+        paths: &paths,
+        operation: RegistryKind::EVALUATION.as_str(),
+        name: &command.suite,
+        target_kind: RegistryKind::EVALUATION,
+        target_name: &command.suite,
         params,
-        command.strict,
-    );
-
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-
-    let outcome = process_events(&session, &events)?;
-
-    match outcome {
-        EvaluationOutcome::Failed(error) => {
-            let run = session.fail(&error.to_string())?;
-            report_failed_evaluation(&run, json)?;
-            Ok(1)
-        }
-        EvaluationOutcome::Completed(result) => {
-            let run = session.complete(result)?;
-            report_completed_evaluation(&paths, &run, json)?;
-            Ok(0)
-        }
+        seed: None,
+        strict: command.strict,
+        default_result: empty_result(),
+    })?;
+    if outcome.failed {
+        report_failed_evaluation(&outcome.run, json)?;
+        Ok(1)
+    } else {
+        report_completed_evaluation(&paths, &outcome.run, json)?;
+        Ok(0)
     }
-}
-
-enum EvaluationOutcome {
-    Completed(Value),
-    Failed(Value),
 }
 
 fn parse_evaluation_target(value: &str) -> RlabResult<ParsedTarget> {
@@ -121,61 +94,6 @@ fn evaluation_params(params: &[String], target_ref: String) -> RlabResult<Value>
     }
 
     Ok(params)
-}
-
-fn evaluation_request(
-    config: &rlab_core::EffectiveConfig,
-    paths: &ProjectPaths,
-    session: &RunSession,
-    suite: &str,
-    params: Value,
-    strict: bool,
-) -> HostRequest {
-    let run_id = session.directory.id.as_str().to_string();
-
-    HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: run_id.clone(),
-        command: HostCommand::Execute,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: Some(HostTarget {
-            kind: RegistryKind::EVALUATION,
-            name: suite.to_string(),
-        }),
-        run_id: Some(run_id),
-        run_dir: Some(session.directory.path.clone()),
-        cache_dir: Some(paths.cache.clone()),
-        params,
-        seed: None,
-        strict: strict || config.production.strict,
-        environment: empty_object(),
-    }
-}
-
-fn process_events(session: &RunSession, events: &[HostEvent]) -> RlabResult<EvaluationOutcome> {
-    let mut completed = None;
-    let mut failed = None;
-
-    for event in events {
-        validate_event(event)?;
-        process_event_public(session, event, &mut completed, &mut failed)?;
-    }
-
-    if let Some(error) = failed {
-        return Ok(EvaluationOutcome::Failed(error));
-    }
-
-    let result = match completed {
-        Some(value) => value,
-        None => empty_result(),
-    };
-
-    Ok(EvaluationOutcome::Completed(result))
-}
-
-fn empty_object() -> Value {
-    Value::Object(serde_json::Map::new())
 }
 
 fn empty_result() -> Value {

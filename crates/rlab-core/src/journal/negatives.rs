@@ -18,19 +18,29 @@ pub struct NegativeResultEntry {
     pub created_at: OffsetDateTime,
 }
 
+impl NegativeResultEntry {
+    pub fn new(hypothesis: String, tried: String, reason: String) -> Self {
+        Self {
+            schema_version: NEGATIVE_SCHEMA_VERSION,
+            hypothesis,
+            tried,
+            reason,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 pub fn add_negative_result(
     paths: &ProjectPaths,
     hypothesis: &str,
     tried: &str,
     reason: &str,
 ) -> RlabResult<NegativeResultEntry> {
-    let entry = NegativeResultEntry {
-        schema_version: NEGATIVE_SCHEMA_VERSION,
-        hypothesis: hypothesis.to_string(),
-        tried: tried.to_string(),
-        reason: reason.to_string(),
-        created_at: OffsetDateTime::now_utc(),
-    };
+    let entry = NegativeResultEntry::new(
+        hypothesis.to_string(),
+        tried.to_string(),
+        reason.to_string(),
+    );
     append_jsonl(&paths.cache.join("negatives.jsonl"), &entry)?;
     Ok(entry)
 }

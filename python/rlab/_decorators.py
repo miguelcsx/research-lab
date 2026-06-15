@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Final, Protocol, TypeVar
 
-T = TypeVar("T")
+from rlab._rlab import (
+    ComponentUse,
+    DataDecision,
+    data_boundary,
+    data_drop,
+    data_keep,
+    data_update,
+)
 
-ACTION_KEEP: Final = "keep"
-ACTION_UPDATE: Final = "update"
-ACTION_DROP: Final = "drop"
-ACTION_BOUNDARY: Final = "boundary"
+T = TypeVar("T")
 
 REF_SEPARATOR: Final = ":"
 ATTR_RLAB_REF: Final = "__rlab_ref__"
@@ -39,43 +42,6 @@ class RegistryProject(Protocol):
     ) -> None: ...
 
 
-@dataclass(frozen=True, slots=True)
-class ComponentUse:
-    """Reference to a registered component-like object."""
-
-    ref: str
-
-
-@dataclass(frozen=True, slots=True)
-class DataDecision:
-    """Typed data decision emitted by data helpers."""
-
-    action: str
-    record: object | None = None
-    reason: str | None = None
-    kind: str | None = None
-
-
-def data_keep(record: object) -> DataDecision:
-    """Keep a record unchanged."""
-    return _decision(ACTION_KEEP, record=record)
-
-
-def data_update(record: object, reason: str | None = None) -> DataDecision:
-    """Keep an updated record."""
-    return _decision(ACTION_UPDATE, record=record, reason=reason)
-
-
-def data_drop(reason: str) -> DataDecision:
-    """Drop a record with a reason."""
-    return _decision(ACTION_DROP, reason=reason)
-
-
-def data_boundary(value: object, kind: str) -> DataDecision:
-    """Emit a boundary value for later batch-level processing."""
-    return _decision(ACTION_BOUNDARY, record=value, kind=kind)
-
-
 def decorator_factory(
     project: RegistryProject,
     kind: str,
@@ -99,16 +65,6 @@ def decorator_factory(
         return obj
 
     return decorate
-
-
-def _decision(
-    action: str,
-    *,
-    record: object | None = None,
-    reason: str | None = None,
-    kind: str | None = None,
-) -> DataDecision:
-    return DataDecision(action=action, record=record, reason=reason, kind=kind)
 
 
 def _ref(kind: str, name: str) -> str:

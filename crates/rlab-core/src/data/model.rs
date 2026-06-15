@@ -72,6 +72,18 @@ pub struct AuditPolicy {
     pub sample_limit_per_reason: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataDocument {
+    pub dataset: DataDocumentDataset,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataDocumentDataset {
+    pub name: String,
+    pub description: Option<String>,
+    pub tags: Option<Vec<String>>,
+}
+
 impl ComponentUse {
     pub fn new(reference: String) -> RlabResult<Self> {
         if reference.trim().is_empty() {

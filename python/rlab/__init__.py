@@ -1,154 +1,92 @@
-"""Python facade for the Rust-backed rlab runtime."""
+"""Rust-backed Python boundary for rlab user code."""
 
-from pathlib import Path
-import json
-
-from ._project import Project
-from ._loader import discover_modules
-from .runner import RuntimeContext
-from ._decorators import (
-    ComponentUse,
-    DataDecision,
-    data_boundary,
-    data_drop,
-    data_keep,
-    data_update,
-)
 from ._rlab import (
     ArtifactManifest,
     ArtifactStore,
+    Assumption,
+    BaselineEntry,
+    BaselineStore,
+    BudgetEstimate,
+    CacheEntry,
+    CheckpointManager,
+    CheckpointRecord,
+    ComponentUse,
+    DataDecision,
+    DecisionEntry,
     EffectiveConfig,
+    ExternalCommand,
+    ExternalPath,
+    ExternalResult,
+    ExternalWorkspace,
+    FigureArtifact,
+    FileArtifact,
+    IdeaEntry,
+    JobRecord,
+    LabPolicy,
+    LicenseCompatibilitySummary,
+    LicenseManifest,
+    LogArtifact,
     Metric,
+    MetricComparison,
+    NegativeResultEntry,
+    NoteEntry,
+    PiiHit,
+    PolicyViolation,
     ProductionPolicy,
     Registry,
     RegistryRecord,
     ResultBundle,
-    RunDirectory,
-    bundle_from_metrics,
-    find_project_root,
-    load_config,
-)
-from .baselines import BaselineEntry, BaselineStore
-from .benchmarks.model import BenchmarkResult, BenchmarkSpec
-from .components import ComponentSpec, Requirements, collect_requirements
-from .checkpoints import (
-    CheckpointManager,
-    CheckpointRecord,
-    CheckpointSerializer,
-    RetentionPolicy,
-)
-from .data import (
-    AuditPolicy,
-    CheckResult,
-    DataAblation,
-    DataAction,
-    DataBoundary,
-    DataCheck,
-    DataContext,
-    DataExperiment,
-    DataMetric,
-    DataSink,
-    DataSource,
-    DatasetSpec,
-    PipelineSpec,
-    SinkResult,
-    classify,
-    materialize,
-    patterns,
-    predicate,
-    substitute,
-    threshold,
-)
-from .evaluations.model import (
-    EvaluationResult,
-    EvaluationSuite,
-    EvaluationTask,
-    TaskResult,
-)
-from .experiments.model import (
-    Distribution,
-    Experiment,
-    ExperimentResult,
-    Grid,
-    RetryPolicy,
-    Sample,
-    choice,
-    factor,
-    grid,
-    log_uniform,
-    uniform,
-)
-from .results import (
-    FigureArtifact,
-    FileArtifact,
-    LogArtifact,
     ResultSchema,
+    RetentionPolicy,
+    RunDirectory,
+    RunQuery,
+    RunRecord,
+    RuntimeContext,
+    SecretHit,
     TableArtifact,
+    Threat,
+    Unit,
+    UnitRegistry,
+    bundle_from_metrics,
+    cache_path,
+    cache_size,
+    check_compatibility,
+    compare_metric_arrays,
+    data_boundary,
+    data_drop,
+    data_keep,
+    data_update,
+    estimate_budget,
+    estimate_required_repetitions,
+    find_project_root,
+    list_cache,
+    list_data_documents,
+    load_config,
+    paired_bootstrap,
+    redact_secrets,
+    resolve_data_document,
+    scan_for_pii,
+    scan_for_secrets,
+    validate_data_documents,
+    write_card,
+    write_markdown_report,
 )
-from .config import diff_configs, list_configs, resolve_config, validate_configs
-from .runs import RunQuery, RunRecord
+from .components import ComponentSpec, Requirements, collect_requirements
+from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
+from .config import diff_configs, list_configs, resolve_config, validate_configs
+from .data import AuditPolicy, DataBoundary, SinkResult
+from .data.documents import list_datasets, resolve_dataset, validate_datasets
 from .external import (
     AdapterContext,
     AdapterValidationError,
     BaseAdapter,
-    ExternalCommand,
     ExternalCommandError,
-    ExternalPath,
-    ExternalResult,
-    ExternalWorkspace,
 )
-from .governance import (
-    Assumption,
-    LabPolicy,
-    LicenseManifest,
-    Threat,
-    check_compatibility,
-    redact_secrets,
-    scan_for_pii,
-    scan_for_secrets,
-)
-from .plan import BudgetEstimate, estimate_budget, estimate_required_repetitions
-from .stats.compare import MetricComparison, compare_metric_arrays, paired_bootstrap
-from .studies.model import Study, StudyPlan
-from .units.model import Unit, UnitRegistry
+from .project import Project, pinned_project
 from .workflows.model import ExternalStep, Workflow, WorkflowStep
 
 WorkflowContext = RuntimeContext
-
-
-def define_workflow(name: str, *, steps: list[WorkflowStep | ExternalStep]) -> Workflow:
-    """Create a workflow descriptor outside of a project instance."""
-    return Workflow(name=name, steps=tuple(steps))
-
-
-def compare_runs(
-    path: str | Path = ".rlab/runs", *, metric: str | None = None
-) -> list[dict[str, object]]:
-    """Compare completed run metric summaries from a runs directory.
-
-    This Python helper mirrors the Rust CLI's basic comparison contract for
-    notebook and scripting use. Durable CLI output remains Rust-owned.
-    """
-    root = Path(path)
-    rows: list[dict[str, object]] = []
-    if not root.exists():
-        return rows
-    for run_dir in sorted(child for child in root.iterdir() if child.is_dir()):
-        summary_path = run_dir / "metrics_summary.json"
-        if not summary_path.exists():
-            continue
-        try:
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        metrics = summary.get("metrics", summary)
-        if not isinstance(metrics, dict):
-            continue
-        selected = {metric: metrics.get(metric)} if metric else dict(metrics)
-        rows.append({"run_id": run_dir.name, "metrics": selected})
-    return rows
-
 
 __all__ = [
     "AdapterContext",
@@ -156,73 +94,57 @@ __all__ = [
     "ArtifactManifest",
     "ArtifactStore",
     "Assumption",
-    "AuditPolicy",
-    "BaseAdapter",
     "BaselineEntry",
     "BaselineStore",
-    "BenchmarkResult",
-    "BenchmarkSpec",
     "BudgetEstimate",
-    "CheckResult",
-    "ComponentUse",
-    "ComponentSpec",
+    "CacheEntry",
+    "BaseAdapter",
     "CheckpointManager",
     "CheckpointRecord",
-    "CheckpointSerializer",
-    "DataAblation",
-    "DataAction",
+    "ComponentSpec",
+    "ComponentUse",
+    "AuditPolicy",
     "DataBoundary",
-    "DataCheck",
-    "DataContext",
     "DataDecision",
-    "DataExperiment",
-    "DataMetric",
-    "DataSink",
-    "DataSource",
-    "DatasetSpec",
-    "Distribution",
+    "DecisionEntry",
     "EffectiveConfig",
-    "EvaluationResult",
-    "EvaluationSuite",
-    "EvaluationTask",
-    "Experiment",
-    "ExperimentResult",
     "ExternalCommand",
     "ExternalCommandError",
     "ExternalPath",
     "ExternalResult",
-    "ExternalWorkspace",
     "ExternalStep",
-    "FileArtifact",
+    "ExternalWorkspace",
     "FigureArtifact",
-    "Grid",
-    "JsonObject",
-    "JsonValue",
+    "FileArtifact",
+    "IdeaEntry",
+    "JobRecord",
     "LabPolicy",
+    "LicenseCompatibilitySummary",
     "LicenseManifest",
     "LogArtifact",
+    "JsonObject",
+    "JsonValue",
     "Metric",
     "MetricComparison",
-    "PipelineSpec",
+    "NegativeResultEntry",
+    "NoteEntry",
+    "PiiHit",
+    "PolicyViolation",
     "ProductionPolicy",
     "Project",
     "Registry",
     "RegistryRecord",
+    "Requirements",
     "ResultBundle",
     "ResultSchema",
-    "Requirements",
     "RetentionPolicy",
-    "RetryPolicy",
     "RunDirectory",
     "RunQuery",
     "RunRecord",
     "RuntimeContext",
-    "Sample",
+    "SecretHit",
     "SinkResult",
-    "Study",
-    "StudyPlan",
     "TableArtifact",
-    "TaskResult",
     "Threat",
     "Unit",
     "UnitRegistry",
@@ -230,39 +152,38 @@ __all__ = [
     "WorkflowContext",
     "WorkflowStep",
     "bundle_from_metrics",
+    "cache_path",
+    "cache_size",
     "check_compatibility",
-    "choice",
-    "classify",
+    "collect_requirements",
     "compare_metric_arrays",
     "coerce_json_object",
     "coerce_json_value",
-    "compare_runs",
     "diff_configs",
-    "collect_requirements",
     "data_boundary",
     "data_drop",
     "data_keep",
     "data_update",
-    "define_workflow",
-    "discover_modules",
     "estimate_budget",
     "estimate_required_repetitions",
-    "factor",
     "find_project_root",
-    "grid",
-    "load_config",
+    "discover_modules",
+    "list_cache",
     "list_configs",
-    "log_uniform",
-    "materialize",
+    "list_data_documents",
+    "list_datasets",
+    "load_config",
     "paired_bootstrap",
-    "resolve_config",
-    "patterns",
-    "predicate",
+    "pinned_project",
     "redact_secrets",
+    "resolve_config",
+    "resolve_data_document",
+    "resolve_dataset",
     "scan_for_pii",
     "scan_for_secrets",
-    "substitute",
-    "threshold",
-    "uniform",
+    "validate_data_documents",
+    "validate_datasets",
     "validate_configs",
+    "write_card",
+    "write_markdown_report",
 ]

@@ -43,7 +43,9 @@ fn validate_schema_version(schema_version: u32) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("unsupported retry policy schema_version"))
+    Err(RlabError::validation(
+        "unsupported retry policy schema_version",
+    ))
 }
 
 fn validate_max_attempts(max_attempts: u32) -> RlabResult<()> {
@@ -51,7 +53,9 @@ fn validate_max_attempts(max_attempts: u32) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("retry max_attempts must be at least 1"))
+    Err(RlabError::validation(
+        "retry max_attempts must be at least 1",
+    ))
 }
 
 fn validate_delay_seconds(delay_seconds: f64) -> RlabResult<()> {
@@ -59,5 +63,7 @@ fn validate_delay_seconds(delay_seconds: f64) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("retry delay_seconds must be finite and non-negative"))
+    Err(RlabError::validation(
+        "retry delay_seconds must be finite and non-negative",
+    ))
 }

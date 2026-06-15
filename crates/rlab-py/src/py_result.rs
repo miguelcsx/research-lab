@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use pyo3::prelude::*;
+use serde_json::Value;
 
-use crate::convert::json::{json_string_literal, to_json};
+use crate::convert::json::{from_json_str, json_string_literal, to_json};
 
 const METRIC_DIRECTION_ERROR_SUFFIX: &str = "expected minimize, maximize, or neutral";
 
@@ -62,6 +64,283 @@ impl PyResultBundle {
     }
 }
 
+#[pyclass(name = "FileArtifact")]
+#[derive(Clone)]
+pub struct PyFileArtifact {
+    inner: rlab_core::FileArtifact,
+}
+
+#[pymethods]
+impl PyFileArtifact {
+    #[new]
+    #[pyo3(signature = (name, path, kind="file", version="1", metadata=None))]
+    pub fn new(
+        py: Python<'_>,
+        name: String,
+        path: PathBuf,
+        kind: &str,
+        version: &str,
+        metadata: Option<PyObject>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: rlab_core::FileArtifact::new_typed(
+                name,
+                path,
+                kind.to_string(),
+                version.to_string(),
+                py_metadata(py, metadata)?,
+            ),
+        })
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name.clone()
+    }
+
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_path(py, self.inner.path.clone())
+    }
+
+    #[getter]
+    pub fn kind(&self) -> String {
+        self.inner.kind.clone()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version.clone()
+    }
+
+    #[getter]
+    pub fn metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(
+            py,
+            &Value::Object(self.inner.metadata.clone().into_iter().collect()),
+        )
+    }
+
+    pub fn to_event_payload(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(py, &self.inner.event_payload())
+    }
+
+    pub fn to_json(&self) -> PyResult<String> {
+        to_json(&self.inner.event_payload())
+    }
+}
+
+#[pyclass(name = "FigureArtifact")]
+#[derive(Clone)]
+pub struct PyFigureArtifact {
+    inner: PyFileArtifact,
+}
+
+#[pymethods]
+impl PyFigureArtifact {
+    #[new]
+    #[pyo3(signature = (name, path, kind="figure", version="1", metadata=None))]
+    pub fn new(
+        py: Python<'_>,
+        name: String,
+        path: PathBuf,
+        kind: &str,
+        version: &str,
+        metadata: Option<PyObject>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: PyFileArtifact::new(py, name, path, kind, version, metadata)?,
+        })
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.path(py)
+    }
+
+    #[getter]
+    pub fn kind(&self) -> String {
+        self.inner.kind()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version()
+    }
+
+    #[getter]
+    pub fn metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.metadata(py)
+    }
+
+    pub fn to_event_payload(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.to_event_payload(py)
+    }
+
+    pub fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json()
+    }
+}
+
+#[pyclass(name = "TableArtifact")]
+#[derive(Clone)]
+pub struct PyTableArtifact {
+    inner: PyFileArtifact,
+}
+
+#[pymethods]
+impl PyTableArtifact {
+    #[new]
+    #[pyo3(signature = (name, path, kind="table", version="1", metadata=None))]
+    pub fn new(
+        py: Python<'_>,
+        name: String,
+        path: PathBuf,
+        kind: &str,
+        version: &str,
+        metadata: Option<PyObject>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: PyFileArtifact::new(py, name, path, kind, version, metadata)?,
+        })
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.path(py)
+    }
+
+    #[getter]
+    pub fn kind(&self) -> String {
+        self.inner.kind()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version()
+    }
+
+    #[getter]
+    pub fn metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.metadata(py)
+    }
+
+    pub fn to_event_payload(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.to_event_payload(py)
+    }
+
+    pub fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json()
+    }
+}
+
+#[pyclass(name = "LogArtifact")]
+#[derive(Clone)]
+pub struct PyLogArtifact {
+    inner: PyFileArtifact,
+}
+
+#[pymethods]
+impl PyLogArtifact {
+    #[new]
+    #[pyo3(signature = (name, path, kind="log", version="1", metadata=None))]
+    pub fn new(
+        py: Python<'_>,
+        name: String,
+        path: PathBuf,
+        kind: &str,
+        version: &str,
+        metadata: Option<PyObject>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: PyFileArtifact::new(py, name, path, kind, version, metadata)?,
+        })
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.path(py)
+    }
+
+    #[getter]
+    pub fn kind(&self) -> String {
+        self.inner.kind()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version()
+    }
+
+    #[getter]
+    pub fn metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.metadata(py)
+    }
+
+    pub fn to_event_payload(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.inner.to_event_payload(py)
+    }
+
+    pub fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json()
+    }
+}
+
+#[pyclass(name = "ResultSchema")]
+#[derive(Clone)]
+pub struct PyResultSchema {
+    inner: rlab_core::ResultSchema,
+}
+
+#[pymethods]
+impl PyResultSchema {
+    #[new]
+    #[pyo3(signature = (name, fields=None, version="1"))]
+    pub fn new(name: String, fields: Option<BTreeMap<String, String>>, version: &str) -> Self {
+        Self {
+            inner: rlab_core::ResultSchema::new(
+                name,
+                fields.unwrap_or_default(),
+                version.to_string(),
+            ),
+        }
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name.clone()
+    }
+
+    #[getter]
+    pub fn fields(&self) -> BTreeMap<String, String> {
+        self.inner.fields.clone()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version.clone()
+    }
+
+    pub fn to_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(py, &from_json_str(&to_json(&self.inner)?)?)
+    }
+}
+
 #[pyfunction]
 pub fn bundle_from_metrics(metrics: BTreeMap<String, f64>) -> PyResult<PyResultBundle> {
     Ok(PyResultBundle {
@@ -94,4 +373,39 @@ fn invalid_metric_direction(value: &str) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(format!(
         "invalid metric direction: {value}; {METRIC_DIRECTION_ERROR_SUFFIX}"
     ))
+}
+
+fn py_path(py: Python<'_>, path: PathBuf) -> PyResult<PyObject> {
+    Ok(py
+        .import_bound("pathlib")?
+        .getattr("Path")?
+        .call1((path.to_string_lossy().to_string(),))?
+        .unbind())
+}
+
+fn py_from_json(py: Python<'_>, value: &Value) -> PyResult<PyObject> {
+    Ok(py
+        .import_bound("json")?
+        .call_method1("loads", (to_json(value)?,))?
+        .unbind())
+}
+
+fn py_metadata(py: Python<'_>, metadata: Option<PyObject>) -> PyResult<BTreeMap<String, Value>> {
+    let Some(metadata) = metadata else {
+        return Ok(BTreeMap::new());
+    };
+    let coerced = py
+        .import_bound("rlab._typing")?
+        .getattr("coerce_json_value")?
+        .call1((metadata,))?;
+    let raw: String = py
+        .import_bound("json")?
+        .call_method1("dumps", (coerced,))?
+        .extract()?;
+    match from_json_str(&raw)? {
+        Value::Object(values) => Ok(values.into_iter().collect()),
+        _ => Err(pyo3::exceptions::PyTypeError::new_err(
+            "artifact metadata must be a JSON object",
+        )),
+    }
 }

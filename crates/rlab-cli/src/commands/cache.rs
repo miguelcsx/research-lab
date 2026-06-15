@@ -17,7 +17,6 @@ pub enum CacheSubcommand {
     Inspect,
     List,
     Clean,
-    Prune { name: String },
 }
 
 pub fn run(command: CacheCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
@@ -59,20 +58,6 @@ pub fn run(command: CacheCommand, root: Option<&Path>, json: bool) -> RlabResult
                 print_json("cache_clean", inspection)?;
             } else {
                 print_line("cache cleaned");
-            }
-        }
-        CacheSubcommand::Prune { name } => {
-            if name == "downloads" {
-                let inspection = rlab_core::cache_inspect(&paths)?;
-                if json {
-                    print_json("cache_prune", inspection)?;
-                } else {
-                    print_line("download cache prune completed");
-                }
-            } else {
-                return Err(rlab_core::RlabError::Validation {
-                    message: format!("unknown cache prune target: {name}"),
-                });
             }
         }
     }

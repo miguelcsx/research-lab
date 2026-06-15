@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rlab_core::{HostEvent, HostRequest, RlabError, RlabResult};
@@ -8,9 +9,11 @@ pub fn run_python_host(
     runner_module: &str,
     request: &HostRequest,
 ) -> RlabResult<Vec<HostEvent>> {
-    let mut child = Command::new(python)
+    let python = resolve_program(&request.project_root, python);
+    let mut child = Command::new(&python)
         .arg("-m")
         .arg(runner_module)
+        .current_dir(&request.project_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -52,4 +55,34 @@ pub fn run_python_host(
         events.push(event);
     }
     Ok(events)
+}
+
+fn resolve_program(project_root: &Path, program: &str) -> PathBuf {
+    let path = PathBuf::from(program);
+    if path.is_absolute() || path.components().count() == 1 {
+        path
+    } else {
+        project_root.join(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leaves_path_lookup_programs_unqualified() {
+        assert_eq!(
+            resolve_program(Path::new("/repo"), "python"),
+            PathBuf::from("python")
+        );
+    }
+
+    #[test]
+    fn resolves_relative_paths_from_project_root() {
+        assert_eq!(
+            resolve_program(Path::new("/repo"), ".venv/bin/python"),
+            PathBuf::from("/repo/.venv/bin/python")
+        );
+    }
 }

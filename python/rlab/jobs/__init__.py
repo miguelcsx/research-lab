@@ -1,21 +1,9 @@
-"""Simple job record models used by the Python facade."""
+"""Rust-backed job models."""
 
-from __future__ import annotations
+from typing import Literal, TypeAlias
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Literal
+from rlab._rlab import JobRecord
 
-JobStatus = Literal["running", "completed", "failed", "cancelled"]
-
-
-@dataclass(slots=True)
-class JobRecord:
-    id: str
-    command: str
-    status: JobStatus
-    log_path: Path
-    exit_code: int | None = None
-
+JobStatus: TypeAlias = Literal["running", "completed", "failed", "cancelled"]
 
 __all__ = ["JobRecord", "JobStatus"]

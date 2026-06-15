@@ -14,3 +14,4 @@ rlab-core = { path = "../rlab-core" }
 rlab-cli = { path = "../rlab-cli" }
 serde.workspace = true
 serde_json.workspace = true
+time.workspace = true

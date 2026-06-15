@@ -13,8 +13,7 @@ pub fn load_effective_config(
     root: Option<&Path>,
     overrides: &[ConfigOverride],
 ) -> RlabResult<EffectiveConfig> {
-    let start = config_start_path(root)?;
-    let project_root = find_project_root(&start)?;
+    let project_root = project_root(root)?;
     let project_name = super::infer::infer_project_name(&project_root)?;
     let mut config = EffectiveConfig::default_for(project_root.clone(), project_name);
 
@@ -28,13 +27,63 @@ pub fn load_effective_config(
     Ok(config)
 }
 
-fn config_start_path(root: Option<&Path>) -> RlabResult<PathBuf> {
+fn project_root(root: Option<&Path>) -> RlabResult<PathBuf> {
     match root {
-        Some(path) => Ok(path.to_path_buf()),
-        None => current_dir(),
+        Some(path) => explicit_project_root(path),
+        None => find_project_root(&current_dir()?),
     }
 }
 
 fn current_dir() -> RlabResult<PathBuf> {
     std::env::current_dir().map_err(|error| RlabError::io(Path::new(CURRENT_DIR_ERROR_PATH), error))
+}
+
+fn explicit_project_root(path: &Path) -> RlabResult<PathBuf> {
+    if !path.exists() {
+        return Err(RlabError::NotFound {
+            subject: format!("project root {}", path.display()),
+        });
+    }
+
+    path.canonicalize()
+        .map_err(|error| RlabError::io(path, error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn explicit_root_is_used_without_project_markers() {
+        let root = temp_root("explicit");
+        fs::create_dir_all(&root).expect("create temp root");
+
+        let config = expect_ok(load_effective_config(Some(&root), &[]));
+
+        assert_eq!(config.project.root, root.canonicalize().unwrap());
+        cleanup(root);
+    }
+
+    fn temp_root(label: &str) -> PathBuf {
+        let unique = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos(),
+            Err(_) => 0,
+        };
+        std::env::temp_dir().join(format!("rlab-config-root-{label}-{unique}"))
+    }
+
+    fn cleanup(root: PathBuf) {
+        if root.exists() {
+            fs::remove_dir_all(root).expect("remove temp root");
+        }
+    }
+
+    fn expect_ok<T>(result: RlabResult<T>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected ok, got {error}"),
+        }
+    }
 }

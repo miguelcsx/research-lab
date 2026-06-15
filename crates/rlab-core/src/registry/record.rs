@@ -100,7 +100,9 @@ impl RegistryKind {
 
 fn validate_kind(value: &str) -> RlabResult<()> {
     if value.is_empty() || !value.chars().all(is_valid_kind_character) {
-        return Err(RlabError::registry(format!("{INVALID_REGISTRY_KIND_PREFIX}: {value}")));
+        return Err(RlabError::registry(format!(
+            "{INVALID_REGISTRY_KIND_PREFIX}: {value}"
+        )));
     }
 
     Ok(())

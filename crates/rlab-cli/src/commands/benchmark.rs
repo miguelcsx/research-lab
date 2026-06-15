@@ -1,15 +1,10 @@
 use std::path::Path;
 
 use clap::Args;
-use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, HostCommand, HostRequest,
-    HostTarget, ProtocolVersion, RegistryKind, RlabResult, RunSession,
-};
+use rlab_core::{config::ProjectPaths, load_effective_config, RegistryKind, RlabResult};
 
-use crate::commands::run::{
-    parse_params_public, parse_target, process_event_public, ParseTargetError, ParsedTarget,
-};
-use crate::host::process::run_python_host;
+use crate::commands::run::{parse_params_public, parse_target, ParseTargetError, ParsedTarget};
+use crate::host::execution::{self, ExecutionRequest};
 use crate::render::{human::print_line, json::print_json};
 const SCHEMA_VERSION: u32 = 1;
 
@@ -22,7 +17,7 @@ pub struct BenchmarkCommand {
     pub target: String,
     #[arg(long)]
     pub strict: bool,
-    #[arg(long = "param")]
+    #[arg(long = "param", alias = "params")]
     pub params: Vec<String>,
 }
 
@@ -58,60 +53,27 @@ pub fn run(command: BenchmarkCommand, root: Option<&Path>, json: bool) -> RlabRe
             serde_json::Value::String(format!("{kind_str}:{name}")),
         );
     }
-    let session = RunSession::create(
-        &paths,
-        RegistryKind::BENCHMARK.as_str(),
-        &command.benchmark_name,
-        std::env::args().collect(),
-        params.clone(),
-    )?;
-    let request = HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: session.directory.id.as_str().to_string(),
-        command: HostCommand::Execute,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: Some(HostTarget {
-            kind: RegistryKind::BENCHMARK,
-            name: command.benchmark_name.clone(),
-        }),
-        run_id: Some(session.directory.id.as_str().to_string()),
-        run_dir: Some(session.directory.path.clone()),
-        cache_dir: Some(paths.cache.clone()),
+    let outcome = execution::execute_run(ExecutionRequest {
+        config: &config,
+        paths: &paths,
+        operation: RegistryKind::BENCHMARK.as_str(),
+        name: &command.benchmark_name,
+        target_kind: RegistryKind::BENCHMARK,
+        target_name: &command.benchmark_name,
         params,
         seed: None,
-        strict: command.strict || config.production.strict,
-        environment: serde_json::json!({}),
-    };
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-    let mut completed = None;
-    let mut failed = None;
-    for event in &events {
-        validate_event(event)?;
-        process_event_public(&session, event, &mut completed, &mut failed)?;
-    }
-    if let Some(error) = failed {
-        let run = session.fail(&error.to_string())?;
-        if json {
-            print_json("benchmark", run)?;
-        } else {
-            print_line(&format!("benchmark failed: {}", run.id.as_str()));
-        }
-        return Ok(1);
-    }
-    let result = match completed {
-        Some(value) => value,
-        None => serde_json::json!({"schema_version": SCHEMA_VERSION, "data": {}}),
-    };
-    let run = session.complete(result)?;
+        strict: command.strict,
+        default_result: serde_json::json!({"schema_version": SCHEMA_VERSION, "data": {}}),
+    })?;
     if json {
-        print_json("benchmark", run)?;
+        print_json("benchmark", &outcome.run)?;
+    } else if outcome.failed {
+        print_line(&format!("benchmark failed: {}", outcome.run.id.as_str()));
     } else {
-        print_line(&format!("completed benchmark run: {}", run.id.as_str()));
+        print_line(&format!(
+            "completed benchmark run: {}",
+            outcome.run.id.as_str()
+        ));
     }
-    Ok(0)
+    Ok(u8::from(outcome.failed))
 }

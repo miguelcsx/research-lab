@@ -38,7 +38,7 @@ pub struct StudyPlanArgs {
     full: bool,
     #[arg(long)]
     strict: bool,
-    #[arg(long = "param")]
+    #[arg(long = "param", alias = "params")]
     params: Vec<String>,
 }
 

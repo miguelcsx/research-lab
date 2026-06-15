@@ -20,7 +20,7 @@ pub struct Metric {
     pub value: f64,
     pub unit: Option<String>,
     pub direction: Option<MetricDirection>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(default = "OffsetDateTime::now_utc", with = "time::serde::rfc3339")]
     pub timestamp: OffsetDateTime,
 }
 

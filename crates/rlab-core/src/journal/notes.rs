@@ -19,13 +19,19 @@ pub struct NoteEntry {
     pub created_at: OffsetDateTime,
 }
 
+impl NoteEntry {
+    pub fn new(run_id: String, text: String) -> Self {
+        Self {
+            schema_version: NOTE_SCHEMA_VERSION,
+            run_id,
+            text,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 pub fn add_run_note(paths: &ProjectPaths, run_id: &str, text: &str) -> RlabResult<NoteEntry> {
-    let entry = NoteEntry {
-        schema_version: NOTE_SCHEMA_VERSION,
-        run_id: run_id.to_string(),
-        text: text.to_string(),
-        created_at: OffsetDateTime::now_utc(),
-    };
+    let entry = NoteEntry::new(run_id.to_string(), text.to_string());
     append_jsonl(&run_notes_path(paths, run_id), &entry)?;
     append_jsonl(&paths.cache.join("notes.jsonl"), &entry)?;
     Ok(entry)

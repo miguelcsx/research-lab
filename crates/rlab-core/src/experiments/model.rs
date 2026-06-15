@@ -52,7 +52,9 @@ fn validate_schema_version(schema_version: u32) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("unsupported experiment schema_version"))
+    Err(RlabError::validation(
+        "unsupported experiment schema_version",
+    ))
 }
 
 fn validate_name(name: &str) -> RlabResult<()> {

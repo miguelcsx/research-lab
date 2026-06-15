@@ -1,12 +1,9 @@
 use std::path::Path;
 
 use clap::{Args, Subcommand};
-use rlab_core::{
-    adapter_inventory, host::validate_event, load_effective_config, HostCommand, HostEvent,
-    HostRequest, ProtocolVersion, Registry, RlabResult,
-};
+use rlab_core::{adapter_inventory, load_effective_config, Registry, RlabResult};
 
-use crate::host::process::run_python_host;
+use crate::host::execution;
 use crate::render::{human::print_line, json::print_json};
 
 #[derive(Debug, Args)]
@@ -58,32 +55,5 @@ pub fn run(command: AdaptersCommand, root: Option<&Path>, json: bool) -> RlabRes
 }
 
 fn discover_registry(config: &rlab_core::EffectiveConfig) -> RlabResult<Registry> {
-    let request = HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: "adapters".to_string(),
-        command: HostCommand::Discover,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: None,
-        run_id: None,
-        run_dir: None,
-        cache_dir: None,
-        params: serde_json::json!({}),
-        seed: None,
-        strict: config.production.strict,
-        environment: serde_json::json!({}),
-    };
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-    let mut registry = Registry::new();
-    for event in events {
-        validate_event(&event)?;
-        if let HostEvent::RegistryRecord(value) = event {
-            registry.insert(value.record)?;
-        }
-    }
-    Ok(registry)
+    execution::discover_registry(config, config.production.strict)
 }

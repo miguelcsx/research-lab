@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rlab.reports import write_card
+from rlab import paired_bootstrap, write_card
 from rlab.runs import RunQuery
-from rlab.stats import paired_bootstrap
 
 
 def test_run_query_filters_target_and_seed(tmp_path: Path) -> None:

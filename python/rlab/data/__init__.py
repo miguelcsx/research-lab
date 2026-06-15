@@ -1,5 +1,6 @@
 """Data primitives and built-in source/sink helpers."""
 
+from .documents import list_datasets, resolve_dataset, validate_datasets
 from .primitives import (
     AuditPolicy,
     CheckResult,
@@ -54,6 +55,9 @@ __all__ = [
     "materialize",
     "patterns",
     "predicate",
+    "list_datasets",
+    "resolve_dataset",
     "substitute",
     "threshold",
+    "validate_datasets",
 ]

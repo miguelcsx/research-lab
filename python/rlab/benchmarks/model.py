@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Final
 
-from rlab._typing import JsonObject, JsonValue
+from rlab._typing import JsonObject
 
 SCHEMA_VERSION: Final = 1
 

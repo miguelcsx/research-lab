@@ -21,6 +21,17 @@ pub enum IdeaStatus {
 }
 
 impl IdeaStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idea => "idea",
+            Self::Planned => "planned",
+            Self::Running => "running",
+            Self::Validated => "validated",
+            Self::Rejected => "rejected",
+            Self::Published => "published",
+        }
+    }
+
     pub fn parse(value: &str) -> RlabResult<Self> {
         match value {
             "idea" => Ok(Self::Idea),
@@ -46,15 +57,20 @@ pub struct IdeaEntry {
     pub created_at: OffsetDateTime,
 }
 
+impl IdeaEntry {
+    pub fn new(text: String, status: IdeaStatus) -> Self {
+        Self {
+            schema_version: IDEA_SCHEMA_VERSION,
+            id: format!("idea_{}", OffsetDateTime::now_utc().unix_timestamp_nanos()),
+            text,
+            status,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 pub fn add_idea(paths: &ProjectPaths, text: &str) -> RlabResult<IdeaEntry> {
-    let id = format!("idea_{}", OffsetDateTime::now_utc().unix_timestamp_nanos());
-    let entry = IdeaEntry {
-        schema_version: IDEA_SCHEMA_VERSION,
-        id,
-        text: text.to_string(),
-        status: IdeaStatus::Idea,
-        created_at: OffsetDateTime::now_utc(),
-    };
+    let entry = IdeaEntry::new(text.to_string(), IdeaStatus::Idea);
     append_jsonl(&paths.cache.join("ideas.jsonl"), &entry)?;
     Ok(entry)
 }

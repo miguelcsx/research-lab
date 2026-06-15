@@ -2,14 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
-use rlab_core::{
-    config::ProjectPaths, host::validate_event, load_effective_config, HostCommand, HostRequest,
-    HostTarget, ProtocolVersion, RegistryKind, RlabError, RlabResult, RunSession,
-};
+use rlab_core::{config::ProjectPaths, load_effective_config, RegistryKind, RlabError, RlabResult};
 use serde_json::json;
 
-use crate::commands::run::{parse_params_public, process_event_public};
-use crate::host::process::run_python_host;
+use crate::commands::run::parse_params_public;
+use crate::host::execution::{self, ExecutionRequest};
 use crate::render::{human::print_line, json::print_json};
 const SCHEMA_VERSION: u32 = 1;
 
@@ -23,7 +20,7 @@ pub struct DataCommand {
 pub enum DataSubcommand {
     Build {
         dataset: String,
-        #[arg(long = "override")]
+        #[arg(long = "override", alias = "param", alias = "params")]
         overrides: Vec<String>,
         #[arg(long)]
         strict: bool,
@@ -149,62 +146,29 @@ fn run_data_build(
 ) -> RlabResult<u8> {
     let name = parse_dataset_name(&dataset)?;
     let params = parse_params_public(&overrides)?;
-    let session = RunSession::create(
+    let outcome = execution::execute_run(ExecutionRequest {
+        config,
         paths,
-        "data.build",
-        &name,
-        std::env::args().collect(),
-        params.clone(),
-    )?;
-    let request = HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: session.directory.id.as_str().to_string(),
-        command: HostCommand::Execute,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: Some(HostTarget {
-            kind: RegistryKind::DATASET,
-            name,
-        }),
-        run_id: Some(session.directory.id.as_str().to_string()),
-        run_dir: Some(session.directory.path.clone()),
-        cache_dir: Some(paths.cache.clone()),
+        operation: "data.build",
+        name: &name,
+        target_kind: RegistryKind::DATASET,
+        target_name: &name,
         params,
         seed: None,
-        strict: strict || config.production.strict,
-        environment: json!({}),
-    };
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-    let mut completed = None;
-    let mut failed = None;
-    for event in &events {
-        validate_event(event)?;
-        process_event_public(&session, event, &mut completed, &mut failed)?;
-    }
-    if let Some(error) = failed {
-        let run = session.fail(&error.to_string())?;
-        if json_output {
-            print_json("data_build", run)?;
-        } else {
-            print_line(&format!("data build failed: {}", run.id.as_str()));
-        }
-        return Ok(1);
-    }
-    let result = match completed {
-        Some(value) => value,
-        None => json!({"schema_version": SCHEMA_VERSION, "data": {"records": 0}}),
-    };
-    let run = session.complete(result)?;
+        strict,
+        default_result: json!({"schema_version": SCHEMA_VERSION, "data": {"records": 0}}),
+    })?;
     if json_output {
-        print_json("data_build", run)?;
+        print_json("data_build", &outcome.run)?;
+    } else if outcome.failed {
+        print_line(&format!("data build failed: {}", outcome.run.id.as_str()));
     } else {
-        print_line(&format!("completed data build: {}", run.id.as_str()));
+        print_line(&format!(
+            "completed data build: {}",
+            outcome.run.id.as_str()
+        ));
     }
-    Ok(0)
+    Ok(u8::from(outcome.failed))
 }
 
 fn parse_dataset_name(value: &str) -> RlabResult<String> {

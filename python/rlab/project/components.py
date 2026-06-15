@@ -9,7 +9,6 @@ from rlab._typing import JsonObject
 from rlab.components import ComponentSpec, Requirements
 
 from .constants import (
-    ERROR_COMPONENT_PARAMS_MAPPING,
     ERROR_COMPONENT_REFERENCE_FORMAT,
     ERROR_COMPONENT_REFERENCE_MIXED,
     ERROR_COMPONENT_REFERENCE_REQUIRED,

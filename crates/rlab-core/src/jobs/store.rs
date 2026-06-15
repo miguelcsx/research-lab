@@ -18,6 +18,29 @@ pub enum JobStatus {
     Cancelled,
 }
 
+impl JobStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn parse(value: &str) -> RlabResult<Self> {
+        match value {
+            "running" => Ok(Self::Running),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(RlabError::Validation {
+                message: format!("unknown job status: {value}"),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobRecord {
     pub schema_version: u32,
@@ -30,6 +53,34 @@ pub struct JobRecord {
     pub created_at: OffsetDateTime,
     #[serde(default, with = "time::serde::rfc3339::option")]
     pub completed_at: Option<OffsetDateTime>,
+}
+
+impl JobRecord {
+    pub fn new(
+        id: String,
+        command: String,
+        status: JobStatus,
+        log_path: String,
+        exit_code: Option<i32>,
+    ) -> RlabResult<Self> {
+        validate_nonempty("job id", &id)?;
+        validate_command(&command)?;
+        validate_nonempty("job log path", &log_path)?;
+        let now = OffsetDateTime::now_utc();
+        Ok(Self {
+            schema_version: SCHEMA_VERSION,
+            id,
+            command,
+            status,
+            exit_code,
+            log_path,
+            created_at: now,
+            completed_at: match status {
+                JobStatus::Running => None,
+                _ => Some(now),
+            },
+        })
+    }
 }
 
 pub fn start_job(paths: &ProjectPaths, command: &str) -> RlabResult<JobRecord> {
@@ -120,6 +171,15 @@ fn validate_command(command: &str) -> RlabResult<()> {
     if command.trim().is_empty() {
         return Err(RlabError::Validation {
             message: "job command cannot be empty".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_nonempty(label: &str, value: &str) -> RlabResult<()> {
+    if value.trim().is_empty() {
+        return Err(RlabError::Validation {
+            message: format!("{label} cannot be empty"),
         });
     }
     Ok(())

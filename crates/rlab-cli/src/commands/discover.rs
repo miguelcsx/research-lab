@@ -4,13 +4,12 @@ use std::process::Command;
 use clap::Args;
 use rlab_core::{
     config::ProjectPaths,
-    host::validate_event,
     load_effective_config,
     registry::{hash_strings, load_registry_cache, save_registry_cache, RegistryCacheKey},
-    HostCommand, HostEvent, HostRequest, ProtocolVersion, Registry, RlabResult,
+    Registry, RlabResult,
 };
 
-use crate::host::process::run_python_host;
+use crate::host::execution;
 use crate::render::{
     human::{print_line, print_registry},
     json::print_json,
@@ -50,34 +49,7 @@ pub fn discover_registry(
             return Ok(registry);
         }
     }
-    let request = HostRequest {
-        protocol_version: ProtocolVersion::current(),
-        request_id: "discover".to_string(),
-        command: HostCommand::Discover,
-        project_root: config.project.root.clone(),
-        modules: config.python.modules.clone(),
-        target: None,
-        run_id: None,
-        run_dir: None,
-        cache_dir: None,
-        params: serde_json::json!({}),
-        seed: None,
-        strict,
-        environment: serde_json::json!({
-            "python_executable": config.python.executable,
-            "runner_module": config.python.runner_module,
-        }),
-    };
-    let events = run_python_host(
-        &config.python.executable,
-        &config.python.runner_module,
-        &request,
-    )?;
-    let mut registry = Registry::new();
-    for event in &events {
-        validate_event(event)?;
-        collect_registry_event(event, &mut registry)?;
-    }
+    let registry = execution::discover_registry(config, strict)?;
     save_registry_cache(&paths.registry_cache, registry.clone(), &cache_key)?;
     Ok(registry)
 }
@@ -95,22 +67,6 @@ fn normalize_kind(kind: &str) -> &str {
     match kind {
         "studies" => "study",
         _ => kind.strip_suffix('s').unwrap_or(kind),
-    }
-}
-
-fn collect_registry_event(event: &HostEvent, registry: &mut Registry) -> RlabResult<()> {
-    match event {
-        HostEvent::RegistryRecord(record) => registry.insert(record.record.clone()),
-        HostEvent::Failed { error, .. } => Err(rlab_core::RlabError::Host {
-            message: error.to_string(),
-        }),
-        HostEvent::Batch { events, .. } => {
-            for nested in events {
-                collect_registry_event(nested, registry)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
     }
 }
 
@@ -139,12 +95,20 @@ pub fn cache_key_for(
         modules: config.python.modules.clone(),
         source_paths: infer_source_paths(&config.project.root, &config.python.modules),
         python_executable: config.python.executable.clone(),
-        python_version: detect_python_version(&config.python.executable),
+        python_version: detect_python_version(&config.project.root, &config.python.executable),
         strict_policy_hash: hash_strings(&[strict.to_string()]),
     })
 }
 
-fn detect_python_version(executable: &str) -> String {
+fn detect_python_version(root: &Path, executable: &str) -> String {
+    let executable = {
+        let path = PathBuf::from(executable);
+        if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        }
+    };
     Command::new(executable)
         .arg("--version")
         .output()

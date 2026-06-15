@@ -10,7 +10,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Final
 
-from ._project import Project, pinned_project
+from .project import Project, pinned_project
 
 ERROR_ROOT_MISSING: Final = "project root does not exist: {root}"
 ERROR_EMPTY_MODULE: Final = "module names cannot be empty"
@@ -29,7 +29,7 @@ def load_modules(
     """Import configured modules under a pinned project and return it."""
     root = _validated_project_root(project_root)
     project = Project(root=root)
-    discover_modules(project, root, modules)
+    discover_modules(project, root, modules, strict=strict)
 
     if strict and not project.records:
         raise ValueError(ERROR_STRICT_EMPTY_DISCOVERY)
@@ -41,6 +41,8 @@ def discover_modules(
     project: Project,
     project_root: str | Path,
     modules: Iterable[str],
+    *,
+    strict: bool = False,
 ) -> None:
     """Deterministically import configured packages into an existing project."""
     root = _validated_project_root(project_root)
@@ -48,7 +50,7 @@ def discover_modules(
 
     with pinned_project(project):
         for module_name in _validated_module_names(modules):
-            _import_discovered_modules(module_name)
+            _import_discovered_modules(module_name, strict=strict)
 
 
 def _validated_project_root(project_root: str | Path) -> Path:
@@ -79,11 +81,15 @@ def _validated_module_name(module_name: str) -> str:
     raise ValueError(ERROR_EMPTY_MODULE)
 
 
-def _import_discovered_modules(module_name: str) -> None:
+def _import_discovered_modules(module_name: str, *, strict: bool) -> None:
     module = importlib.import_module(module_name)
     for discovered in _expanded_module_names(module, module_name):
         if discovered != module_name:
-            importlib.import_module(discovered)
+            try:
+                importlib.import_module(discovered)
+            except ModuleNotFoundError:
+                if strict:
+                    raise
 
 
 def _expanded_module_names(module: ModuleType, module_name: str) -> Iterator[str]:
@@ -98,7 +104,9 @@ def _expanded_module_names(module: ModuleType, module_name: str) -> Iterator[str
 
 def _package_path(module: ModuleType) -> list[str] | None:
     path = getattr(module, "__path__", None)
-    return path if isinstance(path, list) else None
+    if path is None:
+        return None
+    return [str(item) for item in path]
 
 
 def _iter_child_module_names(module_path: list[str] | None, module_name: str) -> Iterator[str]:

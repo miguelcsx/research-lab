@@ -19,19 +19,25 @@ pub struct DecisionEntry {
     pub created_at: OffsetDateTime,
 }
 
+impl DecisionEntry {
+    pub fn new(text: String, selected_run: Option<String>, criteria: Value) -> Self {
+        Self {
+            schema_version: DECISION_SCHEMA_VERSION,
+            text,
+            selected_run,
+            criteria,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 pub fn add_decision(
     paths: &ProjectPaths,
     text: &str,
     selected_run: Option<String>,
     criteria: Value,
 ) -> RlabResult<DecisionEntry> {
-    let entry = DecisionEntry {
-        schema_version: DECISION_SCHEMA_VERSION,
-        text: text.to_string(),
-        selected_run,
-        criteria,
-        created_at: OffsetDateTime::now_utc(),
-    };
+    let entry = DecisionEntry::new(text.to_string(), selected_run, criteria);
     append_jsonl(&paths.cache.join("decisions.jsonl"), &entry)?;
     Ok(entry)
 }

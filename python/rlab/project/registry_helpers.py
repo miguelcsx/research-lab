@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
-
 from rlab._typing import JsonObject, JsonValue
 
 from .constants import (
     ERROR_INVALID_NAME,
     ERROR_KIND_NAME_REQUIRED,
-    ERROR_OBJECT_SEQUENCE,
     ERROR_WORKFLOW_STEPS_INVALID,
     KEY_METADATA,
     KEY_NAME,
@@ -64,7 +61,7 @@ def workflow_steps(record: JsonObject, workflow_name: str) -> list[JsonValue]:
             ERROR_WORKFLOW_STEPS_INVALID.format(workflow_name=workflow_name)
         )
 
-    return cast(list[JsonValue], steps)
+    return steps
 
 
 def step_name(step: JsonValue) -> str | None:

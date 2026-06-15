@@ -61,7 +61,9 @@ impl Grid {
             validate_axis_name("matrix", name)?;
 
             if values.is_empty() {
-                return Err(RlabError::validation(format!("matrix axis {name} has no values")));
+                return Err(RlabError::validation(format!(
+                    "matrix axis {name} has no values"
+                )));
             }
         }
 
@@ -86,7 +88,9 @@ impl Sample {
         validate_schema_version("sample", self.schema_version)?;
 
         if self.n == 0 {
-            return Err(RlabError::validation("sample size must be greater than zero"));
+            return Err(RlabError::validation(
+                "sample size must be greater than zero",
+            ));
         }
 
         for (name, distribution) in &self.space {
@@ -107,7 +111,9 @@ impl Distribution {
                 validate_bounds(*low, *high)?;
 
                 if *low <= 0.0 {
-                    return Err(RlabError::validation("log_uniform low bound must be positive"));
+                    return Err(RlabError::validation(
+                        "log_uniform low bound must be positive",
+                    ));
                 }
 
                 Ok(())
@@ -145,7 +151,9 @@ fn validate_schema_version(kind: &str, schema_version: u32) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation(format!("unsupported {kind} schema_version")))
+    Err(RlabError::validation(format!(
+        "unsupported {kind} schema_version"
+    )))
 }
 
 fn validate_axis_name(kind: &str, name: &str) -> RlabResult<()> {
@@ -153,7 +161,9 @@ fn validate_axis_name(kind: &str, name: &str) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation(format!("{kind} axis name cannot be empty")))
+    Err(RlabError::validation(format!(
+        "{kind} axis name cannot be empty"
+    )))
 }
 
 fn validate_choice(values: &[Value]) -> RlabResult<()> {
@@ -161,7 +171,9 @@ fn validate_choice(values: &[Value]) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("choice distribution requires at least one value"))
+    Err(RlabError::validation(
+        "choice distribution requires at least one value",
+    ))
 }
 
 fn validate_bounds(low: f64, high: f64) -> RlabResult<()> {
@@ -169,7 +181,9 @@ fn validate_bounds(low: f64, high: f64) -> RlabResult<()> {
         return Ok(());
     }
 
-    Err(RlabError::validation("distribution bounds must be finite and low < high"))
+    Err(RlabError::validation(
+        "distribution bounds must be finite and low < high",
+    ))
 }
 
 fn grid_size(axes: &BTreeMap<String, Vec<Value>>) -> RlabResult<usize> {

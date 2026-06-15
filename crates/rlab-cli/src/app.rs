@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use rlab_core::RlabResult;
 
-use crate::commands;
+use crate::{commands, logger, logger::LogLevel};
 
 #[derive(Debug, Parser)]
 #[command(name = "rlab", version, about = "Rust-first local research runtime")]
@@ -11,6 +11,8 @@ pub struct Cli {
     pub root: Option<std::path::PathBuf>,
     #[arg(long, global = true)]
     pub json: bool,
+    #[arg(long, global = true, value_enum)]
+    pub log_level: Option<LogLevel>,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -31,6 +33,7 @@ pub enum Command {
     Migrate(commands::migrate::MigrateCommand),
     Freeze(commands::freeze::FreezeCommand),
     Cache(commands::cache::CacheCommand),
+    Clean(commands::clean::CleanCommand),
     Notes(commands::notes::NotesCommand),
     Journal(commands::journal::JournalCommand),
     Report(commands::report::ReportCommand),
@@ -64,6 +67,7 @@ where
     T: Into<std::ffi::OsString> + Clone,
 {
     let cli = Cli::parse_from(args);
+    logger::init(cli.json, cli.log_level);
     match cli.command {
         Command::Init(command) => commands::init::run(command, cli.root.as_deref(), cli.json),
         Command::Validate(command) => {
@@ -89,6 +93,7 @@ where
         Command::Migrate(command) => commands::migrate::run(command, cli.root.as_deref(), cli.json),
         Command::Freeze(command) => commands::freeze::run(command, cli.root.as_deref(), cli.json),
         Command::Cache(command) => commands::cache::run(command, cli.root.as_deref(), cli.json),
+        Command::Clean(command) => commands::clean::run(command, cli.root.as_deref(), cli.json),
         Command::Notes(command) => commands::notes::run(command, cli.root.as_deref(), cli.json),
         Command::Journal(command) => commands::journal::run(command, cli.root.as_deref(), cli.json),
         Command::Report(command) => commands::report::run(command, cli.root.as_deref(), cli.json),
@@ -116,5 +121,36 @@ where
         Command::Adapters(command) => {
             commands::adapters::run(command, cli.root.as_deref(), cli.json)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Command};
+    use clap::Parser;
+
+    #[test]
+    fn parses_clean_command() {
+        let cli = Cli::parse_from(["rlab", "clean"]);
+        assert!(matches!(cli.command, Command::Clean(command) if !command.force));
+    }
+
+    #[test]
+    fn parses_clean_force_command() {
+        let cli = Cli::parse_from(["rlab", "clean", "--force"]);
+        assert!(matches!(cli.command, Command::Clean(command) if command.force));
+    }
+
+    #[test]
+    fn parses_json_clean_command() {
+        let cli = Cli::parse_from(["rlab", "--json", "clean"]);
+        assert!(cli.json);
+        assert!(matches!(cli.command, Command::Clean(command) if !command.force));
+    }
+
+    #[test]
+    fn parses_log_level() {
+        let cli = Cli::parse_from(["rlab", "--log-level", "debug", "clean"]);
+        assert_eq!(cli.log_level, Some(super::LogLevel::Debug));
     }
 }

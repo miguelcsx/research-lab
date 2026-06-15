@@ -1,5 +1,5 @@
-"""Artifact facade exports."""
+"""Rust-backed artifact exports."""
 
-from .service import ArtifactStore
+from rlab._rlab import ArtifactStore
 
 __all__ = ["ArtifactStore"]

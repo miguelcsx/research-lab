@@ -30,9 +30,7 @@ fn descend_path<'a>(target: &'a mut Value, path: &str, part: &str) -> RlabResult
         .as_object_mut()
         .and_then(|object| object.get_mut(part))
         .filter(|value| value.is_object())
-        .ok_or_else(|| {
-            RlabError::config(format!("unknown or non-mapping config path: {path:?}"))
-        })
+        .ok_or_else(|| RlabError::config(format!("unknown or non-mapping config path: {path:?}")))
 }
 
 fn insert_path_value(target: &mut Value, path: &str, key: &str, value: Value) -> RlabResult<()> {

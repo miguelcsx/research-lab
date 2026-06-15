@@ -191,11 +191,9 @@ mod tests {
 
         let path = std::env::temp_dir().join(format!("rlab-configs-{unique}"));
 
-        expect_ok(
-            fs::create_dir_all(&path).map_err(|error| RlabError::config(format!(
-                "failed to create temporary config dir: {error}"
-            ))),
-        );
+        expect_ok(fs::create_dir_all(&path).map_err(|error| {
+            RlabError::config(format!("failed to create temporary config dir: {error}"))
+        }));
 
         path
     }
@@ -205,8 +203,9 @@ mod tests {
         let root = temp_dir();
 
         expect_ok(
-            fs::write(root.join("base.yaml"), "model:\n  width: 32\n")
-                .map_err(|error| RlabError::config(format!("failed to write base config: {error}"))),
+            fs::write(root.join("base.yaml"), "model:\n  width: 32\n").map_err(|error| {
+                RlabError::config(format!("failed to write base config: {error}"))
+            }),
         );
 
         expect_ok(
@@ -228,8 +227,9 @@ mod tests {
         assert_eq!(document.value["model"]["width"], 64);
         assert_eq!(document.value["model"]["layers"], 2);
 
-        expect_ok(fs::remove_dir_all(root)
-            .map_err(|error| RlabError::config(format!("failed to clean temporary config dir: {error}"))));
+        expect_ok(fs::remove_dir_all(root).map_err(|error| {
+            RlabError::config(format!("failed to clean temporary config dir: {error}"))
+        }));
     }
 
     #[test]
@@ -248,8 +248,9 @@ mod tests {
 
         assert!(resolve_document(&root, "a", ".yaml", BTreeMap::new(), true).is_err());
 
-        expect_ok(fs::remove_dir_all(root)
-            .map_err(|error| RlabError::config(format!("failed to clean temporary config dir: {error}"))));
+        expect_ok(fs::remove_dir_all(root).map_err(|error| {
+            RlabError::config(format!("failed to clean temporary config dir: {error}"))
+        }));
     }
 
     fn expect_ok<T>(result: RlabResult<T>) -> T {

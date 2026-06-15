@@ -25,6 +25,17 @@ pub struct BaselineStore {
 }
 
 impl BaselineEntry {
+    pub fn new(name: String, metric: String, value: f64, description: Option<String>) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            name,
+            metric,
+            value,
+            description,
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+
     pub fn validate(&self) -> RlabResult<()> {
         if self.schema_version != SCHEMA_VERSION {
             return Err(RlabError::Validation {
