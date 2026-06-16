@@ -208,20 +208,35 @@ fn render_profile(path: &Path, json_output: bool) -> RlabResult<u8> {
 
 fn validate_manifest(path: &Path, json_output: bool) -> RlabResult<u8> {
     let content = read_text(path)?;
-    let parsed = serde_json::from_str::<serde_json::Value>(&content)
-        .or_else(|_| {
-            let json_str = serde_json::to_string(&content)?;
-            serde_json::from_str::<serde_json::Value>(&format!("{{\"text\":{json_str}}}"))
-        })
-        .map_err(RlabError::serialization)?;
-    let has_schema = parsed.get("schema_version").is_some() || content.contains("schema_version");
-    let result = json!({"schema_version": SCHEMA_VERSION,"path":path.display().to_string(),"valid":has_schema,"has_schema_version":has_schema});
+    let (valid, has_schema) = validate_data_content(&content);
+    let result = json!({"schema_version": SCHEMA_VERSION,"path":path.display().to_string(),"valid":valid,"has_schema_version":has_schema});
     if json_output {
         print_json("data_validate", result)?;
     } else {
         print_line(&serde_json::to_string_pretty(&result).map_err(RlabError::serialization)?);
     }
-    Ok(if has_schema { 0 } else { 1 })
+    Ok(u8::from(!valid))
+}
+
+fn validate_data_content(content: &str) -> (bool, bool) {
+    let lines = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        return (false, false);
+    }
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(content) {
+        return (true, value.get("schema_version").is_some());
+    }
+    let mut has_schema = false;
+    for line in lines {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+            return (false, false);
+        };
+        has_schema |= value.get("schema_version").is_some();
+    }
+    (true, has_schema)
 }
 
 fn render_lineage(path: &Path, json_output: bool) -> RlabResult<u8> {
@@ -340,4 +355,25 @@ fn render_run_file(
         print_line(&text);
     }
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_data_content;
+
+    #[test]
+    fn validates_jsonl_without_schema_version() {
+        assert_eq!(
+            validate_data_content("{\"text\":\"a\"}\n{\"text\":\"b\"}\n"),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_jsonl() {
+        assert_eq!(
+            validate_data_content("{\"text\":\"a\"}\nnope\n"),
+            (false, false)
+        );
+    }
 }
