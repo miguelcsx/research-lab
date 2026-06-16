@@ -451,7 +451,18 @@ fn apply_stage(
 ) -> PyResult<StageResult> {
     let stage = stage.bind(py);
     if let Some(apply) = callable_attr(stage, "apply")? {
-        if !accepts_args(py, &apply, 1)? && !accepts_args(py, &apply, 2)? {
+        let accepts_one = accepts_args(py, &apply, 1)?;
+        let accepts_two = accepts_args(py, &apply, 2)?;
+        if accepts_one && !accepts_two {
+            let args = vec_to_py_list(py, &records);
+            let output = call_python(py, &apply, &[args.unbind().into()])?;
+            return Ok(StageResult {
+                records: iterable_to_vec(py, &output)?,
+                dropped: 0,
+                reasons: BTreeMap::new(),
+            });
+        }
+        if !accepts_one && !accepts_two {
             let args = vec_to_py_list(py, &records);
             let output = call_python(
                 py,
