@@ -640,7 +640,7 @@ fn register_artifact(ctx: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
         .file_stem()
         .map(|value| value.to_string_lossy().to_string())
         .unwrap_or_else(|| "dataset_audit".to_string());
-    ctx.call_method1("save_artifact", (path, name, "dataset_audit"))?;
+    ctx.call_method1("save_artifact", (name, path, "dataset_audit"))?;
     Ok(())
 }
 
