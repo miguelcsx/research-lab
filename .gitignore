@@ -7,6 +7,7 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 *.egg-info/
+python/rlab/*.so
 build/
 dist/
 

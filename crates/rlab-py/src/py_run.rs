@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::{json, Value};
 
-use rlab_core::host::{HostEvent, ProgressEvent, ProtocolVersion};
+use rlab_core::host::{HostEvent, LogEvent, ProgressEvent, ProtocolVersion};
 
 use crate::convert::json::{from_json_str, to_json};
 use crate::error::to_py_error;
@@ -298,8 +298,15 @@ impl PyRuntimeContext {
         self.logs.push(text.to_string());
     }
 
-    pub fn log(&mut self, text: &str) {
-        self.note(text);
+    pub fn log(&mut self, py: Python<'_>, text: &str) -> PyResult<()> {
+        write_host_event(
+            py,
+            HostEvent::Log(LogEvent {
+                protocol_version: ProtocolVersion::current(),
+                request_id: self.run_id.as_deref().unwrap_or("unknown").to_string(),
+                message: text.to_string(),
+            }),
+        )
     }
 
     #[pyo3(signature = (phase, component = "", state = "running", processed = 0, total = None, detail = ""))]
@@ -313,10 +320,9 @@ impl PyRuntimeContext {
         total: Option<u64>,
         detail: &str,
     ) -> PyResult<()> {
-        let request_id = self.run_id.as_deref().unwrap_or("unknown");
         let event = HostEvent::Progress(ProgressEvent {
             protocol_version: ProtocolVersion::current(),
-            request_id: request_id.to_string(),
+            request_id: self.run_id.as_deref().unwrap_or("unknown").to_string(),
             phase: phase.to_string(),
             component: component.to_string(),
             state: state.to_string(),
@@ -324,14 +330,7 @@ impl PyRuntimeContext {
             total,
             detail: detail.to_string(),
         });
-        let line = serde_json::to_string(&event).map_err(|error| {
-            pyo3::exceptions::PyValueError::new_err(error.to_string())
-        })?;
-        let sys = py.import_bound("sys")?;
-        let stdout = sys.getattr("stdout")?;
-        stdout.call_method1("write", (format!("{line}\n"),))?;
-        stdout.call_method0("flush")?;
-        Ok(())
+        write_host_event(py, event)
     }
 
     #[pyo3(signature = (name_or_command, command=None))]
@@ -623,6 +622,16 @@ fn py_from_json(py: Python<'_>, value: &Value) -> PyResult<PyObject> {
         .import_bound("json")?
         .call_method1("loads", (to_json(value)?,))?
         .unbind())
+}
+
+fn write_host_event(py: Python<'_>, event: HostEvent) -> PyResult<()> {
+    let line = serde_json::to_string(&event)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let sys = py.import_bound("sys")?;
+    let stdout = sys.getattr("stdout")?;
+    stdout.call_method1("write", (format!("{line}\n"),))?;
+    stdout.call_method0("flush")?;
+    Ok(())
 }
 
 fn param_type_error(name: &str, kind: &str) -> PyErr {

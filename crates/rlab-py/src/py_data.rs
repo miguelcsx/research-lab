@@ -327,7 +327,14 @@ pub fn execute_dataset_py(
     let num_records = records.len();
     let _ = ctx.call_method1(
         "report_progress",
-        ("source", "", "completed", num_records as u64, Option::<u64>::None, format!("{num_records} records loaded").as_str()),
+        (
+            "source",
+            "",
+            "completed",
+            num_records as u64,
+            Option::<u64>::None,
+            format!("{num_records} records loaded").as_str(),
+        ),
     );
 
     for (reference, stage, config) in stages {
@@ -346,14 +353,28 @@ pub fn execute_dataset_py(
         let stage_output = records.len();
         let _ = ctx.call_method1(
             "report_progress",
-            ("stage", reference.as_str(), "completed", stage_output as u64, Option::<u64>::None, format!("{input} → {stage_output} ({dropped} dropped)").as_str()),
+            (
+                "stage",
+                reference.as_str(),
+                "completed",
+                stage_output as u64,
+                Option::<u64>::None,
+                format!("{input} → {stage_output} ({dropped} dropped)").as_str(),
+            ),
         );
     }
 
     let sink_results = write_sinks(py, sinks, &records, ctx)?;
     let _ = ctx.call_method1(
         "report_progress",
-        ("sink", "", "completed", 0u64, Option::<u64>::None, "sinks written"),
+        (
+            "sink",
+            "",
+            "completed",
+            0u64,
+            Option::<u64>::None,
+            "sinks written",
+        ),
     );
 
     log_dataset_metrics(py, ctx, records.len(), audit.dropped)?;

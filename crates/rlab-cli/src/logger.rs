@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use clap::ValueEnum;
+use rlab_core::HostEvent;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum LogLevel {
@@ -37,17 +38,61 @@ pub fn debug(message: impl AsRef<str>) {
     log(LogLevel::Debug, message);
 }
 
-pub fn progress(phase: &str, component: &str, state: &str, detail: &str) {
+pub fn event(host_event: &HostEvent) {
+    match host_event {
+        HostEvent::Log(log) => info(&log.message),
+        HostEvent::Warning(log) => warn(&log.message),
+        HostEvent::Error(log) => error(&log.message),
+        HostEvent::Progress(progress) => {
+            let level = if progress.state == "running" {
+                LogLevel::Debug
+            } else {
+                LogLevel::Info
+            };
+            log(
+                level,
+                progress_message(
+                    &progress.phase,
+                    &progress.component,
+                    &progress.state,
+                    progress.processed,
+                    progress.total,
+                    &progress.detail,
+                ),
+            );
+        }
+        HostEvent::Batch { events, .. } => {
+            for nested in events {
+                event(nested);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn progress_message(
+    phase: &str,
+    component: &str,
+    state: &str,
+    processed: u64,
+    total: Option<u64>,
+    detail: &str,
+) -> String {
     let tag = if component.is_empty() {
         format!("[{phase}]")
     } else {
         format!("[{phase}.{component}]")
     };
-    let level = match state {
-        "running" => LogLevel::Debug,
-        _ => LogLevel::Info,
+    let count = match total {
+        Some(total) => format!(" {processed}/{total}"),
+        None if processed > 0 => format!(" {processed}"),
+        None => String::new(),
     };
-    log(level, format!("{tag} {detail}"));
+    if detail.is_empty() {
+        format!("{tag} {state}{count}")
+    } else {
+        format!("{tag} {state}{count}: {detail}")
+    }
 }
 
 fn log(level: LogLevel, message: impl AsRef<str>) {
@@ -74,7 +119,7 @@ fn label(level: LogLevel) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::LogLevel;
+    use super::{progress_message, LogLevel};
     use clap::ValueEnum;
 
     #[test]
@@ -82,6 +127,14 @@ mod tests {
         assert_eq!(
             LogLevel::from_str("DEBUG", true).ok(),
             Some(LogLevel::Debug)
+        );
+    }
+
+    #[test]
+    fn formats_progress_with_counts() {
+        assert_eq!(
+            progress_message("dataset", "smoke", "completed", 42, Some(100), "wrote rows"),
+            "[dataset.smoke] completed 42/100: wrote rows"
         );
     }
 }

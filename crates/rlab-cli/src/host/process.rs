@@ -50,17 +50,8 @@ pub fn run_python_host(
             if line.trim().is_empty() {
                 continue;
             }
-            let event: HostEvent =
-                serde_json::from_str(&line).map_err(RlabError::serialization)?;
-            match &event {
-                HostEvent::Log(log) => logger::info(&log.message),
-                HostEvent::Warning(log) => logger::warn(&log.message),
-                HostEvent::Error(log) => logger::error(&log.message),
-                HostEvent::Progress(p) => {
-                    logger::progress(&p.phase, &p.component, &p.state, &p.detail);
-                }
-                _ => {}
-            }
+            let event = parse_host_event_line(&line)?;
+            logger::event(&event);
             events.push(event);
         }
         Ok(events)
@@ -119,6 +110,24 @@ fn resolve_program(project_root: &Path, program: &str) -> PathBuf {
     }
 }
 
+fn parse_host_event_line(line: &str) -> RlabResult<HostEvent> {
+    serde_json::from_str(line).map_err(|error| RlabError::Host {
+        message: format!(
+            "Python runner wrote non-protocol stdout; stdout is reserved for rlab host events. line={} error={error}",
+            preview(line),
+        ),
+    })
+}
+
+fn preview(line: &str) -> String {
+    const LIMIT: usize = 120;
+    let mut value: String = line.chars().take(LIMIT).collect();
+    if line.chars().count() > LIMIT {
+        value.push_str("...");
+    }
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +146,18 @@ mod tests {
             resolve_program(Path::new("/repo"), ".venv/bin/python"),
             PathBuf::from("/repo/.venv/bin/python")
         );
+    }
+
+    #[test]
+    fn previews_long_stdout_lines() {
+        let line = "x".repeat(130);
+        assert_eq!(preview(&line), format!("{}...", "x".repeat(120)));
+    }
+
+    #[test]
+    fn non_protocol_stdout_names_reserved_stdout() {
+        let error = parse_host_event_line("plain print").unwrap_err();
+        assert!(error.to_string().contains("stdout is reserved"));
+        assert!(error.to_string().contains("plain print"));
     }
 }

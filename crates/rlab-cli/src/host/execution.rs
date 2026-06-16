@@ -142,6 +142,14 @@ pub fn process_event(
         HostEvent::Log(value) | HostEvent::Warning(value) | HostEvent::Error(value) => {
             session.append_log(&value.message)
         }
+        HostEvent::Progress(value) => session.append_log(&crate::logger::progress_message(
+            &value.phase,
+            &value.component,
+            &value.state,
+            value.processed,
+            value.total,
+            &value.detail,
+        )),
         HostEvent::Completed { result, .. } => {
             *completed = Some(result.clone());
             Ok(())
@@ -156,7 +164,7 @@ pub fn process_event(
             }
             Ok(())
         }
-        HostEvent::RegistryRecord(_) | HostEvent::Progress(_) => Ok(()),
+        HostEvent::RegistryRecord(_) => Ok(()),
     }
 }
 
