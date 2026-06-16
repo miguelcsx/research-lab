@@ -9,7 +9,7 @@ from typing import TypeVar, cast
 
 from rlab._decorators import decorator_factory
 from rlab._rlab import ProjectCore
-from rlab._typing import JsonObject
+from rlab._typing import JsonObject, coerce_json_object
 from rlab.components import ComponentSpec, Requirements
 
 from .components import (
@@ -85,6 +85,9 @@ class Project:
     def record(self, kind: str, name: str) -> JsonObject:
         return cast(JsonObject, json.loads(self._core.record_json(kind, name)))
 
+    def ref(self, reference: str, **params: object) -> ComponentSpec[object]:
+        return ComponentSpec(reference, coerce_json_object(params))
+
     def experiment(self, name: str, **metadata: object) -> Callable[[T], T]:
         return self._decorator(KIND_EXPERIMENT, name, metadata)
 
@@ -103,6 +106,9 @@ class Project:
             metadata=metadata,
         )
         return name
+
+    def declaration(self, kind: str, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._decorator(kind, name, metadata)
 
     def sweep(self, name: str, **metadata: object) -> Callable[[T], T]:
         return self._planned_experiment("sweep", name, metadata)
@@ -261,9 +267,20 @@ class Project:
 
         return cast(Callable[..., object], factory)(
             *inject,
-            **validate_signature_params(factory, params),
+            **validate_signature_params(factory, params, injected=len(inject)),
             **legacy_kwargs,
         )
+
+    def build_spec(
+        self,
+        spec: ComponentSpec[object] | Mapping[str, object] | str,
+        *inject: object,
+        kind: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        component = ComponentSpec.from_value(spec)
+        reference = component.ref if kind is None else kind
+        return self.build(reference, component, *inject, **kwargs)
 
     def requirements(self, kind: str, name: str) -> Requirements:
         value = self._core.requirements_json(kind, name)
@@ -348,12 +365,14 @@ class Project:
     ) -> dict[str, object]:
         values = dict(metadata)
         source = values.get("source")
-        if source is not None and not isinstance(source, str):
+        if _is_dataset_callable(source):
             values["_source_callable"] = source
             values["source"] = f"{KIND_DATASET_SOURCE}:{name}"
 
         sink_callables = [
-            sink for sink in dataset_sinks(values) if sink is not None and not isinstance(sink, str)
+            sink
+            for sink in dataset_sinks(values)
+            if _is_dataset_callable(sink)
         ]
         if sink_callables:
             values["_sink_callables"] = sink_callables
@@ -397,3 +416,12 @@ class Project:
             version,
             tags,
         )
+
+
+def _is_dataset_callable(value: object) -> bool:
+    return (
+        value is not None
+        and not isinstance(value, str | Mapping)
+        and not callable(getattr(value, "to_dict", None))
+        and not callable(getattr(value, "model_dump", None))
+    )

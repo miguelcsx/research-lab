@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 import rlab
+from rlab._runner import _invoke_dataset
 
 
 def test_project_build_infers_component_params(tmp_path: Path) -> None:
@@ -37,6 +39,131 @@ def test_project_build_infers_component_params(tmp_path: Path) -> None:
     }
     with pytest.raises(ValueError, match="unknown component params"):
         project.build("transform:scale", {"other": 2.5}, "value")
+
+
+def test_project_builds_component_specs_with_inline_params(tmp_path: Path) -> None:
+    project = rlab.Project("component-build-spec-test", root=tmp_path)
+
+    @project.component("transform:scale")
+    def scale(*, factor: float) -> float:
+        return factor
+
+    assert project.build_spec({"ref": "transform:scale", "factor": 2.5}) == 2.5
+    assert project.build_spec({"ref": "scale", "factor": 3.0}, kind="transform") == 3.0
+
+
+def test_project_ref_builds_component_spec(tmp_path: Path) -> None:
+    project = rlab.Project("component-ref-test", root=tmp_path)
+
+    assert project.ref("optimizer:adamw", learning_rate=0.001).to_dict() == {
+        "ref": "optimizer:adamw",
+        "params": {"learning_rate": 0.001},
+    }
+
+
+def test_project_builds_positional_or_keyword_component_params(tmp_path: Path) -> None:
+    project = rlab.Project("component-build-dataclass-test", root=tmp_path)
+
+    @project.component("source:constant")
+    class ConstantSource:
+        def __init__(self, value: str = "default") -> None:
+            self.value = value
+
+    built = cast(
+        ConstantSource,
+        project.build_spec({"ref": "source:constant", "value": "configured"}),
+    )
+
+    assert built.value == "configured"
+
+
+def test_declared_dataset_executes_component_specs(tmp_path: Path) -> None:
+    project = rlab.Project("dataset-spec-execution-test", root=tmp_path)
+
+    @project.source("items")
+    class Items:
+        def __init__(self, value: str = "x") -> None:
+            self.value = value
+
+        def read(self, _ctx: object) -> list[dict[str, str]]:
+            return [{"text": self.value}]
+
+    @project.transform("suffix")
+    class Suffix:
+        def __init__(self, suffix: str = "!") -> None:
+            self.suffix = suffix
+
+        def apply(self, record: dict[str, str], _ctx: object) -> dict[str, str]:
+            return {"text": record["text"] + self.suffix}
+
+    @project.sink("capture")
+    class Capture:
+        def __init__(self, label: str = "out") -> None:
+            self.label = label
+
+        def write(self, records: list[dict[str, str]], _ctx: object) -> rlab.SinkResult:
+            assert records == [{"text": "configured?"}]
+            return rlab.SinkResult(self.label, "memory", len(records))
+
+    project.pipeline("pipe", {"ref": "transform:suffix", "suffix": "?"})
+    project.dataset(
+        "configured",
+        source={"ref": "source:items", "value": "configured"},
+        pipeline="pipeline:pipe",
+        sinks=({"ref": "sink:capture", "label": "captured"},),
+    )
+    ctx = rlab.RuntimeContext(
+        run_id="dataset-spec",
+        run_dir=tmp_path,
+        cache_dir=tmp_path / "cache",
+        project_root=tmp_path,
+        params_json="{}",
+        seed=None,
+    )
+
+    result = _invoke_dataset(project, "configured", ctx)
+
+    assert result["records"] == 1
+    assert result["sinks"] == [{"name": "captured", "path": "memory", "records": 1}]
+
+
+def test_declared_dataset_accepts_component_spec_objects(tmp_path: Path) -> None:
+    project = rlab.Project("dataset-component-spec-test", root=tmp_path)
+
+    @project.source("items")
+    class Items:
+        def __init__(self, value: str = "x") -> None:
+            self.value = value
+
+        def read(self, _ctx: object) -> list[dict[str, str]]:
+            return [{"text": self.value}]
+
+    @project.sink("capture")
+    class Capture:
+        def write(self, records: list[dict[str, str]], _ctx: object) -> rlab.SinkResult:
+            assert records == [{"text": "configured"}]
+            return rlab.SinkResult("captured", "memory", len(records))
+
+    project.dataset(
+        "configured",
+        source=project.ref("source:items", value="configured"),
+        pipeline="pipeline:empty",
+        sinks=(project.ref("sink:capture"),),
+    )
+    project.pipeline("empty")
+    ctx = rlab.RuntimeContext(
+        run_id="dataset-spec",
+        run_dir=tmp_path,
+        cache_dir=tmp_path / "cache",
+        project_root=tmp_path,
+        params_json="{}",
+        seed=None,
+    )
+
+    result = _invoke_dataset(project, "configured", ctx)
+
+    assert result["records"] == 1
+    assert result["sinks"] == [{"name": "captured", "path": "memory", "records": 1}]
 
 
 def test_requirements_merge_without_duplicates() -> None:

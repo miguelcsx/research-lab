@@ -24,6 +24,8 @@ pub enum Command {
     Doctor(commands::doctor::DoctorCommand),
     Config(commands::config::ConfigCommand),
     Discover(commands::discover::DiscoverCommand),
+    Explain(commands::explain::ExplainCommand),
+    Check(commands::check::CheckCommand),
     Benchmark(commands::benchmark::BenchmarkCommand),
     Evaluate(commands::evaluate::EvaluateCommand),
     Run(commands::run::RunCommand),
@@ -78,6 +80,8 @@ where
         Command::Discover(command) => {
             commands::discover::run(command, cli.root.as_deref(), cli.json)
         }
+        Command::Explain(command) => commands::explain::run(command, cli.root.as_deref(), cli.json),
+        Command::Check(command) => commands::check::run(command, cli.root.as_deref(), cli.json),
         Command::Benchmark(command) => {
             commands::benchmark::run(command, cli.root.as_deref(), cli.json)
         }
@@ -146,6 +150,39 @@ mod tests {
         let cli = Cli::parse_from(["rlab", "--json", "clean"]);
         assert!(cli.json);
         assert!(matches!(cli.command, Command::Clean(command) if !command.force));
+    }
+
+    #[test]
+    fn parses_check_command() {
+        let cli = Cli::parse_from(["rlab", "check", "attention.shape", "attention:sdpa"]);
+        assert!(matches!(
+            cli.command,
+            Command::Check(command)
+                if command.check_or_target == "attention.shape"
+                    && command.target.as_deref() == Some("attention:sdpa")
+        ));
+    }
+
+    #[test]
+    fn parses_explain_command() {
+        let cli = Cli::parse_from(["rlab", "explain", "experiment:babylm.smoke"]);
+        assert!(matches!(
+            cli.command,
+            Command::Explain(command)
+                if command.reference == "experiment:babylm.smoke"
+                    && !command.refresh
+        ));
+    }
+
+    #[test]
+    fn parses_benchmark_target_mode() {
+        let cli = Cli::parse_from(["rlab", "benchmark", "model:babylm"]);
+        assert!(matches!(
+            cli.command,
+            Command::Benchmark(command)
+                if command.benchmark_or_target == "model:babylm"
+                    && command.target.is_none()
+        ));
     }
 
     #[test]

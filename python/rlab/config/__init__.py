@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, TypeVar, overload
 
 from rlab._rlab import (
     diff_config_documents,
@@ -13,19 +12,24 @@ from rlab._rlab import (
     resolve_config_document,
     validate_config_documents,
 )
+from rlab._documents import apply_overrides, decode_object, encode_overrides, validate_model
 from rlab._typing import JsonObject, JsonValue
 
 DEFAULT_SUFFIX: Final = ".yaml"
 DEFAULT_REQUIRE_EXPLICIT_PATHS: Final = True
-EMPTY_JSON_OBJECT: Final[JsonObject] = {}
+DOCUMENT_LABEL: Final = "configuration"
+ModelT = TypeVar("ModelT")
 
-ERROR_CONFIG_OBJECT: Final = "configuration must be a JSON object"
+__all__ = [
+    "apply_overrides",
+    "diff_configs",
+    "list_configs",
+    "resolve_config",
+    "validate_configs",
+]
 
-JSON_SORT_KEYS: Final = True
 
-__all__ = ["diff_configs", "list_configs", "resolve_config", "validate_configs"]
-
-
+@overload
 def resolve_config(
     root: str | Path,
     name: str,
@@ -33,16 +37,35 @@ def resolve_config(
     overrides: Mapping[str, JsonValue] | None = None,
     suffix: str = DEFAULT_SUFFIX,
     require_explicit_paths: bool = DEFAULT_REQUIRE_EXPLICIT_PATHS,
-) -> JsonObject:
-    return _decode_object(
-        resolve_config_document(
-            Path(root),
-            name,
-            _encode_object(overrides),
-            suffix,
-            require_explicit_paths,
-        )
+) -> JsonObject: ...
+
+
+@overload
+def resolve_config(
+    root: str | Path,
+    name: str,
+    *,
+    model: type[ModelT],
+    overrides: Mapping[str, JsonValue] | None = None,
+    suffix: str = DEFAULT_SUFFIX,
+    require_explicit_paths: bool = DEFAULT_REQUIRE_EXPLICIT_PATHS,
+) -> ModelT: ...
+
+
+def resolve_config(
+    root: str | Path,
+    name: str,
+    *,
+    model: type[ModelT] | None = None,
+    overrides: Mapping[str, JsonValue] | None = None,
+    suffix: str = DEFAULT_SUFFIX,
+    require_explicit_paths: bool = DEFAULT_REQUIRE_EXPLICIT_PATHS,
+) -> JsonObject | ModelT:
+    document = decode_object(
+        resolve_config_document(Path(root), name, encode_overrides(overrides), suffix, require_explicit_paths),
+        DOCUMENT_LABEL,
     )
+    return document if model is None else validate_model(model, document)
 
 
 def list_configs(root: str | Path, *, suffix: str = DEFAULT_SUFFIX) -> tuple[str, ...]:
@@ -54,30 +77,18 @@ def validate_configs(
 ) -> dict[str, str]:
     return {
         str(key): str(value)
-        for key, value in _decode_object(
-            validate_config_documents(Path(root), suffix)
+        for key, value in decode_object(
+            validate_config_documents(Path(root), suffix),
+            DOCUMENT_LABEL,
         ).items()
     }
 
 
 def diff_configs(left: JsonObject, right: JsonObject) -> JsonObject:
-    return _decode_object(
+    return decode_object(
         diff_config_documents(
-            _encode_object(left),
-            _encode_object(right),
-        )
+            encode_overrides(left),
+            encode_overrides(right),
+        ),
+        DOCUMENT_LABEL,
     )
-
-
-def _encode_object(value: Mapping[str, JsonValue] | None) -> str:
-    return json.dumps(
-        dict(value) if value is not None else EMPTY_JSON_OBJECT,
-        sort_keys=JSON_SORT_KEYS,
-    )
-
-
-def _decode_object(value: str) -> JsonObject:
-    decoded = json.loads(value)
-    if not isinstance(decoded, dict):
-        raise TypeError(ERROR_CONFIG_OBJECT)
-    return {str(key): item for key, item in decoded.items()}

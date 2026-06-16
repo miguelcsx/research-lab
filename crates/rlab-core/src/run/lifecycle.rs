@@ -154,7 +154,7 @@ impl RunSession {
 
         let target = target_dir.join(file_name);
 
-        fs::copy(&source, &target).map_err(|error| RlabError::io(&target, error))?;
+        copy_artifact(&source, &target)?;
 
         Ok(staged_artifact(artifact, &target))
     }
@@ -279,13 +279,38 @@ fn artifact_source(artifact: &Value) -> RlabResult<PathBuf> {
 
     let source = PathBuf::from(source_text);
 
-    if source.is_file() {
+    if source.is_file() || source.is_dir() {
         return Ok(source);
     }
 
     Err(RlabError::Artifact {
-        message: format!("artifact path is not a file: {}", source.display()),
+        message: format!("artifact path does not exist: {}", source.display()),
     })
+}
+
+fn copy_artifact(source: &Path, target: &Path) -> RlabResult<()> {
+    if source.is_dir() {
+        copy_dir(source, target)
+    } else {
+        fs::copy(source, target)
+            .map(|_| ())
+            .map_err(|error| RlabError::io(target, error))
+    }
+}
+
+fn copy_dir(source: &Path, target: &Path) -> RlabResult<()> {
+    ensure_dir(target)?;
+    for entry in fs::read_dir(source).map_err(|error| RlabError::io(source, error))? {
+        let entry = entry.map_err(|error| RlabError::io(source, error))?;
+        let path = entry.path();
+        let destination = target.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir(&path, &destination)?;
+        } else {
+            fs::copy(&path, &destination).map_err(|error| RlabError::io(&destination, error))?;
+        }
+    }
+    Ok(())
 }
 
 fn artifact_name(artifact: &Value) -> RlabResult<&str> {
@@ -337,4 +362,48 @@ fn safe_artifact_file_name(name: &str, source: &Path) -> RlabResult<String> {
 
 fn contains_path_separator(value: &str) -> bool {
     value.contains(std::path::MAIN_SEPARATOR) || value.contains('/') || value.contains('\\')
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::config::ProjectPaths;
+
+    use super::*;
+
+    #[test]
+    fn stages_directory_artifacts() {
+        let root = std::env::temp_dir().join(format!("rlab-dir-artifact-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let source = root.join("source");
+        ensure_dir(&source).unwrap();
+        fs::write(source.join("manifest.json"), "{}").unwrap();
+
+        let paths = ProjectPaths {
+            root: root.clone(),
+            runs: root.join("runs"),
+            artifacts: root.join("artifacts"),
+            cache: root.join("cache"),
+            registry_cache: root.join("registry"),
+        };
+        let session =
+            RunSession::create(&paths, "workflow", "tokenizer", Vec::new(), json!({})).unwrap();
+
+        session
+            .save_artifact_reference(&json!({
+                "path": source,
+                "name": "tokenizer",
+                "kind": "directory",
+            }))
+            .unwrap();
+
+        assert!(session
+            .artifact_dir()
+            .join("directory")
+            .join("tokenizer")
+            .join("manifest.json")
+            .exists());
+        let _ = fs::remove_dir_all(root);
+    }
 }

@@ -22,13 +22,21 @@ def _context(tmp_path: Path, params: dict[str, object]) -> RuntimeContext:
 def test_runtime_context_reads_numeric_and_optional_params(tmp_path: Path) -> None:
     ctx = _context(
         tmp_path,
-        {"count": 3, "ratio": 0.25, "missing": None, "path": "data/input.txt"},
+        {
+            "count": 3,
+            "ratio": 0.25,
+            "enabled": True,
+            "missing": None,
+            "path": "data/input.txt",
+        },
     )
 
     assert ctx.int_param("count") == 3
     assert ctx.optional_int_param("missing") is None
     assert ctx.number_param("count") == 3.0
     assert ctx.number_param("ratio") == 0.25
+    assert ctx.bool_param("enabled") is True
+    assert ctx.bool_param("absent", False) is False
     assert ctx.path_param("path") == tmp_path / "data/input.txt"
 
 
@@ -39,6 +47,13 @@ def test_runtime_context_rejects_boolean_numbers(tmp_path: Path) -> None:
         ctx.int_param("value")
     with pytest.raises(TypeError, match="numeric"):
         ctx.number_param("value")
+
+
+def test_runtime_context_rejects_non_boolean_bool_param(tmp_path: Path) -> None:
+    ctx = _context(tmp_path, {"value": "true"})
+
+    with pytest.raises(TypeError, match="boolean"):
+        ctx.bool_param("value")
 
 
 def test_external_workspace_preserves_symlinked_directories(tmp_path: Path) -> None:

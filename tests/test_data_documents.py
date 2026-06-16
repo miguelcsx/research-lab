@@ -35,6 +35,25 @@ def test_data_document_extends_and_applies_explicit_overrides(tmp_path: Path) ->
         rlab.resolve_dataset(tmp_path, "child", overrides={"max_rows": 20})
 
 
+def test_data_document_resolves_into_typed_model(tmp_path: Path) -> None:
+    class DatasetModel:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        @classmethod
+        def model_validate(cls, value: object) -> "DatasetModel":
+            assert isinstance(value, dict)
+            dataset = value["dataset"]
+            assert isinstance(dataset, dict)
+            return cls(name=str(dataset["name"]))
+
+    (tmp_path / "base.yaml").write_text("dataset:\n  name: base\n", encoding="utf-8")
+
+    dataset = rlab.resolve_dataset(tmp_path, "base", model=DatasetModel)
+
+    assert dataset.name == "base"
+
+
 def test_data_document_rejects_cycles(tmp_path: Path) -> None:
     (tmp_path / "a.yaml").write_text("extends: b\n", encoding="utf-8")
     (tmp_path / "b.yaml").write_text("extends: a\n", encoding="utf-8")

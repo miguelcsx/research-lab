@@ -71,7 +71,17 @@ impl PyDataDecision {
         match &self.inner {
             rlab_core::DataDecision::Keep { record, .. }
             | rlab_core::DataDecision::Update { record, .. } => py_from_json(py, record),
-            rlab_core::DataDecision::Boundary { value, kind, .. } => Ok(Py::new(py, PyDataBoundary { inner: DataBoundary { schema_version: 1, value: value.clone(), kind: kind.clone() } })?.into_py(py)),
+            rlab_core::DataDecision::Boundary { value, kind, .. } => Ok(Py::new(
+                py,
+                PyDataBoundary {
+                    inner: DataBoundary {
+                        schema_version: 1,
+                        value: value.clone(),
+                        kind: kind.clone(),
+                    },
+                },
+            )?
+            .into_py(py)),
             rlab_core::DataDecision::Drop { .. } => Ok(py.None()),
         }
     }
@@ -223,7 +233,6 @@ impl PyJsonlSink {
     }
 }
 
-
 #[pyclass(name = "DataBoundary", frozen)]
 #[derive(Clone)]
 pub struct PyDataBoundary {
@@ -332,21 +341,12 @@ pub struct PyNativeSimhashDedup {
 #[pymethods]
 impl PyNativeSimhashDedup {
     #[new]
-    #[pyo3(signature = (
-        field="text".to_string(),
-        source_field="source".to_string(),
-        exact_min_words=6,
-        source_exact_min_words=None,
-        near_enabled=true,
-        near_min_words=12,
-        near_hamming_threshold=3,
-        near_max_bucket_size=64
-    ))]
+    #[pyo3(signature = (field, source_field, exact_min_words, source_exact_min_words, near_enabled, near_min_words, near_hamming_threshold, near_max_bucket_size))]
     pub fn new(
         field: String,
         source_field: String,
         exact_min_words: usize,
-        source_exact_min_words: Option<BTreeMap<String, usize>>,
+        source_exact_min_words: BTreeMap<String, usize>,
         near_enabled: bool,
         near_min_words: usize,
         near_hamming_threshold: u32,
@@ -356,7 +356,7 @@ impl PyNativeSimhashDedup {
             field,
             source_field,
             exact_min_words,
-            source_exact_min_words: source_exact_min_words.unwrap_or_default(),
+            source_exact_min_words,
             near_enabled,
             near_min_words,
             near_hamming_threshold,
@@ -382,8 +382,8 @@ impl PyNativeSimhashDedup {
                 continue;
             }
             let text = record_field_string(py, record.bind(py), &self.field)?.unwrap_or_default();
-            let source = record_field_string(py, record.bind(py), &self.source_field)?
-                .unwrap_or_default();
+            let source =
+                record_field_string(py, record.bind(py), &self.source_field)?.unwrap_or_default();
             if self.accept(&text, &source, &mut seen_exact, &mut seen_near) {
                 output.append(record.bind(py))?;
             }
@@ -415,11 +415,7 @@ impl PyNativeSimhashDedup {
         }
         if self.near_enabled && words >= self.near_min_words {
             let fingerprint = simhash(text);
-            if near_duplicate(
-                fingerprint,
-                seen_near,
-                self.near_hamming_threshold,
-            ) {
+            if near_duplicate(fingerprint, seen_near, self.near_hamming_threshold) {
                 return false;
             }
             remember_near(fingerprint, seen_near, self.near_max_bucket_size);
@@ -451,22 +447,13 @@ pub struct PyNativeDocumentAssembler {
 #[pymethods]
 impl PyNativeDocumentAssembler {
     #[new]
-    #[pyo3(signature = (
-        text_field="text".to_string(),
-        source_field="source".to_string(),
-        origin_field="origin".to_string(),
-        target_word_budget=10_000_000,
-        source_word_targets=None,
-        min_document_words=50,
-        max_document_chars=20_000,
-        max_document_lines=400
-    ))]
+    #[pyo3(signature = (text_field, source_field, origin_field, target_word_budget, source_word_targets, min_document_words, max_document_chars, max_document_lines))]
     pub fn new(
         text_field: String,
         source_field: String,
         origin_field: String,
         target_word_budget: usize,
-        source_word_targets: Option<BTreeMap<String, usize>>,
+        source_word_targets: BTreeMap<String, usize>,
         min_document_words: usize,
         max_document_chars: usize,
         max_document_lines: usize,
@@ -476,7 +463,7 @@ impl PyNativeDocumentAssembler {
             source_field,
             origin_field,
             target_word_budget,
-            source_word_targets: source_word_targets.unwrap_or_default(),
+            source_word_targets,
             min_document_words,
             max_document_chars,
             max_document_lines,
@@ -569,7 +556,10 @@ impl PyNativeDocumentAssembler {
             if self.target_word_budget.saturating_sub(total_words) == 0 {
                 break;
             }
-            let origin = origins.get(&source).cloned().unwrap_or_else(|| "base".to_string());
+            let origin = origins
+                .get(&source)
+                .cloned()
+                .unwrap_or_else(|| "base".to_string());
             self.maybe_emit(
                 py,
                 &output,
@@ -593,7 +583,9 @@ impl PyNativeDocumentAssembler {
     ) -> usize {
         let global = self.target_word_budget.saturating_sub(total_words);
         match self.source_word_targets.get(source) {
-            Some(target) => global.min(target.saturating_sub(*source_words.get(source).unwrap_or(&0))),
+            Some(target) => {
+                global.min(target.saturating_sub(*source_words.get(source).unwrap_or(&0)))
+            }
             None => global,
         }
     }
@@ -1155,12 +1147,11 @@ fn csv_field(value: &str) -> String {
     }
 }
 
-
 fn parse_text_rule(py: Python<'_>, rule: PyObject) -> PyResult<TextRule> {
     let value = py_to_json(py, rule)?;
-    let object = value.as_object().ok_or_else(|| {
-        PyValueError::new_err("text filter rule must be a JSON object")
-    })?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| PyValueError::new_err("text filter rule must be a JSON object"))?;
     let kind = object
         .get("kind")
         .and_then(Value::as_str)
@@ -1206,15 +1197,13 @@ fn text_rule_rejection(rule: &TextRule, text: &str) -> Option<String> {
                 None
             }
         }
-        "symbol_ratio" => {
-            (symbol_ratio(text) > rule.maximum.unwrap_or(1.0))
-                .then(|| "high_symbol_ratio".to_string())
+        "symbol_ratio" => (symbol_ratio(text) > rule.maximum.unwrap_or(1.0))
+            .then(|| "high_symbol_ratio".to_string()),
+        "repetition_ratio" => (repeated_token_ratio(text) > rule.maximum.unwrap_or(1.0))
+            .then(|| "high_repetition_ratio".to_string()),
+        "boilerplate" => {
+            contains_boilerplate(text, &rule.markers).then(|| "boilerplate".to_string())
         }
-        "repetition_ratio" => {
-            (repeated_token_ratio(text) > rule.maximum.unwrap_or(1.0))
-                .then(|| "high_repetition_ratio".to_string())
-        }
-        "boilerplate" => contains_boilerplate(text, &rule.markers).then(|| "boilerplate".to_string()),
         other => Some(format!("unknown_text_rule:{other}")),
     }
 }
@@ -1277,10 +1266,13 @@ fn simhash(text: &str) -> u64 {
             }
         }
     }
-    weights
-        .iter()
-        .enumerate()
-        .fold(0u64, |acc, (bit, weight)| if *weight > 0 { acc | (1u64 << bit) } else { acc })
+    weights.iter().enumerate().fold(0u64, |acc, (bit, weight)| {
+        if *weight > 0 {
+            acc | (1u64 << bit)
+        } else {
+            acc
+        }
+    })
 }
 
 fn near_duplicate(
@@ -1289,8 +1281,11 @@ fn near_duplicate(
     threshold: u32,
 ) -> bool {
     near_band_keys(fingerprint).into_iter().any(|key| {
-        seen.get(&key)
-            .is_some_and(|items| items.iter().any(|candidate| (fingerprint ^ candidate).count_ones() <= threshold))
+        seen.get(&key).is_some_and(|items| {
+            items
+                .iter()
+                .any(|candidate| (fingerprint ^ candidate).count_ones() <= threshold)
+        })
     })
 }
 
@@ -1318,15 +1313,12 @@ fn is_data_boundary(record: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(!record.hasattr("action")? && record.hasattr("kind")? && record.hasattr("value")?)
 }
 
-fn boundary_source_origin(
-    py: Python<'_>,
-    record: &Bound<'_, PyAny>,
-) -> PyResult<(String, String)> {
+fn boundary_source_origin(py: Python<'_>, record: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     let value = record.getattr("value")?;
     let metadata = py_any_to_json(py, &value)?;
-    let object = metadata.as_object().ok_or_else(|| {
-        PyValueError::new_err("data boundary value must be an object")
-    })?;
+    let object = metadata
+        .as_object()
+        .ok_or_else(|| PyValueError::new_err("data boundary value must be an object"))?;
     let source = object_string(object, "source")?;
     let origin = object_string(object, "origin")?;
     Ok((source, origin))

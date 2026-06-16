@@ -4,7 +4,6 @@ from .documents import list_datasets, resolve_dataset, validate_datasets
 from .primitives import (
     AuditPolicy,
     CheckResult,
-    ComponentUse,
     DataAblation,
     DataAction,
     DataBoundary,
@@ -38,7 +37,6 @@ from .primitives import (
 __all__ = [
     "AuditPolicy",
     "CheckResult",
-    "ComponentUse",
     "DataAblation",
     "DataAction",
     "DataBoundary",

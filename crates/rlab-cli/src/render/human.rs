@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rlab_core::diagnostic::{DiagnosticFinding, DiagnosticLevel};
 use rlab_core::output::Table;
 use rlab_core::registry::Registry;
@@ -9,6 +11,7 @@ pub fn print_line(value: &str) {
 }
 
 pub fn print_registry(registry: &Registry) -> RlabResult<()> {
+    print_line(&registry_summary(registry));
     let mut table = Table::new(vec![
         "kind".to_string(),
         "ref".to_string(),
@@ -25,6 +28,19 @@ pub fn print_registry(registry: &Registry) -> RlabResult<()> {
     }
     print_line(&table.render_plain());
     Ok(())
+}
+
+fn registry_summary(registry: &Registry) -> String {
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for record in &registry.records {
+        *counts.entry(record.kind.as_str()).or_default() += 1;
+    }
+    let details = counts
+        .into_iter()
+        .map(|(kind, count)| format!("{kind}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("registry: {} records ({details})", registry.records.len())
 }
 
 fn registry_reference(record: &rlab_core::registry::RegistryRecord) -> String {
@@ -70,8 +86,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
-    use super::registry_reference;
-    use rlab_core::{RegistryKind, RegistryRecord, RegistryRecordSpec};
+    use super::{registry_reference, registry_summary};
+    use rlab_core::{Registry, RegistryKind, RegistryRecord, RegistryRecordSpec};
 
     fn record(kind: RegistryKind, name: &str) -> RegistryRecord {
         RegistryRecord::from_spec(RegistryRecordSpec {
@@ -103,6 +119,25 @@ mod tests {
                 "bpe"
             )),
             "tokenizer:bpe"
+        );
+    }
+
+    #[test]
+    fn renders_registry_summary_counts_by_kind() {
+        let mut registry = Registry::new();
+        registry
+            .insert(record(RegistryKind::DATASET, "project.clean"))
+            .expect("insert");
+        registry
+            .insert(record(
+                RegistryKind::parse("tokenizer").expect("kind"),
+                "bpe",
+            ))
+            .expect("insert");
+
+        assert_eq!(
+            registry_summary(&registry),
+            "registry: 2 records (dataset=1, tokenizer=1)"
         );
     }
 }

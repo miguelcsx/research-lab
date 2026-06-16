@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
 use crate::error::{RlabError, RlabResult};
 
@@ -18,6 +18,16 @@ const PACKAGE_SOURCE_DIR: &str = "src";
 const PYTHON_PACKAGE_SEPARATOR: &str = ".";
 const PYTHON_MODULE_SEPARATOR: char = '_';
 const PROJECT_NAME_SEPARATOR: char = '-';
+const PYTHON_PACKAGE_MARKER: &str = "__init__.py";
+const IGNORED_TOP_LEVEL_PACKAGES: &[&str] = &[
+    "tests",
+    "test",
+    "external",
+    "inspo",
+    "scripts",
+    "docs",
+    "artifacts",
+];
 
 pub fn infer_project_name(root: &Path) -> RlabResult<String> {
     let pyproject_path = root.join(PYPROJECT_FILE);
@@ -69,6 +79,7 @@ fn infer_modules(root: &Path, project_name: &str) -> Vec<String> {
     let normalized_project_name = normalize_project_name(project_name);
 
     let mut modules = conventional_root_modules(root);
+    modules.extend(top_level_packages(root));
     modules.extend(package_modules(root, &normalized_project_name));
 
     modules.sort_unstable();
@@ -89,6 +100,28 @@ fn conventional_root_modules(root: &Path) -> Vec<String> {
         .collect()
 }
 
+fn top_level_packages(root: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| top_level_package_name(&entry.path()))
+        .collect()
+}
+
+fn top_level_package_name(path: &Path) -> Option<String> {
+    if !path.join(PYTHON_PACKAGE_MARKER).exists() {
+        return None;
+    }
+    let name = path.file_name()?.to_str()?;
+    if name.starts_with('.') || name.starts_with('_') || IGNORED_TOP_LEVEL_PACKAGES.contains(&name)
+    {
+        return None;
+    }
+    Some(name.to_owned())
+}
+
 fn package_modules(root: &Path, normalized_project_name: &str) -> Vec<String> {
     CONVENTIONAL_MODULES
         .iter()
@@ -103,6 +136,49 @@ fn package_modules(root: &Path, normalized_project_name: &str) -> Vec<String> {
                 .join(PYTHON_PACKAGE_SEPARATOR)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::infer_modules;
+
+    fn package(root: &Path, name: &str) {
+        let path = root.join(name);
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join("__init__.py"), "").unwrap();
+    }
+
+    fn temp_root() -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("rlab-infer-test-{nanos}"));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn infers_top_level_python_packages() {
+        let root = temp_root();
+        package(&root, "models");
+        package(&root, "tokenization");
+        package(&root, "tests");
+        fs::create_dir_all(root.join("not_a_package")).unwrap();
+
+        assert_eq!(
+            infer_modules(&root, "project"),
+            vec!["models".to_string(), "tokenization".to_string()]
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn non_empty_borrowed_string(value: Option<&str>) -> Option<String> {

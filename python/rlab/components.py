@@ -39,8 +39,16 @@ class ComponentSpec(Generic[ParamsT]):
             return cls.empty(value)
         if not isinstance(value, Mapping):
             raise TypeError(f"component spec must be a string or mapping, got {type(value).__name__}")
-        name = value.get("ref", value.get("name"))
-        params = value.get("params", {})
+        name = value.get("ref", value.get("reference", value.get("name")))
+        params = (
+            value["params"]
+            if "params" in value
+            else {
+                key: child
+                for key, child in value.items()
+                if key not in {"ref", "reference", "name"}
+            }
+        )
         if not isinstance(name, str) or not name:
             raise ValueError("component spec requires a non-empty name")
         if not isinstance(params, Mapping):

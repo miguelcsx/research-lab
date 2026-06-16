@@ -10,7 +10,6 @@ from ._rlab import (
     CacheEntry,
     CheckpointManager,
     CheckpointRecord,
-    ComponentUse,
     DataBoundary,
     DataDecision,
     NativeDocumentAssembler,
@@ -78,7 +77,7 @@ from ._rlab import (
 from .components import ComponentSpec, Requirements, collect_requirements
 from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
-from .config import diff_configs, list_configs, resolve_config, validate_configs
+from .config import apply_overrides, diff_configs, list_configs, resolve_config, validate_configs
 from .data import AuditPolicy, SinkResult
 from .data.documents import list_datasets, resolve_dataset, validate_datasets
 from .external import (
@@ -88,6 +87,7 @@ from .external import (
     ExternalCommandError,
 )
 from .project import Project, pinned_project
+from .refs import ArtifactRef, RunRef
 from .workflows.model import ExternalStep, Workflow, WorkflowStep
 
 WorkflowContext = RuntimeContext
@@ -96,6 +96,7 @@ __all__ = [
     "AdapterContext",
     "AdapterValidationError",
     "ArtifactManifest",
+    "ArtifactRef",
     "ArtifactStore",
     "Assumption",
     "BaselineEntry",
@@ -106,7 +107,6 @@ __all__ = [
     "CheckpointManager",
     "CheckpointRecord",
     "ComponentSpec",
-    "ComponentUse",
     "AuditPolicy",
     "DataBoundary",
     "DataDecision",
@@ -148,6 +148,7 @@ __all__ = [
     "RunDirectory",
     "RunQuery",
     "RunRecord",
+    "RunRef",
     "RuntimeContext",
     "SecretHit",
     "SinkResult",
@@ -158,6 +159,7 @@ __all__ = [
     "Workflow",
     "WorkflowContext",
     "WorkflowStep",
+    "apply_overrides",
     "bundle_from_metrics",
     "cache_path",
     "cache_size",

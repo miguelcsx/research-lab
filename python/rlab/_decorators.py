@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Final, Protocol, TypeVar
 
 from rlab._rlab import (
-    ComponentUse,
     DataDecision,
     data_boundary,
     data_drop,
@@ -20,7 +19,6 @@ REF_SEPARATOR: Final = ":"
 ATTR_RLAB_REF: Final = "__rlab_ref__"
 
 __all__ = [
-    "ComponentUse",
     "DataDecision",
     "RegistryProject",
     "data_boundary",

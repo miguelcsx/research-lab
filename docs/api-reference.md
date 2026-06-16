@@ -14,6 +14,8 @@ import rlab
 rlab.Project
 rlab.RuntimeContext
 rlab.WorkflowContext
+rlab.RunRef
+rlab.ArtifactRef
 ```
 
 ## Results
@@ -46,7 +48,7 @@ rlab.DataSource
 rlab.DataAction
 rlab.DataDecision
 rlab.DataBoundary
-rlab.ComponentUse
+rlab.ComponentSpec
 rlab.PipelineSpec
 rlab.DatasetSpec
 rlab.AuditPolicy
@@ -87,6 +89,7 @@ rlab.AdapterValidationError
 ```
 
 `RuntimeContext` exposes resolved `run_dir`, `cache_dir`, `output_dir`,
+`run(target, params)` for one child target invocation,
 `external_workspace(name, spec, params)`, and `run_external(name, command)`.
 
 ## Benchmarks and evaluations

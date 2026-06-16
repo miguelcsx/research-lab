@@ -118,11 +118,13 @@ def primitive_annotation_schema(annotation: object) -> JsonObject | None:
 def validate_signature_params(
     factory: object,
     params: Mapping[str, object],
+    *,
+    injected: int = 0,
 ) -> dict[str, object]:
     if not callable(factory):
         raise TypeError(ERROR_COMPONENT_FACTORY_CALLABLE)
 
-    public = keyword_only_parameters(factory)
+    public = keyword_only_parameters(factory, injected=injected)
     unknown = sorted(set(params) - set(public))
     if unknown:
         raise ValueError(ERROR_UNKNOWN_PARAMS.format(unknown=unknown))
@@ -142,12 +144,26 @@ def validate_signature_params(
     }
 
 
-def keyword_only_parameters(obj: object) -> dict[str, inspect.Parameter]:
-    return {
-        parameter.name: parameter
-        for parameter in inspect.signature(cast(Callable[..., object], obj)).parameters.values()
-        if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-    }
+def keyword_only_parameters(
+    obj: object, *, injected: int = 0
+) -> dict[str, inspect.Parameter]:
+    include_positional = inspect.isclass(obj)
+    skipped = 0
+    selected: dict[str, inspect.Parameter] = {}
+    for parameter in inspect.signature(cast(Callable[..., object], obj)).parameters.values():
+        if parameter.name == "self":
+            continue
+        if parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD and skipped < injected:
+            skipped += 1
+            continue
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY:
+            selected[parameter.name] = parameter
+            continue
+        if parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD and (
+            include_positional or parameter.default is not inspect.Parameter.empty
+        ):
+            selected[parameter.name] = parameter
+    return selected
 
 
 def coerce_param(annotation: object, value: object) -> object:

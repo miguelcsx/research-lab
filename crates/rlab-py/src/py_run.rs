@@ -225,6 +225,16 @@ impl PyRuntimeContext {
     }
 
     #[pyo3(signature = (name, default=None))]
+    pub fn bool_param(&self, py: Python<'_>, name: &str, default: Option<bool>) -> PyResult<bool> {
+        match self.param_obj(py, name)? {
+            Some(value) => value
+                .extract()
+                .map_err(|_| param_type_error(name, "boolean")),
+            None => default.ok_or_else(|| param_type_error(name, "boolean")),
+        }
+    }
+
+    #[pyo3(signature = (name, default=None))]
     pub fn path_param(
         &self,
         py: Python<'_>,

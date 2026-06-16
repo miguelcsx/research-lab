@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Final, TypeAlias, cast
+from typing import Final, Protocol, TypeAlias, cast
 
-from rlab._decorators import (
-    ComponentUse,
-    DataDecision,
-    data_boundary,
-    data_drop,
-    data_keep,
-    data_update,
-)
+from rlab._decorators import DataDecision, data_boundary, data_drop, data_keep, data_update
 from rlab._rlab import (
     DataBoundary,
     NativeDocumentAssembler as _NativeDocumentAssembler,
@@ -22,6 +15,7 @@ from rlab._rlab import (
     materialize_records,
 )
 from rlab._typing import JsonObject, JsonValue
+from rlab.components import ComponentSpec
 
 Record: TypeAlias = Mapping[str, JsonValue]
 MutableRecord: TypeAlias = JsonObject
@@ -47,7 +41,6 @@ REASON_ABOVE_MAXIMUM: Final = "{field}>maximum"
 __all__ = [
     "AuditPolicy",
     "CheckResult",
-    "ComponentUse",
     "DataAblation",
     "DataAction",
     "DataBoundary",
@@ -87,6 +80,14 @@ class DataContext:
     seed: int | None = None
 
 
+class DataRegistry(Protocol):
+    def filter(self, name: str) -> Callable[[type[object]], type[object]]: ...
+
+    def dedup(self, name: str) -> Callable[[type[object]], type[object]]: ...
+
+    def group(self, name: str) -> Callable[[type[object]], type[object]]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DataSource:
     """Declarative data source descriptor."""
@@ -108,7 +109,7 @@ class PipelineSpec:
     """Declarative pipeline spec."""
 
     name: str
-    stages: tuple[ComponentUse, ...]
+    stages: tuple[ComponentSpec[object], ...]
     version: str = DEFAULT_VERSION
     tags: tuple[str, ...] = ()
     description: str | None = None
@@ -127,11 +128,11 @@ class DatasetSpec:
     """Declarative dataset build spec."""
 
     name: str
-    source: ComponentUse
+    source: ComponentSpec[object]
     pipeline: str
-    sinks: tuple[ComponentUse, ...] = ()
-    checks: tuple[ComponentUse, ...] = ()
-    metrics: tuple[ComponentUse, ...] = ()
+    sinks: tuple[ComponentSpec[object], ...] = ()
+    checks: tuple[ComponentSpec[object], ...] = ()
+    metrics: tuple[ComponentSpec[object], ...] = ()
     audit: AuditPolicy | None = None
     version: str = DEFAULT_VERSION
     tags: tuple[str, ...] = ()
@@ -355,7 +356,7 @@ class DocumentAssembler:
         )
 
     def apply(self, records: Iterable[object]) -> list[JsonObject]:
-        return self._native.apply(list(records))
+        return cast(list[JsonObject], self._native.apply(list(records)))
 
     def to_dict(self) -> JsonObject:
         return {
@@ -371,8 +372,8 @@ class DocumentAssembler:
         }
 
 
-def register_builtins(lab: object) -> None:
-    """Register native generic data components in a project registry."""
+def register_builtins(lab: DataRegistry) -> None:
+    """Register native data components in a project registry."""
     lab.filter("rlab.text")(TextFilter)
     lab.dedup("rlab.simhash")(SimhashDedup)
     lab.group("rlab.documents")(DocumentAssembler)
@@ -381,20 +382,23 @@ def register_builtins(lab: object) -> None:
 def _rule(value: FilterRule | Mapping[str, object]) -> FilterRule:
     if isinstance(value, FilterRule):
         return value
+    markers = value.get("markers", ())
+    if not isinstance(markers, Iterable) or isinstance(markers, str):
+        markers = ()
     return FilterRule(
         kind=str(value["kind"]),
         field=str(value.get("field", "text")),
         minimum=_optional_float(value.get("minimum")),
         maximum=_optional_float(value.get("maximum")),
-        markers=tuple(str(item) for item in value.get("markers", ())),
+        markers=tuple(str(item) for item in markers),
     )
 
 
 def _optional_float(value: object) -> float | None:
-    return None if value is None else float(value)
+    return None if value is None else float(cast(float | int | str, value))
 
 
-def _string_int_map(values: Mapping[object, int]) -> dict[str, int]:
+def _string_int_map(values: Mapping[str, int]) -> dict[str, int]:
     return {str(key): int(value) for key, value in values.items()}
 
 

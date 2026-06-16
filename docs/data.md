@@ -28,16 +28,16 @@ class StripText:
 
 @lab.pipeline(
     "project.clean",
-    rlab.ComponentUse("transform:text.strip"),
+    rlab.ComponentSpec.empty("transform:text.strip"),
 )
 class CleanPipeline:
     pass
 
 @lab.dataset(
     "project.clean",
-    source=rlab.ComponentUse("source:project.raw"),
+    source=rlab.ComponentSpec.empty("source:project.raw"),
     pipeline="pipeline:project.clean",
-    sinks=(rlab.ComponentUse("sink:rlab.jsonl"),),
+    sinks=(rlab.ComponentSpec.empty("sink:rlab.jsonl"),),
 )
 class CleanDataset:
     pass
