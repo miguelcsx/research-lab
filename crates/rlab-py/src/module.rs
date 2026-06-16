@@ -13,8 +13,9 @@ use crate::py_config::{
 use crate::py_data::{
     data_boundary_py, data_drop_py, data_keep_py, data_update_py, execute_dataset_py,
     list_data_documents_py, materialize_data_py, materialize_records_py, resolve_data_document_py,
-    validate_data_documents_py, PyComponentUse, PyDataDecision, PyJsonlSink, PyJsonlSource,
-    PyMaterializeReport,
+    validate_data_documents_py, PyComponentUse, PyDataBoundary, PyDataDecision, PyJsonlSink,
+    PyJsonlSource, PyMaterializeReport, PyNativeDocumentAssembler, PyNativeSimhashDedup,
+    PyNativeTextFilter,
 };
 use crate::py_external::{
     run_external_command_py, PyExternalCommand, PyExternalPath, PyExternalResult,
@@ -108,6 +109,10 @@ fn register_classes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyRunQuery>()?;
     module.add_class::<PyComponentUse>()?;
     module.add_class::<PyDataDecision>()?;
+    module.add_class::<PyDataBoundary>()?;
+    module.add_class::<PyNativeTextFilter>()?;
+    module.add_class::<PyNativeSimhashDedup>()?;
+    module.add_class::<PyNativeDocumentAssembler>()?;
     module.add_class::<PyMaterializeReport>()?;
     module.add_class::<PyJsonlSource>()?;
     module.add_class::<PyJsonlSink>()?;

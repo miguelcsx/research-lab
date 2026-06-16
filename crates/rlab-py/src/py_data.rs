@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple, PyType};
-use serde_json::{json, Value};
+use rlab_core::data::DataBoundary;
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use crate::convert::json::{from_json_str, to_json, to_pretty_json};
 use crate::error::to_py_error;
@@ -69,7 +71,7 @@ impl PyDataDecision {
         match &self.inner {
             rlab_core::DataDecision::Keep { record, .. }
             | rlab_core::DataDecision::Update { record, .. } => py_from_json(py, record),
-            rlab_core::DataDecision::Boundary { value, .. } => py_from_json(py, value),
+            rlab_core::DataDecision::Boundary { value, kind, .. } => Ok(Py::new(py, PyDataBoundary { inner: DataBoundary { schema_version: 1, value: value.clone(), kind: kind.clone() } })?.into_py(py)),
             rlab_core::DataDecision::Drop { .. } => Ok(py.None()),
         }
     }
@@ -218,6 +220,435 @@ impl PyJsonlSink {
             })?;
         }
         py_path(py, self.path.clone())
+    }
+}
+
+
+#[pyclass(name = "DataBoundary", frozen)]
+#[derive(Clone)]
+pub struct PyDataBoundary {
+    inner: DataBoundary,
+}
+
+#[pymethods]
+impl PyDataBoundary {
+    #[new]
+    pub fn new(py: Python<'_>, value: PyObject, kind: String) -> PyResult<Self> {
+        Ok(Self {
+            inner: DataBoundary {
+                schema_version: 1,
+                value: py_to_json(py, value)?,
+                kind,
+            },
+        })
+    }
+
+    #[getter]
+    pub fn value(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(py, &self.inner.value)
+    }
+
+    #[getter]
+    pub fn kind(&self) -> String {
+        self.inner.kind.clone()
+    }
+
+    pub fn to_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(
+            py,
+            &json!({"kind": self.inner.kind, "value": self.inner.value}),
+        )
+    }
+
+    pub fn to_json(&self) -> PyResult<String> {
+        to_json(&self.inner)
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("DataBoundary(kind={:?})", self.inner.kind)
+    }
+}
+
+#[derive(Clone)]
+struct TextRule {
+    kind: String,
+    field: String,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+    markers: Vec<String>,
+}
+
+#[pyclass(name = "NativeTextFilter", frozen)]
+#[derive(Clone)]
+pub struct PyNativeTextFilter {
+    rules: Vec<TextRule>,
+}
+
+#[pymethods]
+impl PyNativeTextFilter {
+    #[new]
+    pub fn new(py: Python<'_>, rules: Vec<PyObject>) -> PyResult<Self> {
+        Ok(Self {
+            rules: rules
+                .into_iter()
+                .map(|rule| parse_text_rule(py, rule))
+                .collect::<PyResult<Vec<_>>>()?,
+        })
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        if is_data_boundary(record.bind(py))? {
+            return data_keep_py(py, record);
+        }
+        for rule in &self.rules {
+            let text = record_field_string(py, record.bind(py), &rule.field)?.unwrap_or_default();
+            if let Some(reason) = text_rule_rejection(rule, &text) {
+                return Ok(data_drop_py(reason));
+            }
+        }
+        data_keep_py(py, record)
+    }
+}
+
+#[pyclass(name = "NativeSimhashDedup", frozen)]
+#[derive(Clone)]
+pub struct PyNativeSimhashDedup {
+    field: String,
+    source_field: String,
+    exact_min_words: usize,
+    source_exact_min_words: BTreeMap<String, usize>,
+    near_enabled: bool,
+    near_min_words: usize,
+    near_hamming_threshold: u32,
+    near_max_bucket_size: usize,
+}
+
+#[pymethods]
+impl PyNativeSimhashDedup {
+    #[new]
+    #[pyo3(signature = (
+        field="text".to_string(),
+        source_field="source".to_string(),
+        exact_min_words=6,
+        source_exact_min_words=None,
+        near_enabled=true,
+        near_min_words=12,
+        near_hamming_threshold=3,
+        near_max_bucket_size=64
+    ))]
+    pub fn new(
+        field: String,
+        source_field: String,
+        exact_min_words: usize,
+        source_exact_min_words: Option<BTreeMap<String, usize>>,
+        near_enabled: bool,
+        near_min_words: usize,
+        near_hamming_threshold: u32,
+        near_max_bucket_size: usize,
+    ) -> Self {
+        Self {
+            field,
+            source_field,
+            exact_min_words,
+            source_exact_min_words: source_exact_min_words.unwrap_or_default(),
+            near_enabled,
+            near_min_words,
+            near_hamming_threshold,
+            near_max_bucket_size,
+        }
+    }
+
+    #[pyo3(signature = (records, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        records: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyObject> {
+        let output = PyList::empty_bound(py);
+        let mut seen_exact = BTreeSet::new();
+        let mut seen_near: BTreeMap<(usize, u64), Vec<u64>> = BTreeMap::new();
+
+        for item in records.bind(py).iter()? {
+            let record = item?.unbind();
+            if is_data_boundary(record.bind(py))? {
+                output.append(record.bind(py))?;
+                continue;
+            }
+            let text = record_field_string(py, record.bind(py), &self.field)?.unwrap_or_default();
+            let source = record_field_string(py, record.bind(py), &self.source_field)?
+                .unwrap_or_default();
+            if self.accept(&text, &source, &mut seen_exact, &mut seen_near) {
+                output.append(record.bind(py))?;
+            }
+        }
+        Ok(output.unbind().into())
+    }
+}
+
+impl PyNativeSimhashDedup {
+    fn accept(
+        &self,
+        text: &str,
+        source: &str,
+        seen_exact: &mut BTreeSet<String>,
+        seen_near: &mut BTreeMap<(usize, u64), Vec<u64>>,
+    ) -> bool {
+        let words = text.split_whitespace().count();
+        let exact_min_words = self
+            .source_exact_min_words
+            .get(source)
+            .copied()
+            .unwrap_or(self.exact_min_words);
+        if words >= exact_min_words {
+            let key = normalized_line(text);
+            if seen_exact.contains(&key) {
+                return false;
+            }
+            seen_exact.insert(key);
+        }
+        if self.near_enabled && words >= self.near_min_words {
+            let fingerprint = simhash(text);
+            if near_duplicate(
+                fingerprint,
+                seen_near,
+                self.near_hamming_threshold,
+            ) {
+                return false;
+            }
+            remember_near(fingerprint, seen_near, self.near_max_bucket_size);
+        }
+        true
+    }
+}
+
+#[derive(Default)]
+struct DocumentAccumulator {
+    lines: Vec<String>,
+    chars: usize,
+    words: usize,
+}
+
+#[pyclass(name = "NativeDocumentAssembler", frozen)]
+#[derive(Clone)]
+pub struct PyNativeDocumentAssembler {
+    text_field: String,
+    source_field: String,
+    origin_field: String,
+    target_word_budget: usize,
+    source_word_targets: BTreeMap<String, usize>,
+    min_document_words: usize,
+    max_document_chars: usize,
+    max_document_lines: usize,
+}
+
+#[pymethods]
+impl PyNativeDocumentAssembler {
+    #[new]
+    #[pyo3(signature = (
+        text_field="text".to_string(),
+        source_field="source".to_string(),
+        origin_field="origin".to_string(),
+        target_word_budget=10_000_000,
+        source_word_targets=None,
+        min_document_words=50,
+        max_document_chars=20_000,
+        max_document_lines=400
+    ))]
+    pub fn new(
+        text_field: String,
+        source_field: String,
+        origin_field: String,
+        target_word_budget: usize,
+        source_word_targets: Option<BTreeMap<String, usize>>,
+        min_document_words: usize,
+        max_document_chars: usize,
+        max_document_lines: usize,
+    ) -> Self {
+        Self {
+            text_field,
+            source_field,
+            origin_field,
+            target_word_budget,
+            source_word_targets: source_word_targets.unwrap_or_default(),
+            min_document_words,
+            max_document_chars,
+            max_document_lines,
+        }
+    }
+
+    #[pyo3(signature = (records, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        records: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyObject> {
+        let output = PyList::empty_bound(py);
+        let mut total_words = 0usize;
+        let mut source_words: BTreeMap<String, usize> = BTreeMap::new();
+        let mut accumulators: BTreeMap<String, DocumentAccumulator> = BTreeMap::new();
+        let mut origins: BTreeMap<String, String> = BTreeMap::new();
+
+        for item in records.bind(py).iter()? {
+            if self.target_word_budget.saturating_sub(total_words) < self.min_document_words {
+                break;
+            }
+            let record = item?.unbind();
+            if is_data_boundary(record.bind(py))? {
+                let (source, origin) = boundary_source_origin(py, record.bind(py))?;
+                origins.insert(source.clone(), origin.clone());
+                self.maybe_emit(
+                    py,
+                    &output,
+                    &source,
+                    &origin,
+                    &mut total_words,
+                    &mut source_words,
+                    &mut accumulators,
+                )?;
+                continue;
+            }
+            let Some(text) = record_field_string(py, record.bind(py), &self.text_field)? else {
+                continue;
+            };
+            let Some(source) = record_field_string(py, record.bind(py), &self.source_field)? else {
+                continue;
+            };
+            let origin = record_field_string(py, record.bind(py), &self.origin_field)?
+                .unwrap_or_else(|| "base".to_string());
+            origins.insert(source.clone(), origin.clone());
+            if self.remaining_for(&source, total_words, &source_words) < self.min_document_words {
+                continue;
+            }
+            let words = text.split_whitespace().count();
+            if words == 0 {
+                continue;
+            }
+            if words > self.remaining_for(&source, total_words, &source_words) {
+                self.maybe_emit(
+                    py,
+                    &output,
+                    &source,
+                    &origin,
+                    &mut total_words,
+                    &mut source_words,
+                    &mut accumulators,
+                )?;
+                continue;
+            }
+            let remaining = self.remaining_for(&source, total_words, &source_words);
+            let accumulator = accumulators.entry(source.clone()).or_default();
+            if !accumulator.lines.is_empty()
+                && !self.accumulator_accepts(accumulator, &text, words, remaining)
+            {
+                self.maybe_emit(
+                    py,
+                    &output,
+                    &source,
+                    &origin,
+                    &mut total_words,
+                    &mut source_words,
+                    &mut accumulators,
+                )?;
+            }
+            let accumulator = accumulators.entry(source).or_default();
+            accumulator.chars += text.len() + 1;
+            accumulator.words += words;
+            accumulator.lines.push(text);
+        }
+
+        let sources = accumulators.keys().cloned().collect::<Vec<_>>();
+        for source in sources {
+            if self.target_word_budget.saturating_sub(total_words) == 0 {
+                break;
+            }
+            let origin = origins.get(&source).cloned().unwrap_or_else(|| "base".to_string());
+            self.maybe_emit(
+                py,
+                &output,
+                &source,
+                &origin,
+                &mut total_words,
+                &mut source_words,
+                &mut accumulators,
+            )?;
+        }
+        Ok(output.unbind().into())
+    }
+}
+
+impl PyNativeDocumentAssembler {
+    fn remaining_for(
+        &self,
+        source: &str,
+        total_words: usize,
+        source_words: &BTreeMap<String, usize>,
+    ) -> usize {
+        let global = self.target_word_budget.saturating_sub(total_words);
+        match self.source_word_targets.get(source) {
+            Some(target) => global.min(target.saturating_sub(*source_words.get(source).unwrap_or(&0))),
+            None => global,
+        }
+    }
+
+    fn accumulator_accepts(
+        &self,
+        accumulator: &DocumentAccumulator,
+        text: &str,
+        words: usize,
+        remaining: usize,
+    ) -> bool {
+        accumulator.chars + text.len() + 1 <= self.max_document_chars
+            && accumulator.lines.len() < self.max_document_lines
+            && accumulator.words + words <= remaining
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn maybe_emit(
+        &self,
+        py: Python<'_>,
+        output: &Bound<'_, PyList>,
+        source: &str,
+        origin: &str,
+        total_words: &mut usize,
+        source_words: &mut BTreeMap<String, usize>,
+        accumulators: &mut BTreeMap<String, DocumentAccumulator>,
+    ) -> PyResult<()> {
+        let remaining = self.remaining_for(source, *total_words, source_words);
+        let Some(accumulator) = accumulators.get_mut(source) else {
+            return Ok(());
+        };
+        if accumulator.lines.is_empty() {
+            return Ok(());
+        }
+        if accumulator.words < self.min_document_words || accumulator.words > remaining {
+            accumulator.lines.clear();
+            accumulator.chars = 0;
+            accumulator.words = 0;
+            return Ok(());
+        }
+        let words = accumulator.words;
+        let document = json!({
+            "source": source,
+            "text": accumulator.lines.join("\n"),
+            "word_count": words,
+            "line_count": accumulator.lines.len(),
+            "origin": origin,
+        });
+        accumulator.lines.clear();
+        accumulator.chars = 0;
+        accumulator.words = 0;
+        *total_words += words;
+        *source_words.entry(source.to_string()).or_insert(0) += words;
+        output.append(py_from_json(py, &document)?)?;
+        Ok(())
     }
 }
 
@@ -721,6 +1152,230 @@ fn csv_field(value: &str) -> String {
         format!("\"{}\"", value.replace('"', "\"\""))
     } else {
         value.to_string()
+    }
+}
+
+
+fn parse_text_rule(py: Python<'_>, rule: PyObject) -> PyResult<TextRule> {
+    let value = py_to_json(py, rule)?;
+    let object = value.as_object().ok_or_else(|| {
+        PyValueError::new_err("text filter rule must be a JSON object")
+    })?;
+    let kind = object
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PyValueError::new_err("text filter rule requires kind"))?
+        .to_string();
+    let field = object
+        .get("field")
+        .and_then(Value::as_str)
+        .unwrap_or("text")
+        .to_string();
+    let minimum = object.get("minimum").and_then(Value::as_f64);
+    let maximum = object.get("maximum").and_then(Value::as_f64);
+    let markers = object
+        .get("markers")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(TextRule {
+        kind,
+        field,
+        minimum,
+        maximum,
+        markers,
+    })
+}
+
+fn text_rule_rejection(rule: &TextRule, text: &str) -> Option<String> {
+    match rule.kind.as_str() {
+        "url" => contains_url(text).then(|| "contains_url".to_string()),
+        "word_count" => {
+            let words = text.split_whitespace().count() as f64;
+            if rule.minimum.is_some_and(|minimum| words < minimum) {
+                Some("too_few_words".to_string())
+            } else if rule.maximum.is_some_and(|maximum| words > maximum) {
+                Some("too_many_words".to_string())
+            } else {
+                None
+            }
+        }
+        "symbol_ratio" => {
+            (symbol_ratio(text) > rule.maximum.unwrap_or(1.0))
+                .then(|| "high_symbol_ratio".to_string())
+        }
+        "repetition_ratio" => {
+            (repeated_token_ratio(text) > rule.maximum.unwrap_or(1.0))
+                .then(|| "high_repetition_ratio".to_string())
+        }
+        "boilerplate" => contains_boilerplate(text, &rule.markers).then(|| "boilerplate".to_string()),
+        other => Some(format!("unknown_text_rule:{other}")),
+    }
+}
+
+fn contains_url(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("http://") || lower.contains("https://") || lower.contains("www.")
+}
+
+fn contains_boilerplate(text: &str, markers: &[String]) -> bool {
+    let lower = text.to_ascii_lowercase();
+    markers
+        .iter()
+        .any(|marker| lower.contains(&marker.to_ascii_lowercase()))
+}
+
+fn symbol_ratio(text: &str) -> f64 {
+    if text.is_empty() {
+        return 0.0;
+    }
+    let symbols = text
+        .chars()
+        .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+        .count();
+    symbols as f64 / text.chars().count().max(1) as f64
+}
+
+fn repeated_token_ratio(text: &str) -> f64 {
+    let tokens = text.split_whitespace().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return 0.0;
+    }
+    let unique = tokens.iter().copied().collect::<BTreeSet<_>>().len();
+    1.0 - (unique as f64 / tokens.len() as f64)
+}
+
+fn normalized_line(text: &str) -> String {
+    text.to_ascii_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn simhash(text: &str) -> u64 {
+    let mut counts = BTreeMap::<String, i64>::new();
+    for token in normalized_line(text).split_whitespace() {
+        *counts.entry(token.to_string()).or_insert(0) += 1;
+    }
+    let mut weights = [0i64; 64];
+    for (token, count) in counts {
+        let digest = Sha256::digest(token.as_bytes());
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&digest[..8]);
+        let hash = u64::from_be_bytes(bytes);
+        for (bit, weight) in weights.iter_mut().enumerate() {
+            if hash & (1u64 << bit) != 0 {
+                *weight += count;
+            } else {
+                *weight -= count;
+            }
+        }
+    }
+    weights
+        .iter()
+        .enumerate()
+        .fold(0u64, |acc, (bit, weight)| if *weight > 0 { acc | (1u64 << bit) } else { acc })
+}
+
+fn near_duplicate(
+    fingerprint: u64,
+    seen: &BTreeMap<(usize, u64), Vec<u64>>,
+    threshold: u32,
+) -> bool {
+    near_band_keys(fingerprint).into_iter().any(|key| {
+        seen.get(&key)
+            .is_some_and(|items| items.iter().any(|candidate| (fingerprint ^ candidate).count_ones() <= threshold))
+    })
+}
+
+fn remember_near(
+    fingerprint: u64,
+    seen: &mut BTreeMap<(usize, u64), Vec<u64>>,
+    max_bucket_size: usize,
+) {
+    for key in near_band_keys(fingerprint) {
+        let bucket = seen.entry(key).or_default();
+        if bucket.len() < max_bucket_size {
+            bucket.push(fingerprint);
+        }
+    }
+}
+
+fn near_band_keys(fingerprint: u64) -> Vec<(usize, u64)> {
+    let mask = (1u64 << 16) - 1;
+    (0..4)
+        .map(|band| (band, (fingerprint >> (band * 16)) & mask))
+        .collect()
+}
+
+fn is_data_boundary(record: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(!record.hasattr("action")? && record.hasattr("kind")? && record.hasattr("value")?)
+}
+
+fn boundary_source_origin(
+    py: Python<'_>,
+    record: &Bound<'_, PyAny>,
+) -> PyResult<(String, String)> {
+    let value = record.getattr("value")?;
+    let metadata = py_any_to_json(py, &value)?;
+    let object = metadata.as_object().ok_or_else(|| {
+        PyValueError::new_err("data boundary value must be an object")
+    })?;
+    let source = object_string(object, "source")?;
+    let origin = object_string(object, "origin")?;
+    Ok((source, origin))
+}
+
+fn object_string(object: &Map<String, Value>, key: &str) -> PyResult<String> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| PyValueError::new_err(format!("boundary requires string {key}")))
+}
+
+fn record_field_string(
+    py: Python<'_>,
+    record: &Bound<'_, PyAny>,
+    field: &str,
+) -> PyResult<Option<String>> {
+    if let Ok(value) = record.get_item(field) {
+        if !value.is_none() {
+            return any_string(value);
+        }
+    }
+    if record.hasattr(field)? {
+        let value = record.getattr(field)?;
+        if !value.is_none() {
+            return any_string(value);
+        }
+    }
+    let value = py_any_to_json(py, record)?;
+    Ok(value.get(field).map(json_string))
+}
+
+fn any_string(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    if value.hasattr("value")? {
+        let enum_value = value.getattr("value")?;
+        if !enum_value.is_callable() {
+            if let Ok(text) = enum_value.extract::<String>() {
+                return Ok(Some(text));
+            }
+        }
+    }
+    Ok(Some(value.str()?.extract()?))
+}
+
+fn json_string(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
     }
 }
 

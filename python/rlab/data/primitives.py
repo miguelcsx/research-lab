@@ -14,7 +14,13 @@ from rlab._decorators import (
     data_keep,
     data_update,
 )
-from rlab._rlab import materialize_records
+from rlab._rlab import (
+    DataBoundary,
+    NativeDocumentAssembler as _NativeDocumentAssembler,
+    NativeSimhashDedup as _NativeSimhashDedup,
+    NativeTextFilter as _NativeTextFilter,
+    materialize_records,
+)
 from rlab._typing import JsonObject, JsonValue
 
 Record: TypeAlias = Mapping[str, JsonValue]
@@ -54,6 +60,11 @@ __all__ = [
     "DataSource",
     "DatasetSpec",
     "PipelineSpec",
+    "FilterRule",
+    "TextFilter",
+    "SimhashDedup",
+    "DocumentAssembler",
+    "register_builtins",
     "SinkResult",
     "classify",
     "data_boundary",
@@ -90,14 +101,6 @@ class DataAction:
 
     name: str
     params: Mapping[str, JsonValue]
-
-
-@dataclass(frozen=True, slots=True)
-class DataBoundary:
-    """Boundary value emitted by grouping/dedup stages."""
-
-    value: object
-    kind: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +185,217 @@ class DataExperiment:
     name: str
     dataset: str
     ablations: tuple[DataAblation, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class FilterRule:
+    """Declarative text filter rule executed by the native data engine."""
+
+    kind: str
+    field: str = "text"
+    minimum: float | None = None
+    maximum: float | None = None
+    markers: tuple[str, ...] = ()
+
+    @classmethod
+    def url(cls, *, field: str = "text") -> "FilterRule":
+        return cls(kind="url", field=field)
+
+    @classmethod
+    def word_count(
+        cls,
+        *,
+        field: str = "text",
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> "FilterRule":
+        return cls(kind="word_count", field=field, minimum=minimum, maximum=maximum)
+
+    @classmethod
+    def symbol_ratio(
+        cls,
+        *,
+        field: str = "text",
+        maximum: float,
+    ) -> "FilterRule":
+        return cls(kind="symbol_ratio", field=field, maximum=maximum)
+
+    @classmethod
+    def repetition_ratio(
+        cls,
+        *,
+        field: str = "text",
+        maximum: float,
+    ) -> "FilterRule":
+        return cls(kind="repetition_ratio", field=field, maximum=maximum)
+
+    @classmethod
+    def boilerplate(
+        cls,
+        *,
+        field: str = "text",
+        markers: tuple[str, ...],
+    ) -> "FilterRule":
+        return cls(kind="boilerplate", field=field, markers=markers)
+
+    def to_dict(self) -> JsonObject:
+        payload: JsonObject = {"kind": self.kind, "field": self.field}
+        if self.minimum is not None:
+            payload["minimum"] = self.minimum
+        if self.maximum is not None:
+            payload["maximum"] = self.maximum
+        if self.markers:
+            payload["markers"] = list(self.markers)
+        return payload
+
+
+class TextFilter:
+    """Registry component wrapping native declarative text filter rules."""
+
+    __rlab_ref__ = "filter:rlab.text"
+
+    def __init__(self, rules: Iterable[FilterRule | Mapping[str, object]]) -> None:
+        self.rules = tuple(_rule(rule) for rule in rules)
+        self._native = _NativeTextFilter([rule.to_dict() for rule in self.rules])
+
+    def apply(self, record: object, ctx: object | None = None) -> DataDecision:
+        return self._native.apply(record, ctx)
+
+    def to_dict(self) -> JsonObject:
+        return {"ref": self.__rlab_ref__, "rules": [rule.to_dict() for rule in self.rules]}
+
+
+class SimhashDedup:
+    """Registry component for native exact and simhash near deduplication."""
+
+    __rlab_ref__ = "dedup:rlab.simhash"
+
+    def __init__(
+        self,
+        *,
+        field: str = "text",
+        source_field: str = "source",
+        exact_min_words: int = 6,
+        source_exact_min_words: Mapping[str, int] | None = None,
+        near_enabled: bool = True,
+        near_min_words: int = 12,
+        near_hamming_threshold: int = 3,
+        near_max_bucket_size: int = 64,
+    ) -> None:
+        self.field = field
+        self.source_field = source_field
+        self.exact_min_words = exact_min_words
+        self.source_exact_min_words = _string_int_map(source_exact_min_words or {})
+        self.near_enabled = near_enabled
+        self.near_min_words = near_min_words
+        self.near_hamming_threshold = near_hamming_threshold
+        self.near_max_bucket_size = near_max_bucket_size
+        self._native = _NativeSimhashDedup(
+            field=field,
+            source_field=source_field,
+            exact_min_words=exact_min_words,
+            source_exact_min_words=self.source_exact_min_words,
+            near_enabled=near_enabled,
+            near_min_words=near_min_words,
+            near_hamming_threshold=near_hamming_threshold,
+            near_max_bucket_size=near_max_bucket_size,
+        )
+
+    def apply(self, records: Iterable[object]) -> list[object]:
+        return self._native.apply(list(records))
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "ref": self.__rlab_ref__,
+            "field": self.field,
+            "source_field": self.source_field,
+            "exact_min_words": self.exact_min_words,
+            "source_exact_min_words": dict(self.source_exact_min_words),
+            "near_enabled": self.near_enabled,
+            "near_min_words": self.near_min_words,
+            "near_hamming_threshold": self.near_hamming_threshold,
+            "near_max_bucket_size": self.near_max_bucket_size,
+        }
+
+
+class DocumentAssembler:
+    """Registry component for native budget-aware text document assembly."""
+
+    __rlab_ref__ = "group:rlab.documents"
+
+    def __init__(
+        self,
+        *,
+        text_field: str = "text",
+        source_field: str = "source",
+        origin_field: str = "origin",
+        target_word_budget: int = 10_000_000,
+        source_word_targets: Mapping[str, int] | None = None,
+        min_document_words: int = 50,
+        max_document_chars: int = 20_000,
+        max_document_lines: int = 400,
+    ) -> None:
+        self.text_field = text_field
+        self.source_field = source_field
+        self.origin_field = origin_field
+        self.target_word_budget = target_word_budget
+        self.source_word_targets = _string_int_map(source_word_targets or {})
+        self.min_document_words = min_document_words
+        self.max_document_chars = max_document_chars
+        self.max_document_lines = max_document_lines
+        self._native = _NativeDocumentAssembler(
+            text_field=text_field,
+            source_field=source_field,
+            origin_field=origin_field,
+            target_word_budget=target_word_budget,
+            source_word_targets=self.source_word_targets,
+            min_document_words=min_document_words,
+            max_document_chars=max_document_chars,
+            max_document_lines=max_document_lines,
+        )
+
+    def apply(self, records: Iterable[object]) -> list[JsonObject]:
+        return self._native.apply(list(records))
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "ref": self.__rlab_ref__,
+            "text_field": self.text_field,
+            "source_field": self.source_field,
+            "origin_field": self.origin_field,
+            "target_word_budget": self.target_word_budget,
+            "source_word_targets": dict(self.source_word_targets),
+            "min_document_words": self.min_document_words,
+            "max_document_chars": self.max_document_chars,
+            "max_document_lines": self.max_document_lines,
+        }
+
+
+def register_builtins(lab: object) -> None:
+    """Register native generic data components in a project registry."""
+    lab.filter("rlab.text")(TextFilter)
+    lab.dedup("rlab.simhash")(SimhashDedup)
+    lab.group("rlab.documents")(DocumentAssembler)
+
+
+def _rule(value: FilterRule | Mapping[str, object]) -> FilterRule:
+    if isinstance(value, FilterRule):
+        return value
+    return FilterRule(
+        kind=str(value["kind"]),
+        field=str(value.get("field", "text")),
+        minimum=_optional_float(value.get("minimum")),
+        maximum=_optional_float(value.get("maximum")),
+        markers=tuple(str(item) for item in value.get("markers", ())),
+    )
+
+
+def _optional_float(value: object) -> float | None:
+    return None if value is None else float(value)
+
+
+def _string_int_map(values: Mapping[object, int]) -> dict[str, int]:
+    return {str(key): int(value) for key, value in values.items()}
 
 
 def patterns(name: str, mapping: Mapping[str, str]) -> JsonObject:

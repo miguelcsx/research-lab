@@ -11,7 +11,11 @@ from ._rlab import (
     CheckpointManager,
     CheckpointRecord,
     ComponentUse,
+    DataBoundary,
     DataDecision,
+    NativeDocumentAssembler,
+    NativeSimhashDedup,
+    NativeTextFilter,
     DecisionEntry,
     EffectiveConfig,
     ExternalCommand,
@@ -75,7 +79,7 @@ from .components import ComponentSpec, Requirements, collect_requirements
 from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
 from .config import diff_configs, list_configs, resolve_config, validate_configs
-from .data import AuditPolicy, DataBoundary, SinkResult
+from .data import AuditPolicy, SinkResult
 from .data.documents import list_datasets, resolve_dataset, validate_datasets
 from .external import (
     AdapterContext,
@@ -124,6 +128,9 @@ __all__ = [
     "LogArtifact",
     "JsonObject",
     "JsonValue",
+    "NativeDocumentAssembler",
+    "NativeSimhashDedup",
+    "NativeTextFilter",
     "Metric",
     "MetricComparison",
     "NegativeResultEntry",
