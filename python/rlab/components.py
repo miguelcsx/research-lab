@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Generic, cast
@@ -115,8 +115,23 @@ def collect_requirements(values: list[Requirements]) -> Requirements:
     return result
 
 
+def collect_component_requirements(
+    lookup: Callable[[str, str], Requirements],
+    kind: str,
+    specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+) -> Requirements:
+    return collect_requirements(
+        [lookup(kind, ComponentSpec.from_value(spec).name) for spec in specs]
+    )
+
+
 def _union(left: tuple[str, ...], right: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys((*left, *right)))
 
 
-__all__ = ["ComponentSpec", "Requirements", "collect_requirements"]
+__all__ = [
+    "ComponentSpec",
+    "Requirements",
+    "collect_component_requirements",
+    "collect_requirements",
+]

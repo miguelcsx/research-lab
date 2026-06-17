@@ -10,7 +10,11 @@ from typing import TypeVar, cast
 from rlab._decorators import decorator_factory
 from rlab._rlab import ProjectCore
 from rlab._typing import JsonObject, coerce_json_object
-from rlab.components import ComponentSpec, Requirements
+from rlab.components import (
+    ComponentSpec,
+    Requirements,
+    collect_component_requirements,
+)
 
 from .components import (
     build_parts,
@@ -294,6 +298,13 @@ class Project:
             capabilities=tuple(data.get("capabilities", ())),
             artifacts=tuple(data.get("artifacts", ())),
         )
+
+    def component_requirements(
+        self,
+        kind: str,
+        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+    ) -> Requirements:
+        return collect_component_requirements(self.requirements, kind, specs)
 
     def benchmark(
         self, name: str, *, target: str, **metadata: object

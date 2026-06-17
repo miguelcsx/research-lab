@@ -179,6 +179,32 @@ def test_requirements_merge_without_duplicates() -> None:
     assert requirements.capabilities == ("tokens",)
 
 
+def test_project_collects_component_requirements(tmp_path: Path) -> None:
+    project = rlab.Project("component-requirements-test", root=tmp_path)
+
+    @project.component(
+        "objective:clm",
+        requires=rlab.Requirements(model_outputs=("lm",), model_heads=("lm",)),
+    )
+    def clm() -> object:
+        return object()
+
+    @project.component(
+        "objective:mlm",
+        requires=rlab.Requirements(model_outputs=("lm",), batch_fields=("labels",)),
+    )
+    def mlm() -> object:
+        return object()
+
+    requirements = project.component_requirements(
+        "objective", (project.ref("objective:clm"), "mlm")
+    )
+
+    assert requirements.model_outputs == ("lm",)
+    assert requirements.model_heads == ("lm",)
+    assert requirements.batch_fields == ("labels",)
+
+
 def test_planned_variants_reuse_experiment_registry() -> None:
     project = rlab.Project("planned-variants")
 

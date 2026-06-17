@@ -74,7 +74,12 @@ from ._rlab import (
     write_card,
     write_markdown_report,
 )
-from .components import ComponentSpec, Requirements, collect_requirements
+from .components import (
+    ComponentSpec,
+    Requirements,
+    collect_component_requirements,
+    collect_requirements,
+)
 from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
 from .config import apply_overrides, diff_configs, list_configs, resolve_config, validate_configs
@@ -164,6 +169,7 @@ __all__ = [
     "cache_path",
     "cache_size",
     "check_compatibility",
+    "collect_component_requirements",
     "collect_requirements",
     "compare_metric_arrays",
     "coerce_json_object",
