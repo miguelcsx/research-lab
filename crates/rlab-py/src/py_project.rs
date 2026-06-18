@@ -60,7 +60,9 @@ impl PyProjectCore {
             "group",
             "rlab.documents",
             "NativeDocumentAssembler",
-            py.get_type_bound::<PyNativeDocumentAssembler>().unbind().into(),
+            py.get_type_bound::<PyNativeDocumentAssembler>()
+                .unbind()
+                .into(),
         )?;
         Ok(core)
     }

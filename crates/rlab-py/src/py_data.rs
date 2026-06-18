@@ -736,6 +736,206 @@ impl PyNativeDocumentAssembler {
     }
 }
 
+#[pyclass(name = "SubstituteStage")]
+#[derive(Clone)]
+pub struct PySubstituteStage {
+    field: String,
+    old: String,
+    new: String,
+}
+
+#[pymethods]
+impl PySubstituteStage {
+    #[new]
+    pub fn new(field: String, old: String, new: String) -> Self {
+        Self { field, old, new }
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn __call__(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+}
+
+impl PySubstituteStage {
+    fn call(&self, py: Python<'_>, record: PyObject) -> PyResult<PyDataDecision> {
+        let mut value = py_to_json(py, record)?;
+        let object = value
+            .as_object_mut()
+            .ok_or_else(|| PyTypeError::new_err("substitute stage expects JSON object records"))?;
+        let text = object
+            .get(&self.field)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .replace(&self.old, &self.new);
+        object.insert(self.field.clone(), Value::String(text));
+        data_update_py(
+            py,
+            py_from_json(py, &value)?,
+            Some(format!("substitute:{}", self.field)),
+        )
+    }
+}
+
+#[pyclass(name = "ClassifyStage")]
+#[derive(Clone)]
+pub struct PyClassifyStage {
+    field: String,
+    labels: BTreeMap<String, String>,
+}
+
+#[pymethods]
+impl PyClassifyStage {
+    #[new]
+    pub fn new(field: String, labels: BTreeMap<String, String>) -> Self {
+        Self { field, labels }
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn __call__(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+}
+
+impl PyClassifyStage {
+    fn call(&self, py: Python<'_>, record: PyObject) -> PyResult<PyDataDecision> {
+        let mut value = py_to_json(py, record.clone_ref(py))?;
+        let text = value
+            .as_object()
+            .and_then(|object| object.get(&self.field))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let Some((label, _)) = self
+            .labels
+            .iter()
+            .find(|(_, needle)| text.contains(needle.as_str()))
+        else {
+            return data_keep_py(py, record);
+        };
+        let object = value
+            .as_object_mut()
+            .ok_or_else(|| PyTypeError::new_err("classify stage expects JSON object records"))?;
+        object.insert("label".to_string(), Value::String(label.clone()));
+        data_update_py(
+            py,
+            py_from_json(py, &value)?,
+            Some(format!("classify:{label}")),
+        )
+    }
+}
+
+#[pyclass(name = "ThresholdStage")]
+#[derive(Clone)]
+pub struct PyThresholdStage {
+    field: String,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+}
+
+#[pymethods]
+impl PyThresholdStage {
+    #[new]
+    #[pyo3(signature = (field, minimum=None, maximum=None))]
+    pub fn new(field: String, minimum: Option<f64>, maximum: Option<f64>) -> Self {
+        Self {
+            field,
+            minimum,
+            maximum,
+        }
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn __call__(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        self.call(py, record)
+    }
+}
+
+impl PyThresholdStage {
+    fn call(&self, py: Python<'_>, record: PyObject) -> PyResult<PyDataDecision> {
+        let value = py_to_json(py, record.clone_ref(py))?;
+        let Some(number) = value
+            .as_object()
+            .and_then(|object| object.get(&self.field))
+            .and_then(Value::as_f64)
+        else {
+            return Ok(data_drop_py(format!("{}:not_numeric", self.field)));
+        };
+        if self.minimum.is_some_and(|minimum| number < minimum) {
+            return Ok(data_drop_py(format!("{}<minimum", self.field)));
+        }
+        if self.maximum.is_some_and(|maximum| number > maximum) {
+            return Ok(data_drop_py(format!("{}>maximum", self.field)));
+        }
+        data_keep_py(py, record)
+    }
+}
+
+#[pyfunction(name = "substitute")]
+pub fn substitute_stage_py(field: String, old: String, new: String) -> PySubstituteStage {
+    PySubstituteStage::new(field, old, new)
+}
+
+#[pyfunction(name = "classify")]
+pub fn classify_stage_py(field: String, labels: BTreeMap<String, String>) -> PyClassifyStage {
+    PyClassifyStage::new(field, labels)
+}
+
+#[pyfunction(name = "threshold")]
+#[pyo3(signature = (field, minimum=None, maximum=None))]
+pub fn threshold_stage_py(
+    field: String,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+) -> PyThresholdStage {
+    PyThresholdStage::new(field, minimum, maximum)
+}
+
 #[pyfunction(name = "data_keep")]
 pub fn data_keep_py(py: Python<'_>, record: PyObject) -> PyResult<PyDataDecision> {
     let original = record.clone_ref(py);

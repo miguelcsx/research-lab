@@ -1,4 +1,5 @@
 #![allow(clippy::useless_conversion)]
+#![allow(unexpected_cfgs)]
 
 mod convert;
 mod error;
@@ -9,6 +10,7 @@ mod py_budget;
 mod py_cache;
 mod py_checkpoint;
 mod py_cli;
+mod py_components;
 mod py_config;
 mod py_data;
 mod py_external;

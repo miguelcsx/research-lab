@@ -365,7 +365,7 @@ class Project:
         specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
     ) -> ComponentContract:
         return collect_contracts(
-            self.contract(*self._component_lookup(kind, spec)) for spec in specs
+            [self.contract(*self._component_lookup(kind, spec)) for spec in specs]
         )
 
     def component_requirements(

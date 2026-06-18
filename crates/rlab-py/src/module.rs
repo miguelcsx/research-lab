@@ -3,20 +3,30 @@ use pyo3::prelude::*;
 use crate::py_artifact::{PyArtifactManifest, PyArtifactStore};
 use crate::py_baselines::{PyBaselineEntry, PyBaselineStore};
 use crate::py_budget::{estimate_budget_py, estimate_required_repetitions_py, PyBudgetEstimate};
-use crate::py_cache::{cache_path_py, cache_size_py, list_cache_py, PyCacheEntry};
+use crate::py_cache::{
+    cache_key_py, cache_path_py, cache_size_py, list_cache_py, read_jsonl_py,
+    runtime_cache_path_py, write_jsonl_atomic_py, write_through_jsonl_atomic_py, PyCacheEntry,
+};
 use crate::py_checkpoint::{PyCheckpointManager, PyCheckpointRecord, PyRetentionPolicy};
 use crate::py_cli::cli_main;
+use crate::py_components::{
+    collect_component_requirements_py, collect_contracts_py, collect_requirements_py,
+    component_spec_from_value_py, missing_requirements_py, requirements_from_mapping_py,
+    MissingRequirementsError, PyComponentContract, PyComponentSpec, PyMissingRequirements,
+    PyRequirements,
+};
 use crate::py_config::{
     apply_overrides_py, diff_config_documents_py, find_project_root_py, list_config_documents_py,
     load_config_py, read_json_manifest_py, resolve_config_document_py,
     validate_config_documents_py, PyEffectiveConfig,
 };
 use crate::py_data::{
-    data_boundary_py, data_drop_py, data_keep_py, data_update_py, execute_dataset_py,
-    list_data_documents_py, materialize_data_py, materialize_records_py, resolve_data_document_py,
-    validate_data_documents_py, PyComponentUse, PyDataBoundary, PyDataDecision, PyJsonlSink,
-    PyJsonlSource, PyMaterializeReport, PyNativeDocumentAssembler, PyNativeSimhashDedup,
-    PyNativeTextFilter,
+    classify_stage_py, data_boundary_py, data_drop_py, data_keep_py, data_update_py,
+    execute_dataset_py, list_data_documents_py, materialize_data_py, materialize_records_py,
+    resolve_data_document_py, substitute_stage_py, threshold_stage_py, validate_data_documents_py,
+    PyClassifyStage, PyComponentUse, PyDataBoundary, PyDataDecision, PyJsonlSink, PyJsonlSource,
+    PyMaterializeReport, PyNativeDocumentAssembler, PyNativeSimhashDedup, PyNativeTextFilter,
+    PySubstituteStage, PyThresholdStage,
 };
 use crate::py_external::{
     run_external_command_py, PyExternalCommand, PyExternalPath, PyExternalResult,
@@ -66,6 +76,9 @@ fn register_functions(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(data_update_py, module)?)?;
     module.add_function(wrap_pyfunction!(data_drop_py, module)?)?;
     module.add_function(wrap_pyfunction!(data_boundary_py, module)?)?;
+    module.add_function(wrap_pyfunction!(substitute_stage_py, module)?)?;
+    module.add_function(wrap_pyfunction!(classify_stage_py, module)?)?;
+    module.add_function(wrap_pyfunction!(threshold_stage_py, module)?)?;
     module.add_function(wrap_pyfunction!(materialize_data_py, module)?)?;
     module.add_function(wrap_pyfunction!(materialize_records_py, module)?)?;
     module.add_function(wrap_pyfunction!(execute_dataset_py, module)?)?;
@@ -81,6 +94,17 @@ fn register_functions(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(cache_path_py, module)?)?;
     module.add_function(wrap_pyfunction!(list_cache_py, module)?)?;
     module.add_function(wrap_pyfunction!(cache_size_py, module)?)?;
+    module.add_function(wrap_pyfunction!(cache_key_py, module)?)?;
+    module.add_function(wrap_pyfunction!(runtime_cache_path_py, module)?)?;
+    module.add_function(wrap_pyfunction!(read_jsonl_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_jsonl_atomic_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_through_jsonl_atomic_py, module)?)?;
+    module.add_function(wrap_pyfunction!(component_spec_from_value_py, module)?)?;
+    module.add_function(wrap_pyfunction!(collect_requirements_py, module)?)?;
+    module.add_function(wrap_pyfunction!(collect_component_requirements_py, module)?)?;
+    module.add_function(wrap_pyfunction!(collect_contracts_py, module)?)?;
+    module.add_function(wrap_pyfunction!(missing_requirements_py, module)?)?;
+    module.add_function(wrap_pyfunction!(requirements_from_mapping_py, module)?)?;
     module.add_function(wrap_pyfunction!(estimate_budget_py, module)?)?;
     module.add_function(wrap_pyfunction!(estimate_required_repetitions_py, module)?)?;
     module.add_function(wrap_pyfunction!(redact_secrets_py, module)?)?;
@@ -111,12 +135,19 @@ fn register_classes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyRunHandle>()?;
     module.add_class::<PyRunRecord>()?;
     module.add_class::<PyRunQuery>()?;
+    module.add_class::<PyComponentSpec>()?;
+    module.add_class::<PyRequirements>()?;
+    module.add_class::<PyComponentContract>()?;
+    module.add_class::<PyMissingRequirements>()?;
     module.add_class::<PyComponentUse>()?;
     module.add_class::<PyDataDecision>()?;
     module.add_class::<PyDataBoundary>()?;
     module.add_class::<PyNativeTextFilter>()?;
     module.add_class::<PyNativeSimhashDedup>()?;
     module.add_class::<PyNativeDocumentAssembler>()?;
+    module.add_class::<PySubstituteStage>()?;
+    module.add_class::<PyClassifyStage>()?;
+    module.add_class::<PyThresholdStage>()?;
     module.add_class::<PyMaterializeReport>()?;
     module.add_class::<PyJsonlSource>()?;
     module.add_class::<PyJsonlSink>()?;
@@ -150,6 +181,10 @@ fn register_classes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyNoteEntry>()?;
     module.add_class::<PyUnit>()?;
     module.add_class::<PyUnitRegistry>()?;
+    module.add(
+        "MissingRequirementsError",
+        module.py().get_type_bound::<MissingRequirementsError>(),
+    )?;
 
     Ok(())
 }

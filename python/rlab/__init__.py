@@ -51,6 +51,7 @@ from ._rlab import (
     Threat,
     Unit,
     UnitRegistry,
+    apply_overrides,
     bundle_from_metrics,
     cache_path,
     cache_size,
@@ -90,7 +91,7 @@ from .components import (
 )
 from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
-from .config import apply_overrides, diff_configs, list_configs, resolve_config, validate_configs
+from .config import diff_configs, list_configs, resolve_config, validate_configs
 from .data import AuditPolicy, SinkResult
 from .data.documents import list_datasets, resolve_dataset, validate_datasets
 from .external import (

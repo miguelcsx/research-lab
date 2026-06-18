@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import traceback
 from collections.abc import Mapping
@@ -15,7 +14,6 @@ from rlab import RuntimeContext
 from rlab._rlab import _failed_host_event_line, execute_dataset
 from rlab._loader import load_modules
 from rlab.components import ComponentSpec
-from rlab.refs import ArtifactRef, RunRef
 
 PROTOCOL_VERSION = 1
 SCHEMA_VERSION = 1
@@ -67,7 +65,7 @@ def _execute(request: Mapping[str, Any], project: Any) -> None:
     if not isinstance(target, Mapping):
         raise ValueError("execute request requires a target")
 
-    base_ctx = RuntimeContext(
+    ctx = RuntimeContext(
         run_id=request.get("run_id"),
         run_dir=_optional_path(request.get("run_dir")),
         cache_dir=_optional_path(request.get("cache_dir")),
@@ -76,93 +74,9 @@ def _execute(request: Mapping[str, Any], project: Any) -> None:
         seed=request.get("seed"),
         strict=bool(request.get("strict", False)),
     )
-    ctx = _ChildContext(base_ctx)
-    result = _invoke(project, str(target["kind"]), str(target["name"]), cast(RuntimeContext, ctx))
-    ctx.save_children()
-    for line in base_ctx.host_event_lines(str(request["request_id"]), result):
+    result = _invoke(project, str(target["kind"]), str(target["name"]), ctx)
+    for line in ctx.host_event_lines(str(request["request_id"]), result):
         _write_line(line)
-
-
-class _ChildContext:
-    def __init__(self, base: RuntimeContext) -> None:
-        self._base = base
-        self._children: list[dict[str, str]] = []
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._base, name)
-
-    def run(self, target: str, params: Mapping[str, object] | None = None) -> RunRef:
-        command = _child_command(Path(self._base.project_root), target, params or {})
-        result = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        payload = json.loads(result.stdout)
-        data = _run_data(payload, Path(self._base.project_root))
-        ref = RunRef(
-            id=str(data["id"]),
-            target=target,
-            path=Path(str(data["path"])),
-        )
-        self._children.append(
-            {"id": ref.id, "target": ref.target, "path": str(ref.path)}
-        )
-        return ref
-
-    def save_children(self) -> None:
-        if not self._children:
-            return
-        path = Path(self._base.output_path(Path("children.json")))
-        path.write_text(
-            json.dumps(self._children, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        self._base.save_artifact("run.children", path, kind="file")
-
-
-def _child_command(
-    root: Path,
-    target: str,
-    params: Mapping[str, object],
-) -> list[str]:
-    if target.startswith("dataset:"):
-        command = [sys.executable, "-m", "rlab", "--root", str(root), "data", "build", target, "--json"]
-        for key, value in params.items():
-            command.extend(["--override", f"{key}={_param_value(value)}"])
-        return command
-    command = [sys.executable, "-m", "rlab", "--root", str(root), "run", target, "--json"]
-    for key, value in params.items():
-        command.extend(["--param", f"{key}={_param_value(value)}"])
-    return command
-
-
-def _param_value(value: object) -> str:
-    if isinstance(value, ArtifactRef):
-        return str(value.path)
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, str | int | float | bool):
-        return str(value)
-    return json.dumps(_jsonable(value), sort_keys=True)
-
-
-def _run_data(payload: Mapping[str, object], root: Path) -> Mapping[str, object]:
-    data = payload.get("data")
-    if not isinstance(data, Mapping):
-        raise ValueError("child run returned invalid JSON")
-    if "id" in data:
-        return data
-    runs = data.get("runs")
-    if isinstance(runs, list) and len(runs) == 1:
-        run_id = str(runs[0])
-        return {
-            "id": run_id,
-            "path": str(root / ".rlab" / "runs" / run_id),
-        }
-    raise ValueError("ctx.run expected exactly one child run")
 
 
 def _invoke(project: Any, kind: str, name: str, ctx: RuntimeContext) -> Any:
@@ -288,14 +202,14 @@ def _resolve_component(project: Any, value: object, default_kind: str) -> Any:
 def _component_spec(value: object, default_kind: str) -> ComponentSpec[dict[str, Any]]:
     spec = ComponentSpec.from_value(_component_payload(value, default_kind))
     ref = spec.ref if ":" in spec.ref else f"{default_kind}:{spec.ref}"
-    return ComponentSpec(ref=ref, params=spec.params)
+    return ComponentSpec(ref, spec.params)
 
 
 def _component_payload(value: object, default_kind: str) -> object:
     if isinstance(value, str):
         return value if ":" in value else f"{default_kind}:{value}"
     if isinstance(value, Mapping):
-        ref = value.get("ref") or value.get("reference") or value.get("name")
+        ref = value.get("ref")
         if isinstance(ref, str) and ref:
             normalized = ref if ":" in ref else f"{default_kind}:{ref}"
             return {**value, "ref": normalized}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Final, Protocol, TypeAlias, cast
+from typing import Final, TypeAlias, cast
 
 from rlab._decorators import DataDecision, data_boundary, data_drop, data_keep, data_update
 from rlab._rlab import (
@@ -12,7 +12,10 @@ from rlab._rlab import (
     NativeDocumentAssembler as _NativeDocumentAssembler,
     NativeSimhashDedup as _NativeSimhashDedup,
     NativeTextFilter as _NativeTextFilter,
+    classify as _classify,
     materialize_records,
+    substitute as _substitute,
+    threshold as _threshold,
 )
 from rlab._typing import JsonObject, JsonValue
 from rlab.components import ComponentSpec
@@ -56,7 +59,6 @@ __all__ = [
     "FilterRule",
     "PipelineSpec",
     "SimhashDedup",
-    "register_builtins",
     "SinkResult",
     "TextFilter",
     "classify",
@@ -78,14 +80,6 @@ class DataContext:
 
     params: Mapping[str, JsonValue]
     seed: int | None = None
-
-
-class DataRegistry(Protocol):
-    def filter(self, name: str) -> Callable[[type[object]], type[object]]: ...
-
-    def dedup(self, name: str) -> Callable[[type[object]], type[object]]: ...
-
-    def group(self, name: str) -> Callable[[type[object]], type[object]]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,13 +366,6 @@ class DocumentAssembler:
         }
 
 
-def register_builtins(lab: DataRegistry) -> None:
-    """Register native data components in a project registry."""
-    lab.filter("rlab.text")(TextFilter)
-    lab.dedup("rlab.simhash")(SimhashDedup)
-    lab.group("rlab.documents")(DocumentAssembler)
-
-
 def _rule(value: FilterRule | Mapping[str, object]) -> FilterRule:
     if isinstance(value, FilterRule):
         return value
@@ -412,29 +399,11 @@ def patterns(name: str, mapping: Mapping[str, str]) -> JsonObject:
 
 
 def substitute(field: str, old: str, new: str) -> Callable[[Record], DataDecision]:
-    """Create a simple record substitution transform."""
-
-    def apply(record: Record) -> DataDecision:
-        updated = _copy_record(record)
-        updated[field] = _record_text(record, field).replace(old, new)
-        return data_update(updated, reason=_format(REASON_SUBSTITUTE, field=field))
-
-    return apply
+    return _substitute(field, old, new)
 
 
 def classify(field: str, labels: Mapping[str, str]) -> Callable[[Record], DataDecision]:
-    """Classify a record by substring labels."""
-
-    def apply(record: Record) -> DataDecision:
-        label = _first_matching_label(_record_text(record, field), labels)
-        if label is None:
-            return data_keep(record)
-
-        updated = _copy_record(record)
-        updated[FIELD_LABEL] = label
-        return data_update(updated, reason=_format(REASON_CLASSIFY, label=label))
-
-    return apply
+    return _classify(field, dict(labels))
 
 
 def predicate(
@@ -456,19 +425,7 @@ def threshold(
     minimum: float | None = None,
     maximum: float | None = None,
 ) -> Callable[[Record], DataDecision]:
-    """Create a numeric threshold filter."""
-
-    def apply(record: Record) -> DataDecision:
-        value = _numeric_value(record[field])
-        if value is None:
-            return data_drop(_format(REASON_NOT_NUMERIC, field=field))
-        if minimum is not None and value < minimum:
-            return data_drop(_format(REASON_BELOW_MINIMUM, field=field))
-        if maximum is not None and value > maximum:
-            return data_drop(_format(REASON_ABOVE_MAXIMUM, field=field))
-        return data_keep(record)
-
-    return apply
+    return _threshold(field, minimum, maximum)
 
 
 def materialize(
@@ -477,20 +434,6 @@ def materialize(
 ) -> list[Record]:
     """Apply record-level stages through the native rlab data engine."""
     return cast(list[Record], list(materialize_records(list(records), list(stages))))
-
-
-def _copy_record(record: Record) -> MutableRecord:
-    return dict(record)
-
-
-def _record_text(record: Record, field: str) -> str:
-    return str(_record_value(record, field, DEFAULT_DESCRIPTION))
-
-
-def _record_value(record: object, field: str, default: object = None) -> object:
-    if isinstance(record, Mapping):
-        return record.get(field, default)
-    return getattr(record, field, default)
 
 
 def _first_matching_label(text: str, labels: Mapping[str, str]) -> str | None:

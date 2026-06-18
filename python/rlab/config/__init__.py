@@ -12,7 +12,7 @@ from rlab._rlab import (
     resolve_config_document,
     validate_config_documents,
 )
-from rlab._documents import apply_overrides, decode_object, encode_overrides, validate_model
+from rlab._documents import decode_object, encode_overrides, validate_model
 from rlab._typing import JsonObject, JsonValue
 
 DEFAULT_SUFFIX: Final = ".yaml"
@@ -21,7 +21,6 @@ DOCUMENT_LABEL: Final = "configuration"
 ModelT = TypeVar("ModelT")
 
 __all__ = [
-    "apply_overrides",
     "diff_configs",
     "list_configs",
     "resolve_config",
@@ -92,3 +91,4 @@ def diff_configs(left: JsonObject, right: JsonObject) -> JsonObject:
         ),
         DOCUMENT_LABEL,
     )
+

@@ -16,7 +16,7 @@ def test_apply_overrides_returns_new_document() -> None:
 
 
 def test_apply_overrides_rejects_non_mapping_path() -> None:
-    with pytest.raises(ValueError, match="crosses non-mapping"):
+    with pytest.raises(ValueError, match="unknown or non-mapping config path"):
         rlab.apply_overrides({"model": 32}, {"model.width": 64})
 
 

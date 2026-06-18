@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import TypeVar, cast
 
 from rlab._typing import JsonObject, JsonValue
@@ -25,7 +25,7 @@ def decode_object(value: str, label: str) -> JsonObject:
     return {str(key): item for key, item in decoded.items()}
 
 
-def apply_overrides(
+def apply_document_overrides(
     document: Mapping[str, JsonValue],
     overrides: Mapping[str, JsonValue] | None,
     *,
@@ -53,4 +53,9 @@ def validate_model(model: type[ModelT], value: JsonObject) -> ModelT:
     return cast(ModelT, validate(value))
 
 
-__all__ = ["apply_overrides", "decode_object", "encode_overrides", "validate_model"]
+__all__ = [
+    "apply_document_overrides",
+    "decode_object",
+    "encode_overrides",
+    "validate_model",
+]
