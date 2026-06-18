@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from typing import Any, Generic, cast
 
@@ -13,7 +13,7 @@ from ._typing import JsonObject, ParamsT, coerce_json_value
 @dataclass(frozen=True, slots=True)
 class ComponentSpec(Generic[ParamsT]):
     ref: str
-    params: ParamsT
+    params: ParamsT = field(default_factory=dict)
 
     @classmethod
     def __class_getitem__(cls, _item: object) -> type["ComponentSpec[object]"]:
@@ -78,6 +78,27 @@ class ComponentSpec(Generic[ParamsT]):
             ),
         )
 
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls,
+        _core_schema: object,
+        _handler: object,
+    ) -> JsonObject:
+        return {
+            "anyOf": [
+                {"type": "string"},
+                {
+                    "type": "object",
+                    "properties": {
+                        "ref": {"type": "string"},
+                        "name": {"type": "string"},
+                        "params": {"type": "object"},
+                    },
+                    "additionalProperties": True,
+                },
+            ]
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class Requirements:
@@ -98,6 +119,24 @@ class Requirements:
             artifacts=_union(self.artifacts, other.artifacts),
         )
 
+    def only(self, *fields: str) -> "Requirements":
+        selected = set(fields)
+        return Requirements(
+            **{
+                field: getattr(self, field) if field in selected else ()
+                for field in _REQUIREMENT_FIELDS
+            }
+        )
+
+    def without(self, *fields: str) -> "Requirements":
+        removed = set(fields)
+        return Requirements(
+            **{
+                field: () if field in removed else getattr(self, field)
+                for field in _REQUIREMENT_FIELDS
+            }
+        )
+
     def to_dict(self) -> JsonObject:
         return {
             "model_outputs": list(self.model_outputs),
@@ -108,7 +147,65 @@ class Requirements:
         }
 
 
-def collect_requirements(values: list[Requirements]) -> Requirements:
+@dataclass(frozen=True, slots=True)
+class ComponentContract:
+    """Requirements consumed and produced by a registered component."""
+
+    requires: Requirements = Requirements()
+    provides: Requirements = Requirements()
+
+    def merge(self, other: "ComponentContract") -> "ComponentContract":
+        return ComponentContract(
+            requires=self.requires.merge(other.requires),
+            provides=self.provides.merge(other.provides),
+        )
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "requires": self.requires.to_dict(),
+            "provides": self.provides.to_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MissingRequirements:
+    """Requirement fields requested by consumers but not offered by providers."""
+
+    model_outputs: tuple[str, ...] = ()
+    model_heads: tuple[str, ...] = ()
+    batch_fields: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = ()
+    artifacts: tuple[str, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return not any(self.to_dict().values())
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "model_outputs": list(self.model_outputs),
+            "model_heads": list(self.model_heads),
+            "batch_fields": list(self.batch_fields),
+            "capabilities": list(self.capabilities),
+            "artifacts": list(self.artifacts),
+        }
+
+    def raise_if_any(self, label: str = "component contract") -> None:
+        if self.ok:
+            return
+        missing = {
+            key: value
+            for key, value in self.to_dict().items()
+            if isinstance(value, list) and value
+        }
+        raise MissingRequirementsError(f"{label} is missing requirements: {missing}")
+
+
+class MissingRequirementsError(ValueError):
+    """Raised when required capabilities or artifacts are not provided."""
+
+
+def collect_requirements(values: Iterable[Requirements]) -> Requirements:
     result = Requirements()
     for value in values:
         result = result.merge(value)
@@ -125,13 +222,71 @@ def collect_component_requirements(
     )
 
 
+def collect_contracts(values: Iterable[ComponentContract]) -> ComponentContract:
+    result = ComponentContract()
+    for value in values:
+        result = result.merge(value)
+    return result
+
+
+def missing_requirements(
+    required: Requirements,
+    provided: Requirements,
+    *,
+    fields: Iterable[str] | None = None,
+) -> MissingRequirements:
+    selected = set(fields) if fields is not None else set(_REQUIREMENT_FIELDS)
+    return MissingRequirements(
+        model_outputs=_missing(required.model_outputs, provided.model_outputs)
+        if "model_outputs" in selected
+        else (),
+        model_heads=_missing(required.model_heads, provided.model_heads)
+        if "model_heads" in selected
+        else (),
+        batch_fields=_missing(required.batch_fields, provided.batch_fields)
+        if "batch_fields" in selected
+        else (),
+        capabilities=_missing(required.capabilities, provided.capabilities)
+        if "capabilities" in selected
+        else (),
+        artifacts=_missing(required.artifacts, provided.artifacts)
+        if "artifacts" in selected
+        else (),
+    )
+
+
 def _union(left: tuple[str, ...], right: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys((*left, *right)))
 
 
+def _missing(required: tuple[str, ...], provided: tuple[str, ...]) -> tuple[str, ...]:
+    available = set(provided)
+    return tuple(value for value in required if value not in available)
+
+
+_REQUIREMENT_FIELDS = (
+    "model_outputs",
+    "model_heads",
+    "batch_fields",
+    "capabilities",
+    "artifacts",
+)
+
+
+def ref(name: str, **params: object) -> ComponentSpec[object]:
+    """Create a component reference without needing a Project instance."""
+    return ComponentSpec(name, params)
+
+
 __all__ = [
+    "ComponentContract",
     "ComponentSpec",
+    "MissingRequirements",
+    "MissingRequirementsError",
     "Requirements",
     "collect_component_requirements",
+    "collect_contracts",
     "collect_requirements",
+    "missing_requirements",
+    "ref",
 ]

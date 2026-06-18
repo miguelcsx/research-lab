@@ -19,7 +19,7 @@ pub fn resolve_document(
 ) -> RlabResult<ResolvedDocument> {
     let mut value = load(root, name, suffix, &mut Vec::new())?;
 
-    apply_overrides(&mut value, &overrides, require_explicit_paths)?;
+    apply_dotted_overrides(&mut value, &overrides, require_explicit_paths)?;
 
     Ok(ResolvedDocument {
         name: name.to_string(),
@@ -57,7 +57,7 @@ pub fn validate_documents(root: &Path, suffix: &str) -> RlabResult<BTreeMap<Stri
     Ok(failures)
 }
 
-fn apply_overrides(
+pub fn apply_dotted_overrides(
     value: &mut Value,
     overrides: &BTreeMap<String, Value>,
     require_explicit_paths: bool,

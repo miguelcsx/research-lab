@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
@@ -79,4 +80,94 @@ pub fn diff_config_documents_py(left_json: &str, right_json: &str) -> PyResult<S
         overrides: BTreeMap::new(),
     };
     to_json(&rlab_core::diff_documents(&left, &right))
+}
+
+#[pyfunction(name = "apply_overrides")]
+#[pyo3(signature = (value, overrides, *, strict=false))]
+pub fn apply_overrides_py(
+    py: Python<'_>,
+    value: PyObject,
+    overrides: PyObject,
+    strict: bool,
+) -> PyResult<PyObject> {
+    let mut value = py_to_json(py, value)?;
+    if !value.is_object() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "override target must be a JSON object",
+        ));
+    }
+    let overrides_value = py_to_json(py, overrides)?;
+    let overrides = match overrides_value {
+        serde_json::Value::Object(map) => map.into_iter().collect(),
+        _ => {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "overrides must be a JSON object",
+            ))
+        }
+    };
+    rlab_core::apply_dotted_overrides(&mut value, &overrides, strict).map_err(to_py_error)?;
+    py_from_json(py, &value)
+}
+
+#[pyfunction(name = "read_json_manifest")]
+#[pyo3(signature = (path, *, required_fields=None, schema=None))]
+pub fn read_json_manifest_py(
+    py: Python<'_>,
+    path: PathBuf,
+    required_fields: Option<Vec<String>>,
+    schema: Option<Py<PyAny>>,
+) -> PyResult<PyObject> {
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        pyo3::exceptions::PyOSError::new_err(format!(
+            "failed to read manifest {}: {error}",
+            path.display()
+        ))
+    })?;
+    let value: serde_json::Value = from_json_str(&raw)?;
+    let object = value.as_object().ok_or_else(|| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "manifest {} must be a JSON object",
+            path.display()
+        ))
+    })?;
+    let missing: Vec<String> = required_fields
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|field| !object.contains_key(field))
+        .collect();
+    if !missing.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "manifest {} is missing required fields: {:?}",
+            path.display(),
+            missing
+        )));
+    }
+    let resolved = py_from_json(py, &value)?;
+    match schema {
+        Some(schema) => Ok(schema
+            .bind(py)
+            .getattr("model_validate")?
+            .call1((resolved,))?
+            .unbind()),
+        None => Ok(resolved),
+    }
+}
+
+fn py_to_json(py: Python<'_>, value: PyObject) -> PyResult<serde_json::Value> {
+    let coerced = py
+        .import_bound("rlab._typing")?
+        .getattr("coerce_json_value")?
+        .call1((value,))?;
+    let raw: String = py
+        .import_bound("json")?
+        .call_method1("dumps", (coerced,))?
+        .extract()?;
+    from_json_str(&raw)
+}
+
+fn py_from_json(py: Python<'_>, value: &serde_json::Value) -> PyResult<PyObject> {
+    Ok(py
+        .import_bound("json")?
+        .call_method1("loads", (to_json(value)?,))?
+        .unbind())
 }

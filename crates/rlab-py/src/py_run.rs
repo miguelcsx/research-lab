@@ -1,5 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pyo3::prelude::*;
@@ -11,6 +14,12 @@ use rlab_core::host::{HostEvent, LogEvent, ProgressEvent, ProtocolVersion};
 use crate::convert::json::{from_json_str, to_json};
 use crate::error::to_py_error;
 use crate::py_external::{PyExternalCommand, PyExternalResult, PyExternalWorkspace};
+
+const CHILD_RUNS_FILE: &str = "child_runs.jsonl";
+const ENV_PARENT_RUN_ID: &str = "RLAB_PARENT_RUN_ID";
+const ENV_PARENT_TARGET: &str = "RLAB_PARENT_TARGET";
+const ENV_NESTED_DEPTH: &str = "RLAB_NESTED_DEPTH";
+const MAX_NESTED_DEPTH: u32 = 8;
 
 #[pyclass(name = "RunRecord")]
 #[derive(Clone)]
@@ -57,6 +66,68 @@ pub struct PyRunQuery {
     root: PathBuf,
 }
 
+#[pyclass(name = "RunHandle", frozen)]
+pub struct PyRunHandle {
+    run_id: String,
+    path: PathBuf,
+}
+
+#[pymethods]
+impl PyRunHandle {
+    #[getter]
+    pub fn run_id(&self) -> String {
+        self.run_id.clone()
+    }
+
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_path(py, self.path.clone())
+    }
+
+    #[getter]
+    pub fn status(&self) -> PyResult<String> {
+        Ok(run_json(&self.path)?
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string())
+    }
+
+    #[getter]
+    pub fn result(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(
+            py,
+            &read_json_or(&self.path.join("results.json"), Value::Null)?,
+        )
+    }
+
+    pub fn metrics(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_from_json(
+            py,
+            &read_json_or(
+                &self.path.join("metrics_summary.json"),
+                Value::Object(Default::default()),
+            )?,
+        )
+    }
+
+    pub fn artifact(&self, py: Python<'_>, name: &str) -> PyResult<PyObject> {
+        for artifact in read_jsonl(&self.path.join("artifacts").join("artifacts.jsonl"))? {
+            if artifact.get("name").and_then(Value::as_str) == Some(name) {
+                let Some(path) = artifact.get("path").and_then(Value::as_str) else {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "artifact {name:?} has no path"
+                    )));
+                };
+                return py_path(py, PathBuf::from(path));
+            }
+        }
+        Err(pyo3::exceptions::PyKeyError::new_err(format!(
+            "artifact not found: {name}"
+        )))
+    }
+}
+
 #[pymethods]
 impl PyRunQuery {
     #[new]
@@ -94,6 +165,7 @@ pub struct PyRuntimeContext {
     project_root: PathBuf,
     params: Py<PyDict>,
     seed: Option<u64>,
+    strict: bool,
     metrics: BTreeMap<String, f64>,
     artifacts: Vec<Value>,
     logs: Vec<String>,
@@ -102,7 +174,7 @@ pub struct PyRuntimeContext {
 #[pymethods]
 impl PyRuntimeContext {
     #[new]
-    #[pyo3(signature = (run_id=None, run_dir=None, cache_dir=None, project_root=None, params_json="{}", seed=None))]
+    #[pyo3(signature = (run_id=None, run_dir=None, cache_dir=None, project_root=None, params_json="{}", seed=None, strict=false))]
     pub fn new(
         py: Python<'_>,
         run_id: Option<String>,
@@ -111,6 +183,7 @@ impl PyRuntimeContext {
         project_root: Option<PathBuf>,
         params_json: &str,
         seed: Option<u64>,
+        strict: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             run_id,
@@ -123,6 +196,7 @@ impl PyRuntimeContext {
                 .downcast_into::<PyDict>()?
                 .unbind(),
             seed,
+            strict,
             metrics: BTreeMap::new(),
             artifacts: Vec::new(),
             logs: Vec::new(),
@@ -251,16 +325,70 @@ impl PyRuntimeContext {
     }
 
     pub fn output_path(&self, py: Python<'_>, value: PathBuf) -> PyResult<PyObject> {
-        let Some(run_dir) = &self.run_dir else {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "runtime context has no run_dir",
+        py_path(py, self.output_pathbuf(value)?)
+    }
+
+    #[pyo3(signature = (exclude=None, path_prefix=None, passthrough_roots=None))]
+    pub fn overrides(
+        &self,
+        py: Python<'_>,
+        exclude: Option<Vec<String>>,
+        path_prefix: Option<String>,
+        passthrough_roots: Option<Vec<String>>,
+    ) -> PyResult<PyObject> {
+        let Value::Object(params) = py_to_json(py, self.params.clone_ref(py).into())? else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "runtime params must be an object",
             ));
         };
-        let output = run_dir.join("outputs").join(safe_relative_path(value)?);
-        if let Some(parent) = output.parent() {
-            std::fs::create_dir_all(parent)?;
+        let excluded = exclude.unwrap_or_default();
+        let passthrough = passthrough_roots.unwrap_or_default();
+        let mut result = serde_json::Map::new();
+        for (key, value) in params {
+            if excluded.iter().any(|item| item == &key) {
+                continue;
+            }
+            let root = key.split('.').next().unwrap_or(&key);
+            let output_key = match &path_prefix {
+                Some(prefix) if !passthrough.iter().any(|item| item == root) => {
+                    format!("{prefix}.{key}")
+                }
+                _ => key,
+            };
+            result.insert(output_key, value);
         }
-        py_path(py, output)
+        py_from_json(py, &Value::Object(result))
+    }
+
+    #[pyo3(signature = (schema, base, *, exclude=None, path_prefix=None, passthrough_roots=None, strict=false))]
+    pub fn config(
+        &self,
+        py: Python<'_>,
+        schema: PyObject,
+        base: PyObject,
+        exclude: Option<Vec<String>>,
+        path_prefix: Option<String>,
+        passthrough_roots: Option<Vec<String>>,
+        strict: bool,
+    ) -> PyResult<PyObject> {
+        let base_value = py_to_json(py, base)?;
+        if !base_value.is_object() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "base config must serialize to a JSON object",
+            ));
+        }
+        let overrides = self.overrides(py, exclude, path_prefix, passthrough_roots)?;
+        let kwargs = PyDict::new_bound(py);
+        kwargs.set_item("strict", strict)?;
+        let resolved = py
+            .import_bound("rlab")?
+            .getattr("apply_overrides")?
+            .call((py_from_json(py, &base_value)?, overrides), Some(&kwargs))?;
+        Ok(schema
+            .bind(py)
+            .getattr("model_validate")?
+            .call1((resolved,))?
+            .unbind())
     }
 
     #[pyo3(signature = (first, second=None, kind="file", version="1", metadata=None, inputs=None))]
@@ -282,6 +410,55 @@ impl PyRuntimeContext {
             )));
         }
         self.record_artifact(py, &name, &path, kind, version, metadata, inputs)?;
+        py_path(py, path)
+    }
+
+    pub fn save_file(&mut self, py: Python<'_>, name: &str, path: PathBuf) -> PyResult<PyObject> {
+        let path = self.resolve_project_path(path);
+        if !path.is_file() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "artifact file does not exist: {}",
+                path.display()
+            )));
+        }
+        self.record_artifact(py, name, &path, "file", "1", None, None)?;
+        py_path(py, path)
+    }
+
+    pub fn save_dir(&mut self, py: Python<'_>, name: &str, path: PathBuf) -> PyResult<PyObject> {
+        let path = self.resolve_project_path(path);
+        if !path.is_dir() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "artifact directory does not exist: {}",
+                path.display()
+            )));
+        }
+        self.record_artifact(py, name, &path, "directory", "1", None, None)?;
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, payload, *, artifact=None, kind="file"))]
+    pub fn write_manifest(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        payload: PyObject,
+        artifact: Option<String>,
+        kind: &str,
+    ) -> PyResult<PyObject> {
+        let path = self.output_pathbuf(name.clone())?;
+        let value = py_to_json(py, payload)?;
+        if !value.is_object() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "manifest payload must be a JSON object",
+            ));
+        }
+        rlab_core::fs::write_json_atomic(&path, &value).map_err(to_py_error)?;
+        let artifact_name = artifact.unwrap_or_else(|| {
+            name.to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, ".")
+        });
+        self.record_artifact(py, &artifact_name, &path, kind, "1", None, None)?;
         py_path(py, path)
     }
 
@@ -341,6 +518,95 @@ impl PyRuntimeContext {
             detail: detail.to_string(),
         });
         write_host_event(py, event)
+    }
+
+    #[pyo3(signature = (target, params=None, *, seed=None, strict=None, allow_failure=false))]
+    pub fn run(
+        &mut self,
+        py: Python<'_>,
+        target: &str,
+        params: Option<PyObject>,
+        seed: Option<u64>,
+        strict: Option<bool>,
+        allow_failure: bool,
+    ) -> PyResult<PyRunHandle> {
+        let Some(run_dir) = &self.run_dir else {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "runtime context has no run_dir",
+            ));
+        };
+        let runs_root = run_dir
+            .parent()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("run_dir has no parent"))?
+            .to_path_buf();
+        let before = run_ids(&runs_root)?;
+        let params_value = match params {
+            Some(value) => py_to_json(py, value)?,
+            None => Value::Object(Default::default()),
+        };
+        if !params_value.is_object() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "nested run params must be an object",
+            ));
+        }
+        let depth = nested_depth()?;
+        if depth >= MAX_NESTED_DEPTH {
+            return Err(pyo3::exceptions::PyRecursionError::new_err(format!(
+                "rlab nested run depth exceeded {MAX_NESTED_DEPTH}"
+            )));
+        }
+        let executable: String = py.import_bound("sys")?.getattr("executable")?.extract()?;
+        let mut command = Command::new(executable);
+        command
+            .arg("-m")
+            .arg("rlab")
+            .arg("run")
+            .arg(target)
+            .arg("--param")
+            .arg(to_json(&params_value)?)
+            .current_dir(&self.project_root)
+            .env(ENV_NESTED_DEPTH, (depth + 1).to_string());
+        if let Some(parent) = &self.run_id {
+            command.env(ENV_PARENT_RUN_ID, parent);
+        }
+        command.env(ENV_PARENT_TARGET, target);
+        if strict.unwrap_or(self.strict) {
+            command.arg("--strict");
+        }
+        if let Some(seed) = seed {
+            command.arg("--seed").arg(seed.to_string());
+        }
+        let output = command.output()?;
+        let after = run_ids(&runs_root)?;
+        let created = after
+            .difference(&before)
+            .map(String::to_owned)
+            .collect::<Vec<_>>();
+        if created.len() != 1 {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "nested run expected exactly one child run, found {}",
+                created.len()
+            )));
+        }
+        let child = PyRunHandle {
+            run_id: created[0].clone(),
+            path: runs_root.join(&created[0]),
+        };
+        self.record_child_run(target, &child)?;
+        if !output.status.success() && !allow_failure {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "nested run {target} failed: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+        if child.status()? == "failed" && !allow_failure {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "nested run {target} failed: {}",
+                child.run_id
+            )));
+        }
+        Ok(child)
     }
 
     #[pyo3(signature = (name_or_command, command=None))]
@@ -517,6 +783,19 @@ impl PyRuntimeContext {
         }
     }
 
+    fn output_pathbuf(&self, value: PathBuf) -> PyResult<PathBuf> {
+        let Some(run_dir) = &self.run_dir else {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "runtime context has no run_dir",
+            ));
+        };
+        let output = run_dir.join("outputs").join(safe_relative_path(value)?);
+        if let Some(parent) = output.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        Ok(output)
+    }
+
     fn artifact_args(
         &self,
         py: Python<'_>,
@@ -586,6 +865,28 @@ impl PyRuntimeContext {
         }
         Ok(())
     }
+
+    fn record_child_run(&self, target: &str, child: &PyRunHandle) -> PyResult<()> {
+        let Some(run_dir) = &self.run_dir else {
+            return Ok(());
+        };
+        let path = run_dir.join(CHILD_RUNS_FILE);
+        let entry = json!({
+            "schema_version": 1,
+            "target": target,
+            "run_id": child.run_id,
+            "path": child.path,
+            "status": child.status()?,
+        });
+        let line = serde_json::to_string(&entry).map_err(py_json_error)?;
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        writeln!(file, "{line}")?;
+        Ok(())
+    }
 }
 
 #[pyfunction(name = "_failed_host_event_line")]
@@ -642,6 +943,66 @@ fn write_host_event(py: Python<'_>, event: HostEvent) -> PyResult<()> {
     stdout.call_method1("write", (format!("{line}\n"),))?;
     stdout.call_method0("flush")?;
     Ok(())
+}
+
+fn run_ids(root: &Path) -> PyResult<BTreeSet<String>> {
+    if !root.exists() {
+        return Ok(BTreeSet::new());
+    }
+    let mut values = BTreeSet::new();
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_dir() && path.join("run.json").is_file() {
+            if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
+                values.insert(name.to_string());
+            }
+        }
+    }
+    Ok(values)
+}
+
+fn nested_depth() -> PyResult<u32> {
+    match std::env::var(ENV_NESTED_DEPTH) {
+        Ok(value) => value.parse::<u32>().map_err(|_| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "{ENV_NESTED_DEPTH} must be an integer"
+            ))
+        }),
+        Err(_) => Ok(0),
+    }
+}
+
+fn run_json(path: &Path) -> PyResult<Value> {
+    read_json_or(&path.join("run.json"), Value::Object(Default::default()))
+}
+
+fn read_json_or(path: &Path, default: Value) -> PyResult<Value> {
+    if !path.exists() {
+        return Ok(default);
+    }
+    let text = fs::read_to_string(path)?;
+    serde_json::from_str(&text).map_err(py_json_error)
+}
+
+fn read_jsonl(path: &Path) -> PyResult<Vec<Value>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut values = Vec::new();
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        values.push(serde_json::from_str(&line).map_err(py_json_error)?);
+    }
+    Ok(values)
+}
+
+fn py_json_error(error: serde_json::Error) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(error.to_string())
 }
 
 fn param_type_error(name: &str, kind: &str) -> PyErr {

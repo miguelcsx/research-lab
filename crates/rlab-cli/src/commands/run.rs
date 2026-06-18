@@ -24,6 +24,9 @@ pub struct RunCommand {
 
     #[arg(long = "param", alias = "params")]
     pub params: Vec<String>,
+
+    #[arg(long)]
+    pub seed: Option<u64>,
 }
 
 pub(crate) struct RunOutcome {
@@ -43,7 +46,7 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
 
     let jobs = target_jobs(&config, &paths, strict, &kind, &name)?;
     if jobs.is_empty() {
-        let outcome = execute_run(&config, &paths, &kind, &name, params, None, strict)?;
+        let outcome = execute_run(&config, &paths, &kind, &name, params, command.seed, strict)?;
         return report_run(&outcome, json);
     }
 
@@ -54,7 +57,15 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
     let mut outcomes = Vec::with_capacity(jobs.len());
     for job in &jobs {
         let merged = merge_params(&params, &job.params);
-        let outcome = execute_run(&config, &paths, &kind, &name, merged, job.seed, strict)?;
+        let outcome = execute_run(
+            &config,
+            &paths,
+            &kind,
+            &name,
+            merged,
+            command.seed.or(job.seed),
+            strict,
+        )?;
 
         if !json {
             print_sweep_job_result(job, &outcome);

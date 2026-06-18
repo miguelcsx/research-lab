@@ -52,13 +52,13 @@ __all__ = [
     "DataSink",
     "DataSource",
     "DatasetSpec",
-    "PipelineSpec",
-    "FilterRule",
-    "TextFilter",
-    "SimhashDedup",
     "DocumentAssembler",
+    "FilterRule",
+    "PipelineSpec",
+    "SimhashDedup",
     "register_builtins",
     "SinkResult",
+    "TextFilter",
     "classify",
     "data_boundary",
     "data_drop",
@@ -484,7 +484,13 @@ def _copy_record(record: Record) -> MutableRecord:
 
 
 def _record_text(record: Record, field: str) -> str:
-    return str(record.get(field, DEFAULT_DESCRIPTION))
+    return str(_record_value(record, field, DEFAULT_DESCRIPTION))
+
+
+def _record_value(record: object, field: str, default: object = None) -> object:
+    if isinstance(record, Mapping):
+        return record.get(field, default)
+    return getattr(record, field, default)
 
 
 def _first_matching_label(text: str, labels: Mapping[str, str]) -> str | None:

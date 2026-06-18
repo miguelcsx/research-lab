@@ -74,6 +74,7 @@ def _execute(request: Mapping[str, Any], project: Any) -> None:
         project_root=_optional_path(request.get("project_root")),
         params_json=json.dumps(request.get("params", {}), sort_keys=True),
         seed=request.get("seed"),
+        strict=bool(request.get("strict", False)),
     )
     ctx = _ChildContext(base_ctx)
     result = _invoke(project, str(target["kind"]), str(target["name"]), cast(RuntimeContext, ctx))

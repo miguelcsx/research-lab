@@ -7,8 +7,9 @@ use crate::py_cache::{cache_path_py, cache_size_py, list_cache_py, PyCacheEntry}
 use crate::py_checkpoint::{PyCheckpointManager, PyCheckpointRecord, PyRetentionPolicy};
 use crate::py_cli::cli_main;
 use crate::py_config::{
-    diff_config_documents_py, find_project_root_py, list_config_documents_py, load_config_py,
-    resolve_config_document_py, validate_config_documents_py, PyEffectiveConfig,
+    apply_overrides_py, diff_config_documents_py, find_project_root_py, list_config_documents_py,
+    load_config_py, read_json_manifest_py, resolve_config_document_py,
+    validate_config_documents_py, PyEffectiveConfig,
 };
 use crate::py_data::{
     data_boundary_py, data_drop_py, data_keep_py, data_update_py, execute_dataset_py,
@@ -37,7 +38,7 @@ use crate::py_result::{
     PyResultSchema, PyTableArtifact,
 };
 use crate::py_run::{
-    failed_host_event_line, PyRunDirectory, PyRunQuery, PyRunRecord, PyRuntimeContext,
+    failed_host_event_line, PyRunDirectory, PyRunHandle, PyRunQuery, PyRunRecord, PyRuntimeContext,
 };
 use crate::py_stats::{compare_metric_arrays_py, paired_bootstrap_py, PyMetricComparison};
 use crate::py_strict::PyProductionPolicy;
@@ -57,6 +58,8 @@ fn register_functions(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(list_config_documents_py, module)?)?;
     module.add_function(wrap_pyfunction!(validate_config_documents_py, module)?)?;
     module.add_function(wrap_pyfunction!(diff_config_documents_py, module)?)?;
+    module.add_function(wrap_pyfunction!(apply_overrides_py, module)?)?;
+    module.add_function(wrap_pyfunction!(read_json_manifest_py, module)?)?;
     module.add_function(wrap_pyfunction!(bundle_from_metrics, module)?)?;
     module.add_function(wrap_pyfunction!(run_external_command_py, module)?)?;
     module.add_function(wrap_pyfunction!(data_keep_py, module)?)?;
@@ -105,6 +108,7 @@ fn register_classes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyResultSchema>()?;
     module.add_class::<PyRuntimeContext>()?;
     module.add_class::<PyRunDirectory>()?;
+    module.add_class::<PyRunHandle>()?;
     module.add_class::<PyRunRecord>()?;
     module.add_class::<PyRunQuery>()?;
     module.add_class::<PyComponentUse>()?;

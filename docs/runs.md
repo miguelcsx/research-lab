@@ -56,12 +56,12 @@ Use context helpers inside user code:
 ```python
 ctx.log_metric("loss", 0.2)
 ctx.log_metrics({"loss": 0.2, "accuracy": 0.91})
-ctx.note("run converged")
-ctx.save_artifact("checkpoint", "outputs/model.pt")
-ctx.save_table("metrics", [{"name": "loss", "value": 0.2}])
+path = ctx.output_path("model.pt")
+path.write_bytes(b"...")
+ctx.save_artifact(path, name="checkpoint", kind="model")
 ```
 
-The Python context emits events. Rust validates the events and writes durable files.
+The Python context is Rust-backed. Rust validates events and writes durable files.
 
 ## Inspecting runs
 

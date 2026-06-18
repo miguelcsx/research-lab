@@ -9,11 +9,8 @@ rlab notes add <run-id> "Training diverged after epoch 3."
 rlab notes list <run-id>
 ```
 
-Programmatic:
-
-```python
-ctx.note("Batch size 64 caused OOM on local GPU.")
-```
+Programmatic note helpers are not part of the Rust-backed runtime context; use
+the CLI so notes are written through the durable journal path.
 
 ## Decisions
 

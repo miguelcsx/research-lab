@@ -56,7 +56,8 @@ pub use ci::{ci_compare, ci_reproducibility_check, ci_smoke, CiCheckResult};
 pub use clean::{clean_project_state, CleanSummary};
 pub use compare::{compare_runs, CompareRow};
 pub use config::{
-    diff_documents, list_documents, resolve_document, validate_documents, ResolvedDocument,
+    apply_dotted_overrides, diff_documents, list_documents, resolve_document, validate_documents,
+    ResolvedDocument,
 };
 pub use config::{find_project_root, load_effective_config, EffectiveConfig, ProjectPaths};
 pub use data::{

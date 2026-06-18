@@ -49,12 +49,13 @@ Durable registry records are declarative and reproducible. They store module, qu
 ```python
 ctx.log_metric("loss", 0.2)
 ctx.log_metrics({"loss": 0.2, "accuracy": 0.91})
-ctx.note("training converged")
-ctx.save_artifact("checkpoint", "outputs/model.pt")
-ctx.save_table("summary", [{"metric": "loss", "value": 0.2}])
+path = ctx.output_path("model.pt")
+path.write_bytes(b"...")
+ctx.save_artifact(path, name="checkpoint", kind="model")
 ```
 
-Python user code emits structured events. Rust validates and persists them.
+Python user code runs at the callable boundary. Rust validates and persists
+runtime state.
 
 ## Run
 

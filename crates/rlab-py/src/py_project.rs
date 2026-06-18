@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::convert::json::{from_json_str, to_json};
 use crate::error::to_py_error;
+use crate::py_data::{PyNativeDocumentAssembler, PyNativeSimhashDedup, PyNativeTextFilter};
 
 const DEFAULT_VERSION: &str = "1";
 const KEY_METADATA: &str = "metadata";
@@ -31,15 +32,37 @@ pub struct PyProjectCore {
 impl PyProjectCore {
     #[new]
     #[pyo3(signature = (name, root=None))]
-    pub fn new(name: String, root: Option<PathBuf>) -> Self {
-        Self {
+    pub fn new(py: Python<'_>, name: String, root: Option<PathBuf>) -> PyResult<Self> {
+        let mut core = Self {
             name,
             root: root.unwrap_or_else(|| PathBuf::from(".")),
             registry: rlab_core::Registry::new(),
             callables: BTreeMap::new(),
             component_schemas: BTreeMap::new(),
             component_requirements: BTreeMap::new(),
-        }
+        };
+        core.register_builtin(
+            py,
+            "filter",
+            "rlab.text",
+            "NativeTextFilter",
+            py.get_type_bound::<PyNativeTextFilter>().unbind().into(),
+        )?;
+        core.register_builtin(
+            py,
+            "dedup",
+            "rlab.simhash",
+            "NativeSimhashDedup",
+            py.get_type_bound::<PyNativeSimhashDedup>().unbind().into(),
+        )?;
+        core.register_builtin(
+            py,
+            "group",
+            "rlab.documents",
+            "NativeDocumentAssembler",
+            py.get_type_bound::<PyNativeDocumentAssembler>().unbind().into(),
+        )?;
+        Ok(core)
     }
 
     #[getter]
@@ -151,6 +174,35 @@ impl PyProjectCore {
             .get(&registry_key(kind, name))
             .cloned()
     }
+
+    #[pyo3(signature = (reference, overrides_json="{}", strict=false))]
+    pub fn resolve_config(
+        &self,
+        py: Python<'_>,
+        reference: &str,
+        overrides_json: &str,
+        strict: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let callable = self.resolve(py, "config", reference)?;
+        let base = callable.bind(py).call0()?.unbind();
+        let mut value = py_to_json(py, base)?;
+        if !value.is_object() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "config:{reference} must resolve to a JSON object"
+            )));
+        }
+        let overrides: BTreeMap<String, Value> = from_json_str(overrides_json)?;
+        rlab_core::apply_dotted_overrides(&mut value, &overrides, strict).map_err(to_py_error)?;
+        let resolved = py_from_json(py, &value)?;
+        match self.schema(py, "config", reference) {
+            Some(schema) => Ok(schema
+                .bind(py)
+                .getattr("model_validate")?
+                .call1((resolved,))?
+                .unbind()),
+            None => Ok(resolved),
+        }
+    }
 }
 
 impl PyProjectCore {
@@ -216,6 +268,46 @@ impl PyProjectCore {
         self.registry.insert(record).map_err(to_py_error)?;
         self.callables.insert(key, callable);
         Ok(())
+    }
+
+    fn register_builtin(
+        &mut self,
+        py: Python<'_>,
+        kind: &str,
+        name: &str,
+        qualname: &str,
+        callable: Py<PyAny>,
+    ) -> PyResult<()> {
+        let record = self.record(
+            kind,
+            name,
+            "rlab._rlab",
+            qualname,
+            PathBuf::from("rlab/_rlab"),
+            "Built-in rlab data primitive.",
+            BTreeMap::from([
+                (
+                    "component_kind".to_string(),
+                    Value::String(kind.to_string()),
+                ),
+                (
+                    "reference".to_string(),
+                    Value::String(format!("{kind}:{name}")),
+                ),
+                ("builtin".to_string(), Value::Bool(true)),
+                (
+                    "params_schema".to_string(),
+                    builtin_params_schema(kind, name),
+                ),
+            ]),
+            DEFAULT_VERSION,
+            Some(vec![
+                "rlab".to_string(),
+                "builtin".to_string(),
+                "data".to_string(),
+            ]),
+        )?;
+        self.insert_record(py, record, callable)
     }
 
     fn register_first_workflow_step(
@@ -291,6 +383,26 @@ fn registry_key(kind: &str, name: &str) -> String {
     format!("{kind}:{name}")
 }
 
+fn builtin_params_schema(kind: &str, name: &str) -> Value {
+    match (kind, name) {
+        ("filter", "rlab.text") => serde_json::json!({
+            "type": "object",
+            "properties": {
+                "rules": {
+                    "type": "array",
+                    "items": { "type": "object" },
+                },
+            },
+            "additionalProperties": false,
+        }),
+        _ => serde_json::json!({
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false,
+        }),
+    }
+}
+
 fn workflow_step_key(workflow_name: &str, step: &str) -> String {
     registry_key(KIND_WORKFLOW_STEP, &format!("{workflow_name}:{step}"))
 }
@@ -337,5 +449,24 @@ fn workflow_sentinel(py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         .import_bound("types")?
         .getattr("SimpleNamespace")?
         .call((), Some(&kwargs))?
+        .unbind())
+}
+
+fn py_to_json(py: Python<'_>, value: Py<PyAny>) -> PyResult<Value> {
+    let coerced = py
+        .import_bound("rlab._typing")?
+        .getattr("coerce_json_value")?
+        .call1((value,))?;
+    let raw: String = py
+        .import_bound("json")?
+        .call_method1("dumps", (coerced,))?
+        .extract()?;
+    from_json_str(&raw)
+}
+
+fn py_from_json(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
+    Ok(py
+        .import_bound("json")?
+        .call_method1("loads", (to_json(value)?,))?
         .unbind())
 }

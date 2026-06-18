@@ -9,7 +9,8 @@ mod validate;
 
 pub use discovery::find_project_root;
 pub use documents::{
-    diff_documents, list_documents, resolve_document, validate_documents, ResolvedDocument,
+    apply_dotted_overrides, diff_documents, list_documents, resolve_document, validate_documents,
+    ResolvedDocument,
 };
 pub use load::load_effective_config;
 pub use model::{

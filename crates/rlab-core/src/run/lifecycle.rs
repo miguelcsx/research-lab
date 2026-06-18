@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 const LOG_SCHEMA_VERSION: u32 = 1;
 const ARTIFACT_SCHEMA_VERSION: u32 = 1;
+const ENV_PARENT_RUN_ID: &str = "RLAB_PARENT_RUN_ID";
+const ENV_PARENT_TARGET: &str = "RLAB_PARENT_TARGET";
 
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
@@ -61,6 +63,8 @@ impl RunSession {
             command,
             parameters,
             notes: None,
+            parent_run_id: std::env::var(ENV_PARENT_RUN_ID).ok(),
+            parent_target: std::env::var(ENV_PARENT_TARGET).ok(),
         };
 
         write_initial_run_files(&path, &directory)?;
@@ -284,13 +288,16 @@ fn artifact_source(artifact: &Value) -> RlabResult<PathBuf> {
     }
 
     Err(RlabError::Artifact {
-        message: format!("artifact path does not exist: {}", source.display()),
+        message: format!(
+            "artifact path is not a file or directory: {}",
+            source.display()
+        ),
     })
 }
 
 fn copy_artifact(source: &Path, target: &Path) -> RlabResult<()> {
     if source.is_dir() {
-        copy_dir(source, target)
+        copy_dir_recursive(source, target)
     } else {
         fs::copy(source, target)
             .map(|_| ())
@@ -298,16 +305,20 @@ fn copy_artifact(source: &Path, target: &Path) -> RlabResult<()> {
     }
 }
 
-fn copy_dir(source: &Path, target: &Path) -> RlabResult<()> {
+fn copy_dir_recursive(source: &Path, target: &Path) -> RlabResult<()> {
     ensure_dir(target)?;
     for entry in fs::read_dir(source).map_err(|error| RlabError::io(source, error))? {
         let entry = entry.map_err(|error| RlabError::io(source, error))?;
-        let path = entry.path();
-        let destination = target.join(entry.file_name());
-        if path.is_dir() {
-            copy_dir(&path, &destination)?;
-        } else {
-            fs::copy(&path, &destination).map_err(|error| RlabError::io(&destination, error))?;
+        let entry_source = entry.path();
+        let entry_target = target.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|error| RlabError::io(&entry_source, error))?;
+        if file_type.is_dir() {
+            copy_dir_recursive(&entry_source, &entry_target)?;
+        } else if file_type.is_file() {
+            fs::copy(&entry_source, &entry_target)
+                .map_err(|error| RlabError::io(&entry_target, error))?;
         }
     }
     Ok(())

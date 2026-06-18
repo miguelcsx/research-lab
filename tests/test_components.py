@@ -8,6 +8,58 @@ import rlab
 from rlab._runner import _invoke_dataset
 
 
+class ToyConfig:
+    def __init__(self, width: int, name: str = "toy") -> None:
+        if width <= 0:
+            raise ValueError("width must be positive")
+        self.width = width
+        self.name = name
+
+    @classmethod
+    def model_validate(cls, value: object) -> "ToyConfig":
+        if isinstance(value, ToyConfig):
+            return value
+        if not isinstance(value, dict):
+            raise TypeError("ToyConfig requires a mapping")
+        return cls(width=int(value["width"]), name=str(value.get("name", "toy")))
+
+    @classmethod
+    def model_json_schema(cls) -> dict[str, object]:
+        return {"type": "object", "properties": {"width": {"type": "integer"}}}
+
+    def model_dump(self, mode: str = "python") -> dict[str, object]:
+        del mode
+        return {"width": self.width, "name": self.name}
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, ToyConfig)
+            and self.width == other.width
+            and self.name == other.name
+        )
+
+
+def test_ref_and_bare_component_spec_are_supported() -> None:
+    assert rlab.ref("model:toy", width=4) == rlab.ComponentSpec(
+        "model:toy", {"width": 4}
+    )
+    assert rlab.ComponentSpec("objective:clm").params == {}
+
+
+def test_project_config_applies_typed_overrides(tmp_path: Path) -> None:
+    project = rlab.Project("config-factory-test", root=tmp_path)
+
+    @project.config("toy:small", schema=ToyConfig)
+    def small() -> ToyConfig:
+        return ToyConfig(width=8)
+
+    config = project.config("toy:small", overrides={"width": 16})
+
+    assert config == ToyConfig(width=16)
+    record = project.record("config", "toy:small")
+    assert record["metadata"]["config_reference"] == "toy:small"
+
+
 def test_project_build_infers_component_params(tmp_path: Path) -> None:
     project = rlab.Project("component-build-test", root=tmp_path)
 
@@ -166,6 +218,20 @@ def test_declared_dataset_accepts_component_spec_objects(tmp_path: Path) -> None
     assert result["sinks"] == [{"name": "captured", "path": "memory", "records": 1}]
 
 
+def test_project_includes_data_builtins_out_of_the_box(tmp_path: Path) -> None:
+    project = rlab.Project("builtin-data-test", root=tmp_path)
+    records = {f"{record['kind']}:{record['name']}": record for record in project.records}
+
+    assert "filter:rlab.text" in records
+    assert "dedup:rlab.simhash" in records
+    assert "group:rlab.documents" in records
+    for reference in ("filter:rlab.text", "dedup:rlab.simhash", "group:rlab.documents"):
+        metadata = records[reference]["metadata"]
+        assert isinstance(metadata, dict)
+        assert metadata["builtin"] is True
+        assert metadata["params_schema"]["type"] == "object"
+
+
 def test_requirements_merge_without_duplicates() -> None:
     requirements = rlab.collect_requirements(
         [
@@ -203,6 +269,72 @@ def test_project_collects_component_requirements(tmp_path: Path) -> None:
     assert requirements.model_outputs == ("lm",)
     assert requirements.model_heads == ("lm",)
     assert requirements.batch_fields == ("labels",)
+
+
+def test_component_contracts_include_provides_and_aggregate_specs(tmp_path: Path) -> None:
+    project = rlab.Project("component-contract-test", root=tmp_path)
+
+    @project.component(
+        "objective:lm",
+        requires=rlab.Requirements(model_heads=("lm",), batch_fields=("labels",)),
+    )
+    def lm() -> None:
+        return None
+
+    @project.component(
+        "model:toy",
+        provides=rlab.Requirements(model_heads=("lm",), capabilities=("causal",)),
+    )
+    def toy() -> None:
+        return None
+
+    objective_contract = project.contract("objective", "lm")
+    model_contract = project.contract("model", "toy")
+
+    assert objective_contract.requires.model_heads == ("lm",)
+    assert model_contract.provides.capabilities == ("causal",)
+    assert project.requirements_for("objective", [rlab.ComponentSpec.empty("lm")]) == (
+        rlab.Requirements(model_heads=("lm",), batch_fields=("labels",))
+    )
+    assert project.contracts_for("model", ["toy"]).provides == rlab.Requirements(
+        model_heads=("lm",), capabilities=("causal",)
+    )
+
+
+def test_missing_requirements_reports_each_field() -> None:
+    missing = rlab.missing_requirements(
+        rlab.Requirements(
+            model_outputs=("hidden",),
+            model_heads=("lm",),
+            batch_fields=("labels",),
+            capabilities=("causal",),
+            artifacts=("tokenizer",),
+        ),
+        rlab.Requirements(model_heads=("lm",)),
+    )
+
+    assert not missing.ok
+    assert missing.model_outputs == ("hidden",)
+    assert missing.model_heads == ()
+    assert missing.batch_fields == ("labels",)
+    assert missing.capabilities == ("causal",)
+    assert missing.artifacts == ("tokenizer",)
+    assert rlab.missing_requirements(
+        rlab.Requirements(batch_fields=("labels",), model_heads=("lm",)),
+        rlab.Requirements(),
+        fields=("batch_fields",),
+    ).to_dict() == {
+        "model_outputs": [],
+        "model_heads": [],
+        "batch_fields": ["labels"],
+        "capabilities": [],
+        "artifacts": [],
+    }
+    assert rlab.Requirements(model_heads=("lm",), batch_fields=("labels",)).only(
+        "model_heads"
+    ) == rlab.Requirements(model_heads=("lm",))
+    with pytest.raises(rlab.MissingRequirementsError, match="test contract"):
+        missing.raise_if_any("test contract")
 
 
 def test_planned_variants_reuse_experiment_registry() -> None:

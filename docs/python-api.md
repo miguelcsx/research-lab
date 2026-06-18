@@ -70,19 +70,18 @@ Common methods:
 ```python
 ctx.log_metric("loss", 0.2)
 ctx.log_metrics({"loss": 0.2, "accuracy": 0.91})
-ctx.note("important observation")
-ctx.save_artifact("checkpoint", "outputs/model.pt")
-ctx.save_table("summary", [{"metric": "loss", "value": 0.2}])
+path = ctx.output_path("model.pt")
+path.write_bytes(b"...")
+ctx.save_artifact(path, name="checkpoint", kind="model")
 ```
 
-`ctx.output_dir` is the framework-owned location for files produced by user
-code. Files written there are registered as run artifacts automatically.
+`ctx.output_path(...)` writes under the Rust-owned run directory. Artifacts are
+registered through Rust-backed `ctx.save_artifact(...)`.
 
 Run external tools through the framework:
 
 ```python
 result = ctx.run_external(
-    "trainer",
     rlab.ExternalCommand(
         args=("python", "train.py"),
         cwd=ctx.project_root,
@@ -145,8 +144,10 @@ return rlab.data_boundary(value, kind="document")
 
 ```python
 rlab.bundle_from_metrics({"loss": 0.2})
-rlab.compare_runs(".rlab/runs", metric="loss")
 rlab.compare_metric_arrays([1, 2, 3], [2, 3, 4])
-rlab.estimate_required_repetitions(effect_size=0.5, variance=1.0, alpha=0.05, power=0.8)
-rlab.estimate_budget(jobs=10, seconds_per_job=60, storage_gb_per_job=0.1)
+rlab.paired_bootstrap([1, 2, 3], [2, 3, 5], samples=1000)
+rlab.write_card("card.md", title="Model Card", sections={"Training": {"seed": 7}})
 ```
+
+Checkpoint lifecycle and markdown report writing are Rust-backed. Python is
+only responsible for user-provided serializer callbacks and declaration code.

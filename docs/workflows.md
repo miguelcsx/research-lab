@@ -11,7 +11,6 @@ lab = rlab.Project()
 
 @lab.workflow("project.pipeline", step="prepare")
 def prepare(ctx):
-    ctx.note("Preparing inputs")
     ctx.log_metric("prepared", 1.0)
 
 @lab.workflow("project.pipeline", step="train")

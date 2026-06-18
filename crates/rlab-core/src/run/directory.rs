@@ -25,6 +25,10 @@ pub struct RunDirectory {
     pub command: Vec<String>,
     pub parameters: Value,
     pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_target: Option<String>,
 }
 
 impl RunDirectory {

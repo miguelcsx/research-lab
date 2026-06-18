@@ -17,6 +17,7 @@ from .constants import (
     ERROR_SCHEMA_JSON,
     ERROR_SCHEMA_VALIDATE,
     KEY_COMPONENT_KIND,
+    KEY_PROVIDES,
     KEY_REFERENCE,
     KEY_REQUIREMENTS,
     REFERENCE_SEPARATOR,
@@ -50,6 +51,7 @@ def component_metadata(
     kind: str,
     name: str,
     requires: Requirements,
+    provides: Requirements,
     metadata: Mapping[str, object],
 ) -> dict[str, object]:
     return {
@@ -57,6 +59,7 @@ def component_metadata(
         KEY_COMPONENT_KIND: kind,
         KEY_REFERENCE: f"{kind}:{name}",
         KEY_REQUIREMENTS: requires.to_dict(),
+        KEY_PROVIDES: provides.to_dict(),
     }
 
 

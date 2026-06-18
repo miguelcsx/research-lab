@@ -10,10 +10,14 @@ use crate::registry::{Registry, RegistryKind, RegistryRecord};
 const SCHEMA_VERSION: u32 = 1;
 const DEFAULT_QUALIFICATION_SEED: u64 = 42;
 const KEY_EXPERIMENTS: &str = "experiments";
+const KEY_EXPERIMENT_SELECTOR: &str = "experiment_selector";
+const KEY_KIND: &str = "kind";
 const KEY_MATRIX: &str = "matrix";
+const KEY_METADATA: &str = "metadata";
 const KEY_PARAMS: &str = "params";
 const KEY_QUALIFICATION: &str = "qualification";
 const KEY_SEED: &str = "seed";
+const KEY_TAGS: &str = "tags";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -48,7 +52,7 @@ pub fn plan_registry_study(
     let study = registry
         .find(RegistryKind::STUDY, study_name)
         .ok_or_else(|| RlabError::validation(format!("unknown study: {study_name}")))?;
-    let experiments = string_array(study, KEY_EXPERIMENTS)?;
+    let experiments = study_experiments(registry, study)?;
     if experiments.is_empty() {
         return Err(RlabError::validation(format!(
             "study {study_name} does not declare experiments"
@@ -88,6 +92,59 @@ pub fn plan_registry_study(
     })
 }
 
+fn study_experiments(registry: &Registry, study: &RegistryRecord) -> RlabResult<Vec<String>> {
+    let mut experiments = string_array(study, KEY_EXPERIMENTS)?;
+    experiments.extend(selector_experiments(registry, study)?);
+    let mut seen = std::collections::BTreeSet::new();
+    experiments.retain(|name| seen.insert(name.clone()));
+    Ok(experiments)
+}
+
+fn selector_experiments(registry: &Registry, study: &RegistryRecord) -> RlabResult<Vec<String>> {
+    let Some(value) = study.metadata.get(KEY_EXPERIMENT_SELECTOR) else {
+        return Ok(Vec::new());
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| RlabError::validation("study experiment_selector must be an object"))?;
+    let kind = match object.get(KEY_KIND) {
+        Some(value) => value.as_str().ok_or_else(|| {
+            RlabError::validation("study experiment_selector kind must be a string")
+        })?,
+        None => "experiment",
+    };
+    let kind = RegistryKind::parse(kind)?;
+    let tags = string_array_value(object.get(KEY_TAGS), "study experiment_selector tags")?;
+    let metadata = match object.get(KEY_METADATA) {
+        Some(value) => value.as_object().ok_or_else(|| {
+            RlabError::validation("study experiment_selector metadata must be an object")
+        })?,
+        None => return Ok(records_matching(registry, &kind, &tags, None)),
+    };
+    Ok(records_matching(registry, &kind, &tags, Some(metadata)))
+}
+
+fn records_matching(
+    registry: &Registry,
+    kind: &RegistryKind,
+    tags: &[String],
+    metadata: Option<&serde_json::Map<String, Value>>,
+) -> Vec<String> {
+    registry
+        .records_by_kind_ref(kind)
+        .into_iter()
+        .filter(|record| tags.iter().all(|tag| record.tags.contains(tag)))
+        .filter(|record| {
+            metadata.map_or(true, |expected| {
+                expected
+                    .iter()
+                    .all(|(key, value)| record.metadata.get(key) == Some(value))
+            })
+        })
+        .map(|record| record.name.clone())
+        .collect()
+}
+
 struct Qualification {
     params: BTreeMap<String, Value>,
     seed: u64,
@@ -119,9 +176,13 @@ fn parse_qualification(record: &RegistryRecord) -> RlabResult<Qualification> {
 }
 
 fn string_array(record: &RegistryRecord, key: &str) -> RlabResult<Vec<String>> {
-    match record.metadata.get(key) {
+    string_array_value(record.metadata.get(key), &format!("study {key}"))
+}
+
+fn string_array_value(value: Option<&Value>, label: &str) -> RlabResult<Vec<String>> {
+    match value {
         Some(value) => serde_json::from_value(value.clone())
-            .map_err(|error| RlabError::validation(format!("invalid study {key}: {error}"))),
+            .map_err(|error| RlabError::validation(format!("invalid {label}: {error}"))),
         None => Ok(Vec::new()),
     }
 }
@@ -285,6 +346,40 @@ mod tests {
         assert!(error.to_string().contains("unknown experiment"));
     }
 
+    #[test]
+    fn study_selector_expands_tagged_experiments() {
+        let mut registry = Registry::new();
+        registry
+            .insert(record(
+                RegistryKind::STUDY,
+                "selected",
+                json!({"experiment_selector": {"tags": ["smoke"]}}),
+            ))
+            .expect("valid study record");
+        registry
+            .insert(record_with_tags(
+                RegistryKind::EXPERIMENT,
+                "first",
+                json!({"params": {}, "metrics": [], "seeds": [1]}),
+                vec!["smoke".to_owned()],
+            ))
+            .expect("valid first experiment");
+        registry
+            .insert(record_with_tags(
+                RegistryKind::EXPERIMENT,
+                "second",
+                json!({"params": {}, "metrics": [], "seeds": [1]}),
+                vec!["other".to_owned()],
+            ))
+            .expect("valid second experiment");
+
+        let plan = plan_registry_study(&registry, "selected", StudyMode::Full, &BTreeMap::new())
+            .expect("selector study should plan");
+
+        assert_eq!(plan.jobs.len(), 1);
+        assert_eq!(plan.jobs[0].experiment, "first");
+    }
+
     fn registry(study: Value, experiment: Value) -> Registry {
         let mut registry = Registry::new();
         registry
@@ -297,6 +392,15 @@ mod tests {
     }
 
     fn record(kind: RegistryKind, name: &str, metadata: Value) -> RegistryRecord {
+        record_with_tags(kind, name, metadata, Vec::new())
+    }
+
+    fn record_with_tags(
+        kind: RegistryKind,
+        name: &str,
+        metadata: Value,
+        tags: Vec<String>,
+    ) -> RegistryRecord {
         RegistryRecord {
             schema_version: 1,
             kind,
@@ -305,7 +409,7 @@ mod tests {
             module: "tests".to_owned(),
             qualname: name.to_owned(),
             source: PathBuf::from("tests.py"),
-            tags: Vec::new(),
+            tags,
             description: String::new(),
             metadata: serde_json::from_value(metadata).expect("object metadata"),
         }

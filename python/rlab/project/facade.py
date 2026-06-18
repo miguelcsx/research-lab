@@ -11,8 +11,10 @@ from rlab._decorators import decorator_factory
 from rlab._rlab import ProjectCore
 from rlab._typing import JsonObject, coerce_json_object
 from rlab.components import (
+    ComponentContract,
     ComponentSpec,
     Requirements,
+    collect_contracts,
     collect_component_requirements,
 )
 
@@ -30,6 +32,7 @@ from .constants import (
     KEY_DESCRIPTION,
     KEY_EXPERIMENT_TYPE,
     KEY_PARAMS_SCHEMA,
+    KEY_PROVIDES,
     KEY_SPEC,
     KEY_STAGES,
     KEY_STEP,
@@ -92,6 +95,40 @@ class Project:
     def ref(self, reference: str, **params: object) -> ComponentSpec[object]:
         return ComponentSpec(reference, coerce_json_object(params))
 
+    def config(
+        self,
+        reference: str,
+        *,
+        schema: type[object] | None = None,
+        overrides: Mapping[str, object] | None = None,
+        strict: bool = False,
+        **metadata: object,
+    ) -> Callable[[T], T] | object:
+        """Declare or resolve a typed config by registry reference."""
+        if schema is None and not metadata:
+            return self._core.resolve_config(
+                reference,
+                json.dumps(dict(overrides or {}), sort_keys=True),
+                strict,
+            )
+        if overrides is not None:
+            raise TypeError("lab.config declaration cannot include overrides")
+        if schema is None:
+            raise TypeError("lab.config declaration requires schema=")
+
+        def register(factory: T) -> T:
+            values = dict(metadata)
+            values["config_reference"] = reference
+            values[KEY_PARAMS_SCHEMA] = schema_dict(
+                schema,
+                f"config schema for {reference}",
+            )
+            result = self._decorator("config", reference, values)(factory)
+            self._core.set_component_extras("config", reference, schema, None)
+            return result
+
+        return register
+
     def experiment(self, name: str, **metadata: object) -> Callable[[T], T]:
         return self._decorator(KIND_EXPERIMENT, name, metadata)
 
@@ -111,7 +148,12 @@ class Project:
         )
         return name
 
-    def declaration(self, kind: str, name: str, **metadata: object) -> Callable[[T], T]:
+    def declaration(
+        self,
+        kind: str,
+        name: str,
+        **metadata: object,
+    ) -> Callable[[T], T]:
         return self._decorator(kind, name, metadata)
 
     def sweep(self, name: str, **metadata: object) -> Callable[[T], T]:
@@ -216,10 +258,17 @@ class Project:
         name: str | None = None,
         params_schema: type[object] | None = None,
         requires: Requirements = Requirements(),
+        provides: Requirements = Requirements(),
         **metadata: object,
     ) -> Callable[[T], T]:
         component_kind, component_name = component_identity(reference, kind, name)
-        values = component_metadata(component_kind, component_name, requires, metadata)
+        values = component_metadata(
+            component_kind,
+            component_name,
+            requires,
+            provides,
+            metadata,
+        )
         schema: object | None = params_schema
 
         if params_schema is not None:
@@ -291,12 +340,32 @@ class Project:
         if value is None:
             return Requirements()
         data = json.loads(value)
-        return Requirements(
-            model_outputs=tuple(data.get("model_outputs", ())),
-            model_heads=tuple(data.get("model_heads", ())),
-            batch_fields=tuple(data.get("batch_fields", ())),
-            capabilities=tuple(data.get("capabilities", ())),
-            artifacts=tuple(data.get("artifacts", ())),
+        return _requirements_from_mapping(data)
+
+    def requirements_for(
+        self,
+        kind: str,
+        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+    ) -> Requirements:
+        return self.contracts_for(kind, specs).requires
+
+    def contract(self, kind: str, name: str) -> ComponentContract:
+        record = self.record(kind, name)
+        metadata = record.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            metadata = {}
+        return ComponentContract(
+            requires=self.requirements(kind, name),
+            provides=_requirements_from_mapping(metadata.get(KEY_PROVIDES, {})),
+        )
+
+    def contracts_for(
+        self,
+        kind: str,
+        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+    ) -> ComponentContract:
+        return collect_contracts(
+            self.contract(*self._component_lookup(kind, spec)) for spec in specs
         )
 
     def component_requirements(
@@ -428,6 +497,19 @@ class Project:
             tags,
         )
 
+    def _component_lookup(
+        self,
+        kind: str,
+        spec: ComponentSpec[object] | Mapping[str, object] | str,
+    ) -> tuple[str, str]:
+        component = ComponentSpec.from_value(spec)
+        spec_kind = component.kind
+        if spec_kind is not None and spec_kind != kind:
+            raise ValueError(
+                f"component spec kind mismatch: expected {kind!r}, got {spec_kind!r}"
+            )
+        return kind, component.name
+
 
 def _is_dataset_callable(value: object) -> bool:
     return (
@@ -435,4 +517,16 @@ def _is_dataset_callable(value: object) -> bool:
         and not isinstance(value, str | Mapping)
         and not callable(getattr(value, "to_dict", None))
         and not callable(getattr(value, "model_dump", None))
+    )
+
+
+def _requirements_from_mapping(value: object) -> Requirements:
+    if not isinstance(value, Mapping):
+        return Requirements()
+    return Requirements(
+        model_outputs=tuple(str(item) for item in value.get("model_outputs", ())),
+        model_heads=tuple(str(item) for item in value.get("model_heads", ())),
+        batch_fields=tuple(str(item) for item in value.get("batch_fields", ())),
+        capabilities=tuple(str(item) for item in value.get("capabilities", ())),
+        artifacts=tuple(str(item) for item in value.get("artifacts", ())),
     )

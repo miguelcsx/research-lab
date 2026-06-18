@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from copy import deepcopy
+import json
 from collections.abc import Mapping
 from typing import TypeVar, cast
 
@@ -28,18 +28,22 @@ def decode_object(value: str, label: str) -> JsonObject:
 def apply_overrides(
     document: Mapping[str, JsonValue],
     overrides: Mapping[str, JsonValue] | None,
+    *,
+    strict: bool = False,
 ) -> JsonObject:
-    result: JsonObject = deepcopy(dict(document))
-    for path, value in (overrides or {}).items():
-        target = result
-        parts = path.split(".")
-        for part in parts[:-1]:
-            child = target.setdefault(part, {})
-            if not isinstance(child, dict):
-                raise ValueError(f"config path crosses non-mapping: {path}")
-            target = child
-        target[parts[-1]] = value
-    return result
+    from rlab._rlab import apply_overrides as apply_native_overrides
+
+    try:
+        result = apply_native_overrides(
+            deepcopy(dict(document)), dict(overrides or {}), strict=strict
+        )
+    except ValueError as error:
+        if "non-mapping config path" in str(error):
+            raise ValueError(f"config path crosses non-mapping: {error}") from error
+        raise
+    if not isinstance(result, dict):
+        raise TypeError("override result must be a JSON object")
+    return cast(JsonObject, result)
 
 
 def validate_model(model: type[ModelT], value: JsonObject) -> ModelT:

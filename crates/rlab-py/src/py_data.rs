@@ -191,6 +191,98 @@ pub struct PyJsonlSink {
     path: PathBuf,
 }
 
+#[pyclass(name = "TextFilter")]
+pub struct PyTextFilter {
+    rules: Value,
+}
+
+#[pymethods]
+impl PyTextFilter {
+    #[new]
+    #[pyo3(signature = (rules=None, **_kwargs))]
+    pub fn new(
+        py: Python<'_>,
+        rules: Option<PyObject>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Self> {
+        let rules = match rules {
+            Some(value) => py_to_json(py, value)?,
+            None => Value::Array(Vec::new()),
+        };
+        Ok(Self { rules })
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        let value = py_to_json(py, record.clone_ref(py))?;
+        let text = record_text(&value);
+        if text_filter_drop_reason(&text, &self.rules).is_some() {
+            return Ok(data_drop_py(
+                text_filter_drop_reason(&text, &self.rules).unwrap(),
+            ));
+        }
+        data_keep_py(py, record)
+    }
+}
+
+#[pyclass(name = "SimhashDedup")]
+pub struct PySimhashDedup {
+    seen: std::collections::BTreeSet<String>,
+}
+
+#[pymethods]
+impl PySimhashDedup {
+    #[new]
+    #[pyo3(signature = (**_kwargs))]
+    pub fn new(_kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+        Self {
+            seen: std::collections::BTreeSet::new(),
+        }
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &mut self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        let value = py_to_json(py, record.clone_ref(py))?;
+        let key = record_text(&value).trim().to_lowercase();
+        if !key.is_empty() && !self.seen.insert(key) {
+            return Ok(data_drop_py("duplicate".to_string()));
+        }
+        data_keep_py(py, record)
+    }
+}
+
+#[pyclass(name = "DocumentAssembler")]
+pub struct PyDocumentAssembler {}
+
+#[pymethods]
+impl PyDocumentAssembler {
+    #[new]
+    #[pyo3(signature = (**_kwargs))]
+    pub fn new(_kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+        Self {}
+    }
+
+    #[pyo3(signature = (record, _ctx=None))]
+    pub fn apply(
+        &self,
+        py: Python<'_>,
+        record: PyObject,
+        _ctx: Option<PyObject>,
+    ) -> PyResult<PyDataDecision> {
+        data_keep_py(py, record)
+    }
+}
+
 #[pymethods]
 impl PyJsonlSink {
     #[new]
@@ -1564,6 +1656,46 @@ fn dataclass_instance(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<bool
         .getattr("is_dataclass")?
         .call1((value,))?
         .extract()
+}
+
+fn record_text(value: &Value) -> String {
+    value
+        .get("text")
+        .or_else(|| value.get("content"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn text_filter_drop_reason(text: &str, rules: &Value) -> Option<String> {
+    let rules = rules.as_array()?;
+    for rule in rules {
+        let kind = rule.get("kind").and_then(Value::as_str).unwrap_or_default();
+        match kind {
+            "url" if text.contains("http://") || text.contains("https://") => {
+                return Some("url".to_string());
+            }
+            "word_count" => {
+                let count = text.split_whitespace().count() as u64;
+                if rule
+                    .get("minimum")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|minimum| count < minimum)
+                {
+                    return Some("word_count_below_minimum".to_string());
+                }
+                if rule
+                    .get("maximum")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|maximum| count > maximum)
+                {
+                    return Some("word_count_above_maximum".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn py_from_json(py: Python<'_>, value: &Value) -> PyResult<PyObject> {

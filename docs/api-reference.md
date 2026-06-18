@@ -1,12 +1,8 @@
 # Public API reference
 
-This page summarizes the intended public API. Internal modules may change.
-
-## Top-level package
-
-```python
-import rlab
-```
+The Python package is a thin boundary over Rust-owned behavior. Internal
+modules may change; prefer top-level `rlab` imports and methods on
+`rlab.Project`.
 
 ## Core
 
@@ -14,11 +10,57 @@ import rlab
 rlab.Project
 rlab.RuntimeContext
 rlab.WorkflowContext
+rlab.RunHandle
+rlab.RunRecord
+rlab.RunQuery
 rlab.RunRef
 rlab.ArtifactRef
+rlab.find_project_root
+rlab.load_config
+rlab.resolve_config
+rlab.apply_overrides
+rlab.read_json_manifest
 ```
 
-## Results
+## Registry and declarations
+
+```python
+rlab.ComponentSpec
+rlab.ComponentUse
+rlab.ComponentContract
+rlab.Requirements
+rlab.MissingRequirements
+rlab.MissingRequirementsError
+rlab.collect_component_requirements
+rlab.collect_contracts
+rlab.collect_requirements
+rlab.missing_requirements
+rlab.ref
+```
+
+Use methods on `Project` for declarations. Top-level decorators such as
+`rlab.experiment`, `rlab.dataset`, and `rlab.component` are not public API.
+
+## Data
+
+```python
+rlab.DataBoundary
+rlab.DataDecision
+rlab.AuditPolicy
+rlab.SinkResult
+rlab.data_keep
+rlab.data_update
+rlab.data_drop
+rlab.data_boundary
+rlab.list_data_documents
+rlab.resolve_data_document
+rlab.validate_data_documents
+rlab.list_datasets
+rlab.resolve_dataset
+rlab.validate_datasets
+```
+
+## Results, workflows, and external tools
 
 ```python
 rlab.Metric
@@ -29,100 +71,35 @@ rlab.TableArtifact
 rlab.LogArtifact
 rlab.ResultSchema
 rlab.bundle_from_metrics
-```
-
-## Manifests
-
-```python
-rlab.RunManifest
-rlab.ArtifactManifest
-rlab.ModelManifest
-rlab.DatasetManifest
-```
-
-## Data
-
-```python
-rlab.DataContext
-rlab.DataSource
-rlab.DataAction
-rlab.DataDecision
-rlab.DataBoundary
-rlab.ComponentSpec
-rlab.PipelineSpec
-rlab.DatasetSpec
-rlab.AuditPolicy
-rlab.DataCheck
-rlab.DataMetric
-rlab.DataSink
-rlab.CheckResult
-rlab.SinkResult
-rlab.DataAblation
-rlab.DataExperiment
-rlab.materialize
-rlab.data_keep
-rlab.data_update
-rlab.data_drop
-rlab.data_boundary
-rlab.patterns
-rlab.substitute
-rlab.classify
-rlab.predicate
-rlab.threshold
-```
-
-## Workflows and external commands
-
-```python
 rlab.Workflow
 rlab.WorkflowStep
 rlab.ExternalStep
-rlab.define_workflow
 rlab.ExternalCommand
 rlab.ExternalResult
 rlab.ExternalCommandError
-rlab.ExternalPath
 rlab.ExternalWorkspace
+rlab.ExternalPath
 rlab.BaseAdapter
 rlab.AdapterContext
-rlab.AdapterValidationError
 ```
 
-`RuntimeContext` exposes resolved `run_dir`, `cache_dir`, `output_dir`,
-`run(target, params)` for one child target invocation,
-`external_workspace(name, spec, params)`, and `run_external(name, command)`.
+`RuntimeContext` exposes resolved run/cache paths, output helpers,
+artifact/manifest helpers, progress reporting, `run(target, params)` for child
+targets, `external_workspace(name, spec, params)`, and
+`run_external(name, command)`.
 
-## Benchmarks and evaluations
-
-```python
-rlab.BenchmarkContext
-rlab.BenchmarkResult
-rlab.BenchmarkSpec
-rlab.EvaluationSuite
-rlab.EvaluationTask
-rlab.EvaluationResult
-```
-
-## Experiments and studies
+## Rust-backed runtime utilities
 
 ```python
-rlab.Experiment
-rlab.ExperimentResult
-rlab.RetryPolicy
-rlab.Study
-rlab.StudyPlan
-```
-
-## Matrix helpers
-
-```python
-rlab.Grid
-rlab.Sample
-rlab.factor
-rlab.grid
-rlab.log_uniform
-rlab.uniform
-rlab.choice
+rlab.ArtifactStore
+rlab.ArtifactManifest
+rlab.CheckpointManager
+rlab.CheckpointRecord
+rlab.RetentionPolicy
+rlab.compare_metric_arrays
+rlab.paired_bootstrap
+rlab.write_card
+rlab.write_markdown_report
 ```
 
 ## Governance, baselines, units, stats
@@ -138,8 +115,6 @@ rlab.BudgetEstimate
 rlab.estimate_required_repetitions
 rlab.estimate_budget
 rlab.MetricComparison
-rlab.compare_metric_arrays
-rlab.compare_runs
 ```
 
 ## Not public

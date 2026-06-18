@@ -20,8 +20,6 @@ python/rlab/
 ├── _runner.py
 ├── _loader.py
 ├── _decorators.py
-├── _project.py
-├── _protocol.py
 ├── _rlab.pyi
 └── py.typed
 ```
@@ -41,13 +39,15 @@ Rust owns:
 - file locking;
 - schema versions;
 - CLI orchestration.
+- dataset execution loops, decisions, audit artifacts, and sink dispatch;
+- external command execution.
 
 Python owns:
 
 - decorators;
 - importlib module loading;
 - callable resolution;
-- callable execution;
+- the user-callable boundary;
 - Pythonic facade APIs;
 - type stubs;
 - Python runner process.
