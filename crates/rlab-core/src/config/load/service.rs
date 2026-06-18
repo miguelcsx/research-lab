@@ -66,6 +66,42 @@ mod tests {
         cleanup(root);
     }
 
+    #[test]
+    fn lab_toml_loads_run_defaults() {
+        let root = temp_root("run-defaults");
+        fs::create_dir_all(&root).expect("create temp root");
+        fs::write(
+            root.join("lab.toml"),
+            r#"
+[project]
+name = "demo"
+
+[run]
+default_seed = 42
+
+[run.params]
+device = "auto"
+
+[run.env]
+PYTORCH_ENABLE_MPS_FALLBACK = "0"
+"#,
+        )
+        .expect("write lab.toml");
+
+        let config = expect_ok(load_effective_config(Some(&root), &[]));
+
+        assert_eq!(config.run.default_seed, Some(42));
+        assert_eq!(
+            config.run.params.get("device"),
+            Some(&serde_json::json!("auto"))
+        );
+        assert_eq!(
+            config.run.env.get("PYTORCH_ENABLE_MPS_FALLBACK"),
+            Some(&"0".to_owned())
+        );
+        cleanup(root);
+    }
+
     fn temp_root(label: &str) -> PathBuf {
         let unique = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration.as_nanos(),

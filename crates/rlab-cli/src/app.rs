@@ -13,6 +13,8 @@ pub struct Cli {
     pub json: bool,
     #[arg(long, global = true, value_enum)]
     pub log_level: Option<LogLevel>,
+    #[arg(long, global = true)]
+    pub quiet: bool,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -69,7 +71,7 @@ where
     T: Into<std::ffi::OsString> + Clone,
 {
     let cli = Cli::parse_from(args);
-    logger::init(cli.json, cli.log_level);
+    logger::init(cli.json, cli.quiet, cli.log_level);
     match cli.command {
         Command::Init(command) => commands::init::run(command, cli.root.as_deref(), cli.json),
         Command::Validate(command) => {
@@ -189,5 +191,11 @@ mod tests {
     fn parses_log_level() {
         let cli = Cli::parse_from(["rlab", "--log-level", "debug", "clean"]);
         assert_eq!(cli.log_level, Some(super::LogLevel::Debug));
+    }
+
+    #[test]
+    fn parses_quiet() {
+        let cli = Cli::parse_from(["rlab", "--quiet", "clean"]);
+        assert!(cli.quiet);
     }
 }

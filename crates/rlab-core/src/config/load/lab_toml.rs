@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::error::RlabResult;
 
@@ -21,6 +23,7 @@ struct LabToml {
     modules: Option<LabModules>,
     paths: Option<LabPaths>,
     python: Option<LabPython>,
+    run: Option<LabRun>,
     production: Option<LabProduction>,
     reproducibility: Option<LabReproducibility>,
 }
@@ -48,6 +51,13 @@ struct LabPython {
     modules: Option<Vec<String>>,
     executable: Option<String>,
     runner_module: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabRun {
+    default_seed: Option<u64>,
+    params: Option<BTreeMap<String, Value>>,
+    env: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +92,10 @@ pub fn apply_lab_toml(root: &Path, config: &mut EffectiveConfig) -> RlabResult<(
 
     if let Some(python) = parsed.python {
         apply_python(config, python);
+    }
+
+    if let Some(run) = parsed.run {
+        apply_run(config, run);
     }
 
     if let Some(production) = parsed.production {
@@ -122,6 +136,18 @@ fn apply_python(config: &mut EffectiveConfig, python: LabPython) {
     apply_optional_vec(&mut config.python.modules, python.modules);
     apply_optional_string(&mut config.python.executable, python.executable);
     apply_optional_string(&mut config.python.runner_module, python.runner_module);
+}
+
+fn apply_run(config: &mut EffectiveConfig, run: LabRun) {
+    if run.default_seed.is_some() {
+        config.run.default_seed = run.default_seed;
+    }
+    if let Some(params) = run.params {
+        config.run.params = params;
+    }
+    if let Some(env) = run.env {
+        config.run.env = env;
+    }
 }
 
 fn apply_reproducibility(config: &mut EffectiveConfig, reproducibility: LabReproducibility) {

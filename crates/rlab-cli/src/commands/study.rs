@@ -3,15 +3,17 @@ use std::path::Path;
 
 use clap::{Args, Subcommand};
 use rlab_core::{
-    config::ProjectPaths, load_effective_config, plan_registry_study, search_project,
-    EffectiveConfig, RegistryKind, RegistryStudyPlan, RlabError, RlabResult, RunSession, RunStatus,
-    StudyMode,
+    config::ProjectPaths,
+    host::{HostEvent, ProgressEvent, ProtocolVersion},
+    load_effective_config, plan_registry_study, search_project, EffectiveConfig, RegistryKind,
+    RegistryStudyPlan, RlabError, RlabResult, RunSession, RunStatus, StudyMode,
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::commands::discover::discover_registry;
 use crate::commands::run::{execute_run, parse_params_public, resolve_param_refs};
+use crate::logger;
 use crate::render::{human::print_line, json::print_json};
 
 const RESULT_SCHEMA_VERSION: u32 = 1;
@@ -45,6 +47,10 @@ pub struct StudyPlanArgs {
 #[derive(Debug, Serialize)]
 struct ChildRun {
     experiment: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    variant: Option<String>,
     job_id: String,
     run_id: String,
     status: RunStatus,
@@ -110,11 +116,15 @@ fn run_study(
             plan.mode.as_str(),
             plan.jobs.len()
         ));
+        report_study_progress(&plan, 0, "running", "starting");
     }
 
     let mut children = Vec::with_capacity(plan.jobs.len());
     let mut failures = 0usize;
     for job in &plan.jobs {
+        if !json {
+            report_study_progress(&plan, children.len() as u64, "running", &job_label(job));
+        }
         let outcome = execute_run(
             config,
             paths,
@@ -131,15 +141,44 @@ fn run_study(
             RunStatus::Completed
         };
         render_child(job, &outcome.run, status, json);
+        if !json {
+            report_study_progress(
+                &plan,
+                (children.len() + 1) as u64,
+                "running",
+                &job_label(job),
+            );
+        }
         children.push(ChildRun {
             experiment: job.experiment.clone(),
+            condition: job.condition.clone(),
+            variant: job.variant.clone(),
             job_id: job.job_id.clone(),
             run_id: outcome.run.id.as_str().to_owned(),
             status,
         });
     }
 
+    if !json {
+        report_study_progress(&plan, children.len() as u64, "completed", "done");
+    }
+
     finish_parent(session, &plan, children, failures, json)
+}
+
+fn report_study_progress(plan: &RegistryStudyPlan, processed: u64, state: &str, message: &str) {
+    logger::event(&HostEvent::Progress(ProgressEvent {
+        protocol_version: ProtocolVersion::current(),
+        request_id: plan.study.clone(),
+        phase: "study".to_owned(),
+        component: plan.study.clone(),
+        state: state.to_owned(),
+        processed,
+        total: Some(plan.jobs.len() as u64),
+        unit: "jobs".to_owned(),
+        message: message.to_owned(),
+        detail: String::new(),
+    }));
 }
 
 fn load_plan(
@@ -150,7 +189,13 @@ fn load_plan(
     let strict = args.strict || config.production.strict;
     let registry = discover_registry(config, paths, strict, false)?;
     let explicit = parse_params(&args.params)?;
-    let mut plan = plan_registry_study(&registry, &args.name, study_mode(args.full), &explicit)?;
+    let mut plan = plan_registry_study(
+        &registry,
+        &args.name,
+        study_mode(args.full),
+        &config.run.params,
+        &explicit,
+    )?;
     resolve_plan_refs(paths, &mut plan)?;
     Ok(plan)
 }
@@ -213,7 +258,7 @@ fn render_child(
     print_line(&format!(
         "  {} {}:{} -> {}",
         status.as_str(),
-        job.experiment,
+        job_label(job),
         job.job_id,
         run.id.as_str()
     ));
@@ -273,8 +318,20 @@ fn render_plan(plan: &RegistryStudyPlan, json: bool) -> RlabResult<()> {
         let params = serde_json::to_string(&job.params).map_err(RlabError::serialization)?;
         print_line(&format!(
             "  {}:{} seed={seed} params={params}",
-            job.experiment, job.job_id
+            job_label(job),
+            job.job_id
         ));
     }
     Ok(())
+}
+
+fn job_label(job: &rlab_core::ExperimentJob) -> String {
+    let mut label = job.experiment.clone();
+    if let Some(condition) = &job.condition {
+        label.push_str(&format!(" condition={condition}"));
+    }
+    if let Some(variant) = &job.variant {
+        label.push_str(&format!(" variant={variant}"));
+    }
+    label
 }

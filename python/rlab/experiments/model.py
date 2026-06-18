@@ -29,6 +29,7 @@ KEY_DELAY_SECONDS: Final = "delay_seconds"
 KEY_NAME: Final = "name"
 KEY_QUESTION: Final = "question"
 KEY_HYPOTHESIS: Final = "hypothesis"
+KEY_PARAMS: Final = "params"
 KEY_MATRIX: Final = "matrix"
 KEY_METRICS: Final = "metrics"
 KEY_SEEDS: Final = "seeds"
@@ -69,6 +70,7 @@ class Experiment:
     name: str
     question: str | None = None
     hypothesis: str | None = None
+    params: Mapping[str, JsonValue] = field(default_factory=dict)
     matrix: AxisMap = field(default_factory=dict)
     metrics: tuple[str, ...] = ()
     seeds: tuple[int, ...] = ()
@@ -80,6 +82,7 @@ class Experiment:
             KEY_NAME: self.name,
             KEY_QUESTION: self.question,
             KEY_HYPOTHESIS: self.hypothesis,
+            KEY_PARAMS: dict(self.params),
             KEY_MATRIX: cast(JsonValue, _axes_to_dict(self.matrix)),
             KEY_METRICS: list(self.metrics),
             KEY_SEEDS: list(self.seeds),

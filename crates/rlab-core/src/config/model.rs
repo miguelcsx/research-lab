@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 
@@ -17,6 +19,7 @@ pub struct EffectiveConfig {
     pub project: ProjectConfig,
     pub paths: PathConfig,
     pub python: PythonConfig,
+    pub run: RunConfig,
     pub production: ProductionConfig,
     pub reproducibility: ReproducibilityConfig,
 }
@@ -40,6 +43,13 @@ pub struct PythonConfig {
     pub executable: String,
     pub runner_module: String,
     pub modules: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunConfig {
+    pub default_seed: Option<u64>,
+    pub params: BTreeMap<String, Value>,
+    pub env: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +84,11 @@ impl EffectiveConfig {
                 executable: DEFAULT_PYTHON_EXECUTABLE.to_owned(),
                 runner_module: DEFAULT_RUNNER_MODULE.to_owned(),
                 modules: Vec::new(),
+            },
+            run: RunConfig {
+                default_seed: None,
+                params: BTreeMap::new(),
+                env: BTreeMap::new(),
             },
             production: ProductionConfig { strict: false },
             reproducibility: ReproducibilityConfig {

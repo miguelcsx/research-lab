@@ -71,3 +71,71 @@ An experiment may return:
 - `ResultBundle`.
 
 Metrics should be logged through `ctx.log_metric` or returned in a `ResultBundle`.
+
+## Studies
+
+Use an experiment for the executable protocol and a study for the research
+design. Study planning is Rust-owned: params, axes, variants, seeds,
+qualification mode, full mode, and CLI overrides are expanded before Python user
+code runs.
+
+```python
+@lab.experiment("training.pretrain.clm", params_schema=PretrainConfig)
+def clm(ctx, config):
+    ...
+
+@lab.study(
+    "study.pretrain.embedding_ablation",
+    experiments=["training.pretrain.clm"],
+    params={
+        "model": {
+            "ref": "model:transformer_lm",
+            "params": {
+                "d_model": 384,
+                "n_layers": 6,
+                "embedding": {"ref": "embedding:euclidean", "dim": 128},
+            },
+        },
+        "seq_len": 256,
+        "batch_size": 32,
+    },
+    variants={
+        "hyperbolic": {
+            "model.params.embedding": {
+                "ref": "embedding:hyperbolic",
+                "dim": 128,
+                "curvature": 0.1,
+            },
+        },
+    },
+    axes={"seq_len": [128, 256, 512]},
+    seeds=[1, 2, 3],
+    qualification={"seed": 42, "params": {"max_words": 1_000_000}},
+)
+def embedding_ablation():
+    pass
+```
+
+Run the small qualification plan by default:
+
+```bash
+rlab study plan study.pretrain.embedding_ablation
+rlab study run study.pretrain.embedding_ablation
+```
+
+Run the full factorial design explicitly:
+
+```bash
+rlab study plan study.pretrain.embedding_ablation --full
+rlab study run study.pretrain.embedding_ablation --full
+```
+
+Component specs can be authored as strings, shorthand data, or canonical data:
+
+```python
+"model:transformer_lm"
+{"ref": "model:transformer_lm", "d_model": 384}
+{"ref": "model:transformer_lm", "params": {"d_model": 384}}
+```
+
+Serialization remains canonical as `{"ref": ..., "params": ...}`.

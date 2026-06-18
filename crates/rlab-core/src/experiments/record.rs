@@ -15,8 +15,9 @@ const KEY_SEEDS: &str = "seeds";
 
 pub fn plan_record_experiment(record: &RegistryRecord) -> RlabResult<Vec<ExperimentJob>> {
     let matrix = metadata_value(record, KEY_MATRIX, Value::Object(Default::default()));
+    let params = metadata_value(record, KEY_PARAMS, Value::Object(Default::default()));
     let seeds = metadata_value(record, KEY_SEEDS, Value::Array(Vec::new()));
-    if is_empty_object(&matrix) && is_empty_array(&seeds) {
+    if is_empty_object(&matrix) && is_empty_object(&params) && is_empty_array(&seeds) {
         return Ok(Vec::new());
     }
 
@@ -26,11 +27,7 @@ pub fn plan_record_experiment(record: &RegistryRecord) -> RlabResult<Vec<Experim
         name: name.clone(),
         question: optional_text(record, KEY_QUESTION),
         hypothesis: optional_text(record, KEY_HYPOTHESIS),
-        params: decode_metadata(
-            name,
-            KEY_PARAMS,
-            metadata_value(record, KEY_PARAMS, Value::Object(Default::default())),
-        )?,
+        params: decode_metadata(name, KEY_PARAMS, params)?,
         matrix: decode_metadata(name, KEY_MATRIX, matrix)?,
         metrics: decode_metadata(
             name,
@@ -81,5 +78,44 @@ fn is_empty_array(value: &Value) -> bool {
     match value.as_array() {
         Some(array) => array.is_empty(),
         None => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    use serde_json::json;
+
+    use crate::registry::{RegistryKind, RegistryRecord};
+
+    use super::plan_record_experiment;
+
+    #[test]
+    fn params_only_experiment_plans_one_job() {
+        let record = RegistryRecord {
+            schema_version: 1,
+            kind: RegistryKind::EXPERIMENT,
+            name: "configured".to_string(),
+            version: "1".to_string(),
+            module: "tests".to_string(),
+            qualname: "configured".to_string(),
+            source: PathBuf::from("tests.py"),
+            tags: Vec::new(),
+            description: String::new(),
+            metadata: BTreeMap::from([(
+                "params".to_string(),
+                json!({"runtime.max_words_seen": 20}),
+            )]),
+        };
+
+        let jobs = plan_record_experiment(&record).expect("valid experiment plan");
+
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(
+            jobs[0].params.get("runtime.max_words_seen"),
+            Some(&json!(20))
+        );
     }
 }

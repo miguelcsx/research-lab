@@ -56,6 +56,9 @@ fn experiment_job(
         schema_version: SCHEMA_VERSION,
         job_id: format!("{index:04}"),
         experiment: spec.name.clone(),
+        condition: None,
+        variant: None,
+        cell: Some(index),
         params: merged_params(&spec.params, row),
         seed,
     }

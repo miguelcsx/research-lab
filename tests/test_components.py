@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import cast
 
 import pytest
 import rlab
-from rlab._runner import _invoke_dataset
+from rlab._runner import _invoke, _invoke_dataset
 
 
 class ToyConfig:
@@ -44,6 +45,39 @@ def test_ref_and_bare_component_spec_are_supported() -> None:
         "model:toy", {"width": 4}
     )
     assert rlab.ComponentSpec("objective:clm").params == {}
+    assert deepcopy(rlab.ref("model:toy", width=4)) == rlab.ref("model:toy", width=4)
+
+
+def test_component_spec_supports_pydantic_validation_and_schema() -> None:
+    pydantic = pytest.importorskip("pydantic")
+
+    class Config(pydantic.BaseModel):
+        component: rlab.ComponentSpec
+
+    parsed = Config.model_validate({"component": {"ref": "model:toy", "width": 4}})
+
+    assert parsed.component == rlab.ComponentSpec("model:toy", {"width": 4})
+    assert parsed.model_dump(mode="json") == {
+        "component": {"ref": "model:toy", "params": {"width": 4}}
+    }
+    assert Config.model_validate({"component": "model:toy"}).component == rlab.ComponentSpec(
+        "model:toy", {}
+    )
+    schema = Config.model_json_schema()
+    assert schema["properties"]["component"] == {
+        "anyOf": [
+            {"type": "string"},
+            {
+                "additionalProperties": True,
+                "properties": {
+                    "ref": {"type": "string"},
+                    "params": {"additionalProperties": True, "type": "object"},
+                },
+                "required": ["ref"],
+                "type": "object",
+            },
+        ],
+    }
 
 
 def test_project_config_applies_typed_overrides(tmp_path: Path) -> None:
@@ -58,6 +92,86 @@ def test_project_config_applies_typed_overrides(tmp_path: Path) -> None:
     assert config == ToyConfig(width=16)
     record = project.record("config", "toy:small")
     assert record["metadata"]["config_reference"] == "toy:small"
+
+
+def test_project_experiment_declares_typed_params(tmp_path: Path) -> None:
+    project = rlab.Project("experiment-params-test", root=tmp_path)
+
+    @project.experiment(
+        "configured",
+        params=ToyConfig(width=8),
+        params_schema=ToyConfig,
+    )
+    def configured(ctx: rlab.RuntimeContext, config: ToyConfig) -> dict[str, int]:
+        del ctx
+        return {"width": config.width}
+
+    record = project.record("experiment", "configured")
+    assert record["metadata"]["params"] == {"width": 8, "name": "toy"}
+    assert record["metadata"]["params_schema"] == ToyConfig.model_json_schema()
+
+    ctx = rlab.RuntimeContext(
+        run_id="run",
+        run_dir=tmp_path,
+        cache_dir=tmp_path,
+        project_root=tmp_path,
+        params_json='{"data.path": "train", "width": 16}',
+    )
+
+    assert _invoke(project, "experiment", "configured", ctx) == {"width": 16}
+
+
+def test_experiment_spec_serializes_params() -> None:
+    from rlab.experiments import Experiment
+
+    assert Experiment(
+        name="configured",
+        params={"runtime.max_words_seen": 20},
+    ).to_dict()["params"] == {"runtime.max_words_seen": 20}
+
+
+def test_project_experiment_validates_params_without_injection(tmp_path: Path) -> None:
+    project = rlab.Project("experiment-params-validation-test", root=tmp_path)
+
+    @project.experiment(
+        "configured",
+        params=ToyConfig(width=8),
+        params_schema=ToyConfig,
+    )
+    def configured(ctx: rlab.RuntimeContext) -> dict[str, bool]:
+        del ctx
+        return {"ok": True}
+
+    ctx = rlab.RuntimeContext(
+        run_id="run",
+        run_dir=tmp_path,
+        cache_dir=tmp_path,
+        project_root=tmp_path,
+        params_json='{"width": 0}',
+    )
+
+    with pytest.raises(ValueError, match="width must be positive"):
+        _invoke(project, "experiment", "configured", ctx)
+
+
+def test_empty_experiment_params_validates_runtime_config(tmp_path: Path) -> None:
+    project = rlab.Project("study-owned-params-test", root=tmp_path)
+
+    @project.experiment("configured", params_schema=ToyConfig)
+    def configured(ctx: rlab.RuntimeContext, config: ToyConfig) -> dict[str, int]:
+        del ctx
+        return {"width": config.width}
+
+    ctx = rlab.RuntimeContext(
+        run_id="run",
+        run_dir=tmp_path,
+        cache_dir=tmp_path,
+        project_root=tmp_path,
+        params_json='{"data.path": "train", "seed": 7, "width": 16}',
+        seed=7,
+    )
+
+    assert _invoke(project, "experiment", "configured", ctx) == {"width": 16}
 
 
 def test_project_build_infers_component_params(tmp_path: Path) -> None:
@@ -107,10 +221,19 @@ def test_project_builds_component_specs_with_inline_params(tmp_path: Path) -> No
 def test_project_ref_builds_component_spec(tmp_path: Path) -> None:
     project = rlab.Project("component-ref-test", root=tmp_path)
 
-    assert project.ref("optimizer:adamw", learning_rate=0.001).to_dict() == {
+    assert project.spec("optimizer:adamw", learning_rate=0.001).to_dict() == {
         "ref": "optimizer:adamw",
         "params": {"learning_rate": 0.001},
     }
+    assert project.spec.optimizer.adamw(learning_rate=0.001) == project.spec(
+        "optimizer:adamw", learning_rate=0.001
+    )
+    assert project.spec.optimizer.adamw(learning_rate=0.001) == project.spec(
+        "optimizer:adamw", learning_rate=0.001
+    )
+    assert project.spec.filter("rlab.text", lowercase=True) == project.spec(
+        "filter:rlab.text", lowercase=True
+    )
 
 
 def test_project_builds_positional_or_keyword_component_params(tmp_path: Path) -> None:
@@ -198,9 +321,9 @@ def test_declared_dataset_accepts_component_spec_objects(tmp_path: Path) -> None
 
     project.dataset(
         "configured",
-        source=project.ref("source:items", value="configured"),
+        source=project.spec("source:items", value="configured"),
         pipeline="pipeline:empty",
-        sinks=(project.ref("sink:capture"),),
+        sinks=(project.spec("sink:capture"),),
     )
     project.pipeline("empty")
     ctx = rlab.RuntimeContext(
@@ -263,7 +386,7 @@ def test_project_collects_component_requirements(tmp_path: Path) -> None:
         return object()
 
     requirements = project.component_requirements(
-        "objective", (project.ref("objective:clm"), "mlm")
+        "objective", (project.spec("objective:clm"), "mlm")
     )
 
     assert requirements.model_outputs == ("lm",)

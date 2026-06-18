@@ -46,6 +46,10 @@ pub struct ProgressEvent {
     #[serde(default)]
     pub total: Option<u64>,
     #[serde(default)]
+    pub unit: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
     pub detail: String,
 }
 

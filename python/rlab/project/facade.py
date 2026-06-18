@@ -62,6 +62,33 @@ from .serde import first_doc_line, jsonable_mapping, jsonable_spec, string_list
 T = TypeVar("T")
 
 
+class SpecNamespace:
+    def __init__(self, kind: str) -> None:
+        self.kind = kind
+
+    def __call__(self, name: str, **params: object) -> ComponentSpec[object]:
+        return ComponentSpec(f"{self.kind}:{name}", coerce_json_object(params))
+
+    def __getattr__(self, name: str) -> Callable[..., ComponentSpec[object]]:
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def build(**params: object) -> ComponentSpec[object]:
+            return ComponentSpec(f"{self.kind}:{name}", coerce_json_object(params))
+
+        return build
+
+
+class SpecFactory:
+    def __call__(self, reference: str, **params: object) -> ComponentSpec[object]:
+        return ComponentSpec(reference, coerce_json_object(params))
+
+    def __getattr__(self, kind: str) -> SpecNamespace:
+        if kind.startswith("_"):
+            raise AttributeError(kind)
+        return SpecNamespace(kind)
+
+
 class Project:
     """Python decorator ergonomics backed by Rust-owned registry state."""
 
@@ -80,6 +107,7 @@ class Project:
         self.name = name or default_project_name()
         self.root = Path(root) if root is not None else Path.cwd()
         self._core = ProjectCore(self.name, self.root)
+        self.spec = SpecFactory()
         self._initialized = True
 
     @property
@@ -91,9 +119,6 @@ class Project:
 
     def record(self, kind: str, name: str) -> JsonObject:
         return cast(JsonObject, json.loads(self._core.record_json(kind, name)))
-
-    def ref(self, reference: str, **params: object) -> ComponentSpec[object]:
-        return ComponentSpec(reference, coerce_json_object(params))
 
     def config(
         self,
@@ -129,8 +154,34 @@ class Project:
 
         return register
 
-    def experiment(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator(KIND_EXPERIMENT, name, metadata)
+    def experiment(
+        self,
+        name: str,
+        *,
+        params_schema: type[object] | None = None,
+        **metadata: object,
+    ) -> Callable[[T], T]:
+        values = dict(metadata)
+        if params_schema is not None:
+            values[KEY_PARAMS_SCHEMA] = schema_dict(
+                params_schema,
+                f"params schema for experiment:{name}",
+            )
+            if "params" in values:
+                validate_model_schema(params_schema, values["params"], "experiment", name)
+
+        def register(obj: T) -> T:
+            result = self._decorator(KIND_EXPERIMENT, name, values)(obj)
+            if params_schema is not None:
+                self._core.set_component_extras(
+                    KIND_EXPERIMENT,
+                    name,
+                    params_schema,
+                    None,
+                )
+            return result
+
+        return register
 
     def declare(
         self,

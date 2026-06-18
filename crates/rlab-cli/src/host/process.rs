@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -11,19 +12,21 @@ pub fn run_python_host(
     python: &str,
     runner_module: &str,
     request: &HostRequest,
+    env: &BTreeMap<String, String>,
 ) -> RlabResult<Vec<HostEvent>> {
     let python = resolve_program(&request.project_root, python);
-    let mut child = Command::new(&python)
+    let mut command = Command::new(&python);
+    command
         .arg("-m")
         .arg(runner_module)
         .current_dir(&request.project_root)
+        .envs(env)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| RlabError::Host {
-            message: format!("failed to start Python runner {runner_module}: {error}"),
-        })?;
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| RlabError::Host {
+        message: format!("failed to start Python runner {runner_module}: {error}"),
+    })?;
     let request_line = serde_json::to_string(request).map_err(RlabError::serialization)?;
     if let Some(stdin) = child.stdin.as_mut() {
         stdin

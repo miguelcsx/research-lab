@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
-from typing import Iterable, Literal, Mapping, Sequence, overload
+from typing import Generic, Iterable, Literal, Mapping, Sequence, TypeVar, overload
+
+_T = TypeVar("_T")
 
 JobStatus = Literal["running", "completed", "failed", "cancelled"]
 IdeaStatus = Literal["idea", "planned", "running", "validated", "rejected", "published"]
@@ -77,8 +79,10 @@ class ProjectCore:
         strict: bool = False,
     ) -> object: ...
 
-class ComponentSpec:
+class ComponentSpec(Generic[_T]):
     def __init__(self, reference: str, params: object | None = None) -> None: ...
+    @classmethod
+    def __class_getitem__(cls, item: object) -> type[ComponentSpec[object]]: ...
     @classmethod
     def empty(cls, reference: str) -> ComponentSpec: ...
     @classmethod
@@ -92,6 +96,11 @@ class ComponentSpec:
     @property
     def kind(self) -> str | None: ...
     def to_dict(self) -> dict[str, object]: ...
+    def __reduce__(self) -> tuple[object, tuple[str, dict[str, object]]]: ...
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: object, handler: object) -> object: ...
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: object, handler: object) -> object: ...
 
 class Requirements:
     def __init__(
@@ -449,6 +458,8 @@ class RuntimeContext:
         processed: int = 0,
         total: int | None = None,
         detail: str = "",
+        unit: str = "",
+        message: str = "",
     ) -> None: ...
     def run(
         self,

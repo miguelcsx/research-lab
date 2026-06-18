@@ -496,7 +496,7 @@ impl PyRuntimeContext {
         )
     }
 
-    #[pyo3(signature = (phase, component = "", state = "running", processed = 0, total = None, detail = ""))]
+    #[pyo3(signature = (phase, component = "", state = "running", processed = 0, total = None, detail = "", unit = "", message = ""))]
     pub fn report_progress(
         &self,
         py: Python<'_>,
@@ -506,6 +506,8 @@ impl PyRuntimeContext {
         processed: u64,
         total: Option<u64>,
         detail: &str,
+        unit: &str,
+        message: &str,
     ) -> PyResult<()> {
         let event = HostEvent::Progress(ProgressEvent {
             protocol_version: ProtocolVersion::current(),
@@ -515,6 +517,8 @@ impl PyRuntimeContext {
             state: state.to_string(),
             processed,
             total,
+            unit: unit.to_string(),
+            message: message.to_string(),
             detail: detail.to_string(),
         });
         write_host_event(py, event)

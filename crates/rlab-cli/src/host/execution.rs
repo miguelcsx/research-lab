@@ -27,7 +27,11 @@ pub struct ExecutionOutcome {
 }
 
 pub fn execute_run(request: ExecutionRequest<'_>) -> RlabResult<ExecutionOutcome> {
-    let params = with_seed(request.params, request.seed);
+    let seed = request.seed.or(request.config.run.default_seed);
+    let params = with_seed(
+        with_run_params(&request.config.run.params, request.params),
+        seed,
+    );
     logger::info(format!(
         "{} {} -> {}:{}",
         request.operation,
@@ -57,7 +61,7 @@ pub fn execute_run(request: ExecutionRequest<'_>) -> RlabResult<ExecutionOutcome
         run_dir: Some(session.directory.path.clone()),
         cache_dir: Some(request.paths.cache.clone()),
         params,
-        seed: request.seed,
+        seed,
         strict: request.strict || request.config.production.strict,
         environment: Value::Object(serde_json::Map::new()),
     };
@@ -69,6 +73,7 @@ pub fn execute_run(request: ExecutionRequest<'_>) -> RlabResult<ExecutionOutcome
         &request.config.python.executable,
         &request.config.python.runner_module,
         &host_request,
+        &request.config.run.env,
     )?;
     finalize_session(session, &events, request.default_result)
 }
@@ -100,6 +105,7 @@ pub fn discover_registry(config: &EffectiveConfig, strict: bool) -> RlabResult<R
         &config.python.executable,
         &config.python.runner_module,
         &host_request,
+        &config.run.env,
     )?;
     let registry = collect_registry(&events)?;
     logger::debug(format!(
@@ -148,6 +154,8 @@ pub fn process_event(
             &value.state,
             value.processed,
             value.total,
+            &value.unit,
+            &value.message,
             &value.detail,
         )),
         HostEvent::Completed { result, .. } => {
@@ -200,6 +208,25 @@ pub(crate) fn with_seed(params: Value, seed: Option<u64>) -> Value {
     };
     if let Some(seed) = seed {
         object.insert("seed".to_string(), Value::from(seed));
+    }
+    Value::Object(object)
+}
+
+pub(crate) fn with_run_params(
+    defaults: &std::collections::BTreeMap<String, Value>,
+    params: Value,
+) -> Value {
+    if defaults.is_empty() {
+        return params;
+    }
+    let mut object = serde_json::Map::new();
+    object.extend(
+        defaults
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone())),
+    );
+    if let Value::Object(params) = params {
+        object.extend(params);
     }
     Value::Object(object)
 }

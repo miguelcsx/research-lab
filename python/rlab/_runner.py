@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import inspect
 import sys
 import traceback
 from collections.abc import Mapping
@@ -14,6 +15,7 @@ from rlab import RuntimeContext
 from rlab._rlab import _failed_host_event_line, execute_dataset
 from rlab._loader import load_modules
 from rlab.components import ComponentSpec
+from rlab.project.components import validate_model_schema
 
 PROTOCOL_VERSION = 1
 SCHEMA_VERSION = 1
@@ -89,6 +91,9 @@ def _invoke(project: Any, kind: str, name: str, ctx: RuntimeContext) -> Any:
     target_ref = _params(ctx).get("target")
     if isinstance(target_ref, str) and target_ref:
         return callable_obj(_resolve_component(project, target_ref, "loader"), ctx)
+    config = _validated_params(project, kind, name, ctx)
+    if config is not None and _accepts_config(callable_obj):
+        return callable_obj(ctx, config)
     return callable_obj(ctx)
 
 
@@ -221,6 +226,81 @@ def _metadata(record: Mapping[str, Any]) -> Mapping[str, Any]:
     if not isinstance(metadata, Mapping):
         raise TypeError("registry metadata must be an object")
     return metadata
+
+
+def _validated_params(
+    project: Any,
+    kind: str,
+    name: str,
+    ctx: RuntimeContext,
+) -> object | None:
+    core = getattr(project, "_core", None)
+    schema = core.schema(kind, name) if core is not None else None
+    if schema is None:
+        return None
+    metadata = _metadata(project.record(kind, name))
+    base = metadata.get("params", {})
+    exclude = _params_outside_base(ctx, base, schema)
+    return validate_model_schema(
+        schema,
+        ctx.config(schema, base, exclude=exclude),
+        kind,
+        name,
+    )
+
+
+def _params_outside_base(
+    ctx: RuntimeContext,
+    base: object,
+    schema: object | None = None,
+) -> list[str]:
+    roots: set[str] = set()
+    if isinstance(base, Mapping):
+        roots = {str(key) for key in base}
+    if not roots:
+        roots = _schema_property_roots(schema)
+    return [
+        key
+        for key in _params(ctx)
+        if key == "seed" or (roots and key.split(".", 1)[0] not in roots)
+    ]
+
+
+def _schema_property_roots(schema: object | None) -> set[str]:
+    schema_fn = getattr(schema, "model_json_schema", None)
+    if not callable(schema_fn):
+        return set()
+    value = schema_fn()
+    if not isinstance(value, Mapping):
+        return set()
+    properties = value.get("properties", {})
+    if not isinstance(properties, Mapping):
+        return set()
+    return {str(key) for key in properties}
+
+
+def _accepts_config(callable_obj: object) -> bool:
+    if not callable(callable_obj):
+        return False
+    try:
+        signature = inspect.signature(callable_obj)
+    except (TypeError, ValueError):
+        return False
+    positional = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+    ]
+    if len(positional) >= 2:
+        return True
+    return any(
+        parameter.kind == inspect.Parameter.VAR_POSITIONAL
+        for parameter in signature.parameters.values()
+    )
 
 
 def _materialize(value: Any) -> Any:
