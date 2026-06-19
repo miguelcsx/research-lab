@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import cast
 
@@ -28,7 +28,10 @@ def jsonable_spec(value: object) -> JsonValue:
         return converted
 
     if is_dataclass(value) and not isinstance(value, type):
-        config = {key: jsonable_spec(child) for key, child in asdict(value).items()}
+        config = {
+            field.name: jsonable_spec(getattr(value, field.name))
+            for field in fields(value)
+        }
         rlab_ref = getattr(type(value), "__rlab_ref__", None)
         return (
             {KEY_REF: rlab_ref, **config}

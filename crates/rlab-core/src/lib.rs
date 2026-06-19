@@ -47,7 +47,10 @@ pub mod modules;
 pub mod stats;
 pub mod study;
 
-pub use artifact::{ArtifactManifest, ArtifactReference, ArtifactStore, PromoteRequest};
+pub use artifact::{
+    describe_artifact_reference, parse_artifact_name, parse_artifact_reference, ArtifactManifest,
+    ArtifactReference, ArtifactStore, PromoteRequest,
+};
 pub use baselines::{add_baseline, compare_baseline, list_baselines, BaselineComparison};
 pub use benchmarks::{BenchmarkContext, BenchmarkResult, BenchmarkSpec};
 pub use budget::{estimate_budget, estimate_required_repetitions, BudgetEstimate};

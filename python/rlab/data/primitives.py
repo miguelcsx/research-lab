@@ -8,6 +8,7 @@ from typing import Final, TypeAlias, cast
 
 from rlab._decorators import DataDecision, data_boundary, data_drop, data_keep, data_update
 from rlab._rlab import (
+    ComponentSpec,
     DataBoundary,
     NativeDocumentAssembler as _NativeDocumentAssembler,
     NativeSimhashDedup as _NativeSimhashDedup,
@@ -18,7 +19,6 @@ from rlab._rlab import (
     threshold as _threshold,
 )
 from rlab._typing import JsonObject, JsonValue
-from rlab.components import ComponentSpec
 
 Record: TypeAlias = Mapping[str, JsonValue]
 MutableRecord: TypeAlias = JsonObject

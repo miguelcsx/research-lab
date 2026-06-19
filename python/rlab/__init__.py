@@ -79,7 +79,6 @@ from ._rlab import (
 )
 from .components import (
     ComponentContract,
-    ComponentSpec,
     MissingRequirements,
     MissingRequirementsError,
     Requirements,
@@ -87,7 +86,6 @@ from .components import (
     collect_contracts,
     collect_requirements,
     missing_requirements,
-    ref,
 )
 from ._loader import discover_modules
 from ._typing import JsonObject, JsonValue, coerce_json_object, coerce_json_value
@@ -100,7 +98,7 @@ from .external import (
     BaseAdapter,
     ExternalCommandError,
 )
-from .project import Project, pinned_project
+from .project import Builder, Project, pinned_project
 from .refs import ArtifactRef, RunRef
 from .workflows.model import ExternalStep, Workflow, WorkflowStep
 
@@ -117,12 +115,12 @@ __all__ = [
     "BaselineEntry",
     "BaselineStore",
     "BudgetEstimate",
+    "Builder",
     "CacheEntry",
     "BaseAdapter",
     "CheckpointManager",
     "CheckpointRecord",
     "ComponentContract",
-    "ComponentSpec",
     "AuditPolicy",
     "DataBoundary",
     "DataDecision",
@@ -208,7 +206,6 @@ __all__ = [
     "pinned_project",
     "redact_secrets",
     "read_json_manifest",
-    "ref",
     "resolve_config",
     "resolve_data_document",
     "resolve_dataset",

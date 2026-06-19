@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from rlab import RuntimeContext
-from rlab._rlab import _failed_host_event_line, execute_dataset
+from rlab._rlab import ComponentSpec, _failed_host_event_line, execute_dataset
 from rlab._loader import load_modules
-from rlab.components import ComponentSpec
 from rlab.project.components import validate_model_schema
 
 PROTOCOL_VERSION = 1

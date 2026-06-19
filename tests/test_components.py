@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -40,44 +40,29 @@ class ToyConfig:
         )
 
 
-def test_ref_and_bare_component_spec_are_supported() -> None:
-    assert rlab.ref("model:toy", width=4) == rlab.ComponentSpec(
-        "model:toy", {"width": 4}
-    )
-    assert rlab.ComponentSpec("objective:clm").params == {}
-    assert deepcopy(rlab.ref("model:toy", width=4)) == rlab.ref("model:toy", width=4)
+@dataclass(frozen=True, slots=True)
+class ScaleSpec:
+    factor: float
 
 
-def test_component_spec_supports_pydantic_validation_and_schema() -> None:
-    pydantic = pytest.importorskip("pydantic")
+def test_typed_component_specs_are_registered_and_built(tmp_path: Path) -> None:
+    project = rlab.Project("typed-component-test", root=tmp_path)
 
-    class Config(pydantic.BaseModel):
-        component: rlab.ComponentSpec
+    @project.component("transform:scale", spec=ScaleSpec)
+    def scale(prefix: str, spec: ScaleSpec) -> tuple[str, float]:
+        return prefix, spec.factor
 
-    parsed = Config.model_validate({"component": {"ref": "model:toy", "width": 4}})
+    spec = ScaleSpec(2.5)
 
-    assert parsed.component == rlab.ComponentSpec("model:toy", {"width": 4})
-    assert parsed.model_dump(mode="json") == {
-        "component": {"ref": "model:toy", "params": {"width": 4}}
+    assert rlab.Builder(project).spec(spec) == {
+        "ref": "transform:scale",
+        "params": {"factor": 2.5},
     }
-    assert Config.model_validate({"component": "model:toy"}).component == rlab.ComponentSpec(
-        "model:toy", {}
-    )
-    schema = Config.model_json_schema()
-    assert schema["properties"]["component"] == {
-        "anyOf": [
-            {"type": "string"},
-            {
-                "additionalProperties": True,
-                "properties": {
-                    "ref": {"type": "string"},
-                    "params": {"additionalProperties": True, "type": "object"},
-                },
-                "required": ["ref"],
-                "type": "object",
-            },
-        ],
-    }
+    assert rlab.Builder(project)(spec, "value") == ("value", 2.5)
+
+
+def test_public_project_has_no_spec_factory(tmp_path: Path) -> None:
+    assert not hasattr(rlab.Project("no-spec-factory-test", root=tmp_path), "spec")
 
 
 def test_project_config_applies_typed_overrides(tmp_path: Path) -> None:
@@ -218,24 +203,6 @@ def test_project_builds_component_specs_with_inline_params(tmp_path: Path) -> No
     assert project.build_spec({"ref": "scale", "factor": 3.0}, kind="transform") == 3.0
 
 
-def test_project_ref_builds_component_spec(tmp_path: Path) -> None:
-    project = rlab.Project("component-ref-test", root=tmp_path)
-
-    assert project.spec("optimizer:adamw", learning_rate=0.001).to_dict() == {
-        "ref": "optimizer:adamw",
-        "params": {"learning_rate": 0.001},
-    }
-    assert project.spec.optimizer.adamw(learning_rate=0.001) == project.spec(
-        "optimizer:adamw", learning_rate=0.001
-    )
-    assert project.spec.optimizer.adamw(learning_rate=0.001) == project.spec(
-        "optimizer:adamw", learning_rate=0.001
-    )
-    assert project.spec.filter("rlab.text", lowercase=True) == project.spec(
-        "filter:rlab.text", lowercase=True
-    )
-
-
 def test_project_builds_positional_or_keyword_component_params(tmp_path: Path) -> None:
     project = rlab.Project("component-build-dataclass-test", root=tmp_path)
 
@@ -321,9 +288,9 @@ def test_declared_dataset_accepts_component_spec_objects(tmp_path: Path) -> None
 
     project.dataset(
         "configured",
-        source=project.spec("source:items", value="configured"),
+        source={"ref": "source:items", "value": "configured"},
         pipeline="pipeline:empty",
-        sinks=(project.spec("sink:capture"),),
+        sinks=({"ref": "sink:capture"},),
     )
     project.pipeline("empty")
     ctx = rlab.RuntimeContext(
@@ -386,7 +353,7 @@ def test_project_collects_component_requirements(tmp_path: Path) -> None:
         return object()
 
     requirements = project.component_requirements(
-        "objective", (project.spec("objective:clm"), "mlm")
+        "objective", ("clm", "mlm")
     )
 
     assert requirements.model_outputs == ("lm",)
@@ -416,7 +383,7 @@ def test_component_contracts_include_provides_and_aggregate_specs(tmp_path: Path
 
     assert objective_contract.requires.model_heads == ("lm",)
     assert model_contract.provides.capabilities == ("causal",)
-    assert project.requirements_for("objective", [rlab.ComponentSpec.empty("lm")]) == (
+    assert project.requirements_for("objective", ["lm"]) == (
         rlab.Requirements(model_heads=("lm",), batch_fields=("labels",))
     )
     assert project.contracts_for("model", ["toy"]).provides == rlab.Requirements(

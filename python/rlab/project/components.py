@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import MISSING, fields, is_dataclass
 from typing import cast
 
+from rlab._rlab import ComponentSpec
 from rlab._typing import JsonObject
-from rlab.components import ComponentSpec, Requirements
+from rlab.components import Requirements
 
 from .constants import (
     ERROR_COMPONENT_REFERENCE_FORMAT,
@@ -66,7 +68,20 @@ def component_metadata(
 def schema_dict(params_schema: type[object], label: str) -> JsonObject:
     schema = getattr(params_schema, "model_json_schema", None)
     if not callable(schema):
-        raise TypeError(ERROR_SCHEMA_JSON.format(label=label))
+        if not is_dataclass(params_schema):
+            raise TypeError(ERROR_SCHEMA_JSON.format(label=label))
+        required: list[str] = []
+        properties: dict[str, JsonObject] = {}
+        for field in fields(params_schema):
+            properties[field.name] = {"title": field.name, "type": "object"}
+            if field.default is MISSING and field.default_factory is MISSING:
+                required.append(field.name)
+        return cast(JsonObject, {
+            "title": params_schema.__name__,
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        })
 
     value = schema()
     if not isinstance(value, dict):
@@ -81,10 +96,16 @@ def validate_model_schema(
     kind: str,
     name: str,
 ) -> object:
+    if isinstance(params, schema):
+        return params
     validate = getattr(schema, "model_validate", None)
-    if not callable(validate):
-        raise TypeError(ERROR_SCHEMA_VALIDATE.format(kind=kind, name=name))
-    return validate(params)
+    if callable(validate):
+        return validate(params)
+    if is_dataclass(schema):
+        if not isinstance(params, Mapping):
+            raise TypeError(ERROR_SCHEMA_VALIDATE.format(kind=kind, name=name))
+        return schema(**params)
+    raise TypeError(ERROR_SCHEMA_VALIDATE.format(kind=kind, name=name))
 
 
 def build_parts(

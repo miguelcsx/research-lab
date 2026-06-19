@@ -2,8 +2,9 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use rlab_core::{
-    artifact::describe_artifact, config::ProjectPaths, load_effective_config, ArtifactStore,
-    PromoteRequest, RlabError, RlabResult,
+    artifact::{describe_artifact_reference, parse_artifact_name},
+    config::ProjectPaths,
+    load_effective_config, ArtifactStore, PromoteRequest, RlabError, RlabResult,
 };
 
 use crate::render::{human::print_line, json::print_json};
@@ -58,8 +59,7 @@ pub fn run(command: ArtifactCommand, root: Option<&Path>, json: bool) -> RlabRes
             }
         }
         ArtifactSubcommand::Describe { reference } => {
-            let (kind, name, version) = parse_artifact_reference(&reference)?;
-            let manifest = describe_artifact(&paths, &kind, &name, &version)?;
+            let manifest = describe_artifact_reference(&paths, &reference)?;
             if json {
                 print_json("artifact_describe", manifest)?;
             } else {
@@ -70,63 +70,4 @@ pub fn run(command: ArtifactCommand, root: Option<&Path>, json: bool) -> RlabRes
         }
     }
     Ok(0)
-}
-
-fn parse_artifact_name(value: &str) -> RlabResult<(String, String)> {
-    let mut split = value.splitn(2, ':');
-    let kind = match split.next() {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("invalid artifact name: {value}"),
-            })
-        }
-    };
-    let name = match split.next() {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("artifact reference must be kind:name: {value}"),
-            })
-        }
-    };
-    Ok((kind, name))
-}
-
-fn parse_artifact_reference(value: &str) -> RlabResult<(String, String, String)> {
-    let without_scheme = match value.strip_prefix("artifact:") {
-        Some(text) => text,
-        None => value,
-    };
-    let mut version_split = without_scheme.splitn(2, '@');
-    let left = match version_split.next() {
-        Some(text) if !text.trim().is_empty() => text,
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("invalid artifact reference: {value}"),
-            })
-        }
-    };
-    let version = match version_split.next() {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => "1".to_string(),
-    };
-    let mut kind_split = left.splitn(2, '/');
-    let kind = match kind_split.next() {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("invalid artifact reference: {value}"),
-            })
-        }
-    };
-    let name = match kind_split.next() {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => {
-            return Err(RlabError::Reference {
-                message: format!("artifact reference must be artifact:kind/name@version: {value}"),
-            })
-        }
-    };
-    Ok((kind, name, version))
 }

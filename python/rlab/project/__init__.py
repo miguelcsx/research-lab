@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .facade import Project
+from .facade import Builder, Project
 from .registry import pinned_project
 
-__all__ = ["Project", "pinned_project"]
+__all__ = ["Builder", "Project", "pinned_project"]

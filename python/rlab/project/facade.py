@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import json
+from dataclasses import is_dataclass
+from inspect import Parameter, signature
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TypeVar, cast
 
 from rlab._decorators import decorator_factory
-from rlab._rlab import ProjectCore
-from rlab._typing import JsonObject, coerce_json_object
+from rlab._rlab import ComponentSpec, ProjectCore
+from rlab._typing import JsonObject
 from rlab.components import (
     ComponentContract,
-    ComponentSpec,
     Requirements,
     collect_contracts,
     collect_component_requirements,
 )
 
 from .components import (
-    build_parts,
     component_identity,
     component_metadata,
     schema_dict,
@@ -52,6 +52,7 @@ from .constants import (
     KIND_PIPELINE,
     KIND_STUDY,
     KIND_WORKFLOW,
+    REFERENCE_SEPARATOR,
 )
 from .registry import default_project_name, pinned_or_registered_project
 from .registry_helpers import dataset_sinks
@@ -62,31 +63,24 @@ from .serde import first_doc_line, jsonable_mapping, jsonable_spec, string_list
 T = TypeVar("T")
 
 
-class SpecNamespace:
-    def __init__(self, kind: str) -> None:
-        self.kind = kind
+class Builder:
+    """Runtime-only component resolver injected into component builders."""
 
-    def __call__(self, name: str, **params: object) -> ComponentSpec[object]:
-        return ComponentSpec(f"{self.kind}:{name}", coerce_json_object(params))
+    def __init__(self, project: "Project") -> None:
+        self._project = project
 
-    def __getattr__(self, name: str) -> Callable[..., ComponentSpec[object]]:
-        if name.startswith("_"):
-            raise AttributeError(name)
+    def __call__(
+        self,
+        spec: object,
+        *inject: object,
+        kind: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        component = self._project._component_spec(spec, kind)
+        return self._project.build(component.ref, component, *inject, **kwargs)
 
-        def build(**params: object) -> ComponentSpec[object]:
-            return ComponentSpec(f"{self.kind}:{name}", coerce_json_object(params))
-
-        return build
-
-
-class SpecFactory:
-    def __call__(self, reference: str, **params: object) -> ComponentSpec[object]:
-        return ComponentSpec(reference, coerce_json_object(params))
-
-    def __getattr__(self, kind: str) -> SpecNamespace:
-        if kind.startswith("_"):
-            raise AttributeError(kind)
-        return SpecNamespace(kind)
+    def spec(self, value: object, kind: str | None = None) -> JsonObject:
+        return cast(JsonObject, self._project._component_spec(value, kind).to_dict())
 
 
 class Project:
@@ -107,7 +101,6 @@ class Project:
         self.name = name or default_project_name()
         self.root = Path(root) if root is not None else Path.cwd()
         self._core = ProjectCore(self.name, self.root)
-        self.spec = SpecFactory()
         self._initialized = True
 
     @property
@@ -307,11 +300,14 @@ class Project:
         *,
         kind: str | None = None,
         name: str | None = None,
+        spec: type[object] | None = None,
         params_schema: type[object] | None = None,
         requires: Requirements = Requirements(),
         provides: Requirements = Requirements(),
         **metadata: object,
     ) -> Callable[[T], T]:
+        if spec is not None and params_schema is not None:
+            raise TypeError("lab.component accepts spec= or params_schema=, not both")
         component_kind, component_name = component_identity(reference, kind, name)
         values = component_metadata(
             component_kind,
@@ -320,17 +316,22 @@ class Project:
             provides,
             metadata,
         )
-        schema: object | None = params_schema
+        schema: object | None = spec or params_schema
 
-        if params_schema is not None:
+        if spec is not None:
+            setattr(spec, "__rlab_ref__", f"{component_kind}:{component_name}")
+            setattr(spec, "__rlab_kind__", component_kind)
+            setattr(spec, "__rlab_name__", component_name)
+
+        if schema is not None:
             values[KEY_PARAMS_SCHEMA] = schema_dict(
-                params_schema,
+                cast(type[object], schema),
                 f"params schema for {component_kind}:{component_name}",
             )
 
         def register(obj: T) -> T:
             nonlocal schema
-            if params_schema is None:
+            if schema is None:
                 values[KEY_PARAMS_SCHEMA] = signature_schema(obj)
                 schema = None
 
@@ -348,21 +349,32 @@ class Project:
     def build(
         self,
         reference: str,
-        spec: ComponentSpec[object] | Mapping[str, object] | None = None,
+        spec: object | None = None,
         *inject: object,
         **legacy_kwargs: object,
     ) -> object:
-        kind, name, params = build_parts(reference, spec)
+        kind, name, params = self._build_parts(reference, spec)
         factory = self.resolve(kind, name)
 
         if not callable(factory):
             raise TypeError(ERROR_COMPONENT_NOT_CALLABLE.format(kind=kind, name=name))
 
         schema = self._core.schema(kind, name)
+        builder_kwargs = self._builder_kwargs(factory, legacy_kwargs)
         if schema is not None:
+            validated = validate_model_schema(
+                cast(type[object], schema), params, kind, name
+            )
+            if not self._accepts_schema_arg(factory, len(inject)):
+                return cast(Callable[..., object], factory)(
+                    *inject,
+                    **builder_kwargs,
+                    **legacy_kwargs,
+                )
             return cast(Callable[..., object], factory)(
                 *inject,
-                validate_model_schema(cast(type[object], schema), params, kind, name),
+                validated,
+                **builder_kwargs,
                 **legacy_kwargs,
             )
 
@@ -372,19 +384,19 @@ class Project:
         return cast(Callable[..., object], factory)(
             *inject,
             **validate_signature_params(factory, params, injected=len(inject)),
+            **builder_kwargs,
             **legacy_kwargs,
         )
 
     def build_spec(
         self,
-        spec: ComponentSpec[object] | Mapping[str, object] | str,
+        spec: object,
         *inject: object,
         kind: str | None = None,
         **kwargs: object,
     ) -> object:
-        component = ComponentSpec.from_value(spec)
-        reference = component.ref if kind is None else kind
-        return self.build(reference, component, *inject, **kwargs)
+        component = self._component_spec(spec, kind)
+        return self.build(component.ref, component, *inject, **kwargs)
 
     def requirements(self, kind: str, name: str) -> Requirements:
         value = self._core.requirements_json(kind, name)
@@ -396,7 +408,7 @@ class Project:
     def requirements_for(
         self,
         kind: str,
-        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+        specs: Iterable[object],
     ) -> Requirements:
         return self.contracts_for(kind, specs).requires
 
@@ -413,7 +425,7 @@ class Project:
     def contracts_for(
         self,
         kind: str,
-        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+        specs: Iterable[object],
     ) -> ComponentContract:
         return collect_contracts(
             [self.contract(*self._component_lookup(kind, spec)) for spec in specs]
@@ -422,7 +434,7 @@ class Project:
     def component_requirements(
         self,
         kind: str,
-        specs: Iterable[ComponentSpec[object] | Mapping[str, object] | str],
+        specs: Iterable[object],
     ) -> Requirements:
         return collect_component_requirements(self.requirements, kind, specs)
 
@@ -551,15 +563,88 @@ class Project:
     def _component_lookup(
         self,
         kind: str,
-        spec: ComponentSpec[object] | Mapping[str, object] | str,
+        spec: object,
     ) -> tuple[str, str]:
-        component = ComponentSpec.from_value(spec)
+        component = self._component_spec(spec, kind)
         spec_kind = component.kind
         if spec_kind is not None and spec_kind != kind:
             raise ValueError(
                 f"component spec kind mismatch: expected {kind!r}, got {spec_kind!r}"
             )
         return kind, component.name
+
+    def _build_parts(
+        self,
+        reference: str,
+        spec: object | None,
+    ) -> tuple[str, str, object]:
+        if REFERENCE_SEPARATOR in reference:
+            kind, name = reference.split(REFERENCE_SEPARATOR, 1)
+            if spec is None:
+                return kind, name, {}
+            return kind, name, self._component_params(spec)
+
+        component = self._component_spec(spec, reference)
+        return reference, component.name, component.params
+
+    def _component_spec(
+        self,
+        value: object,
+        default_kind: str | None = None,
+    ) -> ComponentSpec[object]:
+        if isinstance(value, ComponentSpec):
+            component = value
+        elif _has_typed_component_ref(value):
+            component = ComponentSpec.from_value(jsonable_spec(value))
+        else:
+            component = ComponentSpec.from_value(value)
+
+        if default_kind is not None and component.kind is None:
+            return ComponentSpec(f"{default_kind}:{component.name}", component.params)
+        return component
+
+    def _component_params(self, value: object) -> object:
+        if isinstance(value, ComponentSpec):
+            return value.params
+        if _has_typed_component_ref(value):
+            return self._component_spec(value).params
+        if isinstance(value, Mapping):
+            return dict(value)
+        return value
+
+    def _builder_kwargs(
+        self,
+        factory: object,
+        supplied: Mapping[str, object],
+    ) -> dict[str, object]:
+        if "build" in supplied:
+            return {}
+        try:
+            parameters = signature(cast(Callable[..., object], factory)).parameters
+        except (TypeError, ValueError):
+            return {}
+        return {"build": Builder(self)} if "build" in parameters else {}
+
+    def _accepts_schema_arg(self, factory: object, injected: int) -> bool:
+        try:
+            parameters = signature(cast(Callable[..., object], factory)).parameters.values()
+        except (TypeError, ValueError):
+            return True
+        positional = [
+            parameter
+            for parameter in parameters
+            if parameter.kind
+            in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        return len(positional) > injected
+
+
+def _has_typed_component_ref(value: object) -> bool:
+    return (
+        not isinstance(value, type)
+        and is_dataclass(value)
+        and isinstance(getattr(type(value), "__rlab_ref__", None), str)
+    )
 
 
 def _is_dataset_callable(value: object) -> bool:

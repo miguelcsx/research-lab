@@ -79,13 +79,8 @@ ComponentSpec.__get_pydantic_json_schema__ = classmethod(_component_spec_json_sc
 ComponentSpec.__reduce__ = lambda self: (ComponentSpec, (self.ref, self.params))
 
 
-def ref(name: str, **params: object) -> ComponentSpec:
-    return ComponentSpec(name, params)
-
-
 __all__ = [
     "ComponentContract",
-    "ComponentSpec",
     "MissingRequirements",
     "MissingRequirementsError",
     "Requirements",
@@ -93,5 +88,4 @@ __all__ = [
     "collect_contracts",
     "collect_requirements",
     "missing_requirements",
-    "ref",
 ]
