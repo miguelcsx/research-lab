@@ -16,6 +16,7 @@ repository = "ssh://git@github.com/miguelcsx/research-lab.git"
 [workspace.dependencies]
 camino = { version = "1.1", features = ["serde1"] }
 clap = { version = "4.5", features = ["derive"] }
+ctrlc = "3.4"
 hex = "0.4"
 fs2 = "0.4"
 indicatif = "0.17"

@@ -17,7 +17,7 @@ use crate::render::{
 #[derive(Debug, Args)]
 pub struct RunsCommand {
     #[command(subcommand)]
-    pub command: RunsSubcommand,
+    pub command: Option<RunsSubcommand>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -30,7 +30,7 @@ pub fn run(command: RunsCommand, root: Option<&Path>, json: bool) -> RlabResult<
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
 
-    match command.command {
+    match command.command.unwrap_or(RunsSubcommand::List) {
         RunsSubcommand::List => render(json, "runs_list", list_runs(&paths)?, |runs| {
             print_runs(runs)
         })?,

@@ -21,7 +21,7 @@ pub enum ArtifactSubcommand {
         path: PathBuf,
         #[arg(long)]
         r#as: String,
-        #[arg(long)]
+        #[arg(long, default_value = "")]
         version: String,
         #[arg(long)]
         alias: Option<String>,
@@ -29,11 +29,27 @@ pub enum ArtifactSubcommand {
     Describe {
         reference: String,
     },
+    Path {
+        reference: String,
+    },
+    List {
+        kind: Option<String>,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        alias: Option<String>,
+    },
+    Export {
+        reference: String,
+        #[arg(long)]
+        to: PathBuf,
+    },
 }
 
 pub fn run(command: ArtifactCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
     let config = load_effective_config(root, &[])?;
     let paths = ProjectPaths::from_config(&config)?;
+    let store = ArtifactStore::new(&paths);
     match command.command {
         ArtifactSubcommand::Promote {
             path,
@@ -42,7 +58,7 @@ pub fn run(command: ArtifactCommand, root: Option<&Path>, json: bool) -> RlabRes
             alias,
         } => {
             let (kind, name) = parse_artifact_name(&r#as)?;
-            let manifest = ArtifactStore::new(&paths).promote(PromoteRequest {
+            let manifest = store.promote(PromoteRequest {
                 source: path,
                 artifact_kind: kind,
                 name,
@@ -66,6 +82,42 @@ pub fn run(command: ArtifactCommand, root: Option<&Path>, json: bool) -> RlabRes
                 print_line(
                     &serde_json::to_string_pretty(&manifest).map_err(RlabError::serialization)?,
                 );
+            }
+        }
+        ArtifactSubcommand::Path { reference } => {
+            let path = store.resolve_path(&reference)?;
+            if json {
+                print_json(
+                    "artifact_path",
+                    serde_json::json!({"reference": reference, "path": path}),
+                )?;
+            } else {
+                print_line(&path.to_string_lossy());
+            }
+        }
+        ArtifactSubcommand::List { kind, name, alias } => {
+            let rows = store.list(kind.as_deref(), name.as_deref(), alias.as_deref())?;
+            if json {
+                print_json("artifact_list", rows)?;
+            } else {
+                for manifest in rows {
+                    print_line(&format!(
+                        "{}/{}@{} {} {}",
+                        manifest.reference.kind,
+                        manifest.reference.name,
+                        manifest.reference.version,
+                        manifest.storage_type.as_str(),
+                        manifest.sha256,
+                    ));
+                }
+            }
+        }
+        ArtifactSubcommand::Export { reference, to } => {
+            let path = store.export(&reference, &to)?;
+            if json {
+                print_json("artifact_export", serde_json::json!({"path": path}))?;
+            } else {
+                print_line(&format!("exported artifact to {}", path.display()));
             }
         }
     }

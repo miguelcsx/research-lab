@@ -17,4 +17,4 @@ pub use query::{
     RunSummary,
 };
 pub use state::RunStatus;
-pub use store::{read_metrics, write_metric_summary};
+pub use store::{read_metrics, write_metric_summary, ARTIFACTS_FILE, RUN_DIR_ARTIFACTS};

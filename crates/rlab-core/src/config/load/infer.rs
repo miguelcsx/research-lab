@@ -6,12 +6,7 @@ use super::super::model::EffectiveConfig;
 use super::pyproject::{PyProject, PYPROJECT_FILE};
 use super::toml::read_optional_toml;
 
-const CONVENTIONAL_MODULES: &[&str] = &[
-    "experiments",
-    "workflows",
-    "benchmarks",
-    "evaluations",
-];
+const CONVENTIONAL_MODULES: &[&str] = &["experiments", "workflows", "benchmarks", "evaluations"];
 
 const PACKAGE_SOURCE_DIR: &str = "src";
 const PYTHON_PACKAGE_SEPARATOR: &str = ".";

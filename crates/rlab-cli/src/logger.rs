@@ -186,7 +186,12 @@ fn progress_label(progress: &ProgressEvent) -> String {
 
 fn log(level: LogLevel, message: impl AsRef<str>) {
     if (level as u8) <= LEVEL.load(Ordering::Relaxed) {
-        eprintln!("rlab {} {}", label(level), message.as_ref());
+        eprintln!(
+            "{} {} {}",
+            paint_stderr("rlab", "1;36"),
+            label(level),
+            message.as_ref()
+        );
     }
 }
 
@@ -196,14 +201,37 @@ fn env_level() -> Option<LogLevel> {
         .and_then(|value| LogLevel::from_str(&value, true).ok())
 }
 
-fn label(level: LogLevel) -> &'static str {
+fn label(level: LogLevel) -> String {
     match level {
-        LogLevel::Off => "OFF",
-        LogLevel::Error => "error",
-        LogLevel::Warn => "warn",
-        LogLevel::Info => "info",
-        LogLevel::Debug => "debug",
+        LogLevel::Off => paint_stderr("OFF", "2"),
+        LogLevel::Error => paint_stderr("error", "31"),
+        LogLevel::Warn => paint_stderr("warn", "33"),
+        LogLevel::Info => paint_stderr("info", "32"),
+        LogLevel::Debug => paint_stderr("debug", "34"),
     }
+}
+
+fn paint_stderr(value: &str, code: &str) -> String {
+    if stderr_color_enabled() {
+        format!("\x1b[{code}m{value}\x1b[0m")
+    } else {
+        value.to_string()
+    }
+}
+
+fn stderr_color_enabled() -> bool {
+    match std::env::var("RLAB_COLOR").ok().as_deref() {
+        Some("always" | "1" | "true") => return true,
+        Some("never" | "0" | "false") => return false,
+        _ => {}
+    }
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+    if std::env::var("TERM").ok().as_deref() == Some("dumb") {
+        return false;
+    }
+    std::io::stderr().is_terminal()
 }
 
 #[cfg(test)]

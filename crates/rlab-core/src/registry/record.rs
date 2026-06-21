@@ -328,7 +328,10 @@ mod tests {
             expect_ok(RegistryKind::parse(KIND_BENCHMARK)),
             RegistryKind::BENCHMARK
         );
-        assert_eq!(expect_ok(RegistryKind::parse(KIND_LOADER)), RegistryKind::LOADER);
+        assert_eq!(
+            expect_ok(RegistryKind::parse(KIND_LOADER)),
+            RegistryKind::LOADER
+        );
     }
 
     #[test]

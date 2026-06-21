@@ -35,6 +35,16 @@ impl PyArtifactManifest {
     }
 
     #[getter]
+    pub fn storage_type(&self) -> String {
+        self.inner.storage_type.as_str().to_string()
+    }
+
+    #[getter]
+    pub fn size_bytes(&self) -> u64 {
+        self.inner.size_bytes
+    }
+
+    #[getter]
     pub fn object_path(&self) -> PathBuf {
         self.inner.object_path.clone()
     }
@@ -56,6 +66,8 @@ impl PyArtifactManifest {
         dict.set_item("name", self.inner.reference.name.clone())?;
         dict.set_item("version", self.inner.reference.version.clone())?;
         dict.set_item("sha256", self.inner.sha256.clone())?;
+        dict.set_item("storage_type", self.inner.storage_type.as_str())?;
+        dict.set_item("size_bytes", self.inner.size_bytes)?;
         dict.set_item("object_path", self.inner.object_path.clone())?;
         dict.set_item("source_path", self.inner.source_path.clone())?;
         dict.set_item("alias", self.inner.alias.clone())?;
@@ -80,7 +92,7 @@ impl PyArtifactStore {
         Self { root }
     }
 
-    #[pyo3(signature = (source, kind, name, version, alias=None))]
+    #[pyo3(signature = (source, kind, name, version="".to_string(), alias=None))]
     pub fn promote(
         &self,
         source: PathBuf,

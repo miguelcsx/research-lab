@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pyo3::prelude::*;
@@ -114,7 +115,12 @@ impl PyRunHandle {
     pub fn artifact(&self, py: Python<'_>, name: &str) -> PyResult<PyObject> {
         for artifact in read_jsonl(&self.path.join("artifacts").join("artifacts.jsonl"))? {
             if artifact.get("name").and_then(Value::as_str) == Some(name) {
-                let Some(path) = artifact.get("path").and_then(Value::as_str) else {
+                let Some(path) = artifact
+                    .get("artifact_ref")
+                    .or_else(|| artifact.get("object_path"))
+                    .or_else(|| artifact.get("path"))
+                    .and_then(Value::as_str)
+                else {
                     return Err(pyo3::exceptions::PyValueError::new_err(format!(
                         "artifact {name:?} has no path"
                     )));
@@ -167,8 +173,139 @@ pub struct PyRuntimeContext {
     seed: Option<u64>,
     strict: bool,
     metrics: BTreeMap<String, f64>,
-    artifacts: Vec<Value>,
+    artifacts: Arc<Mutex<Vec<Value>>>,
     logs: Vec<String>,
+}
+
+#[pyclass(name = "ReportBundle")]
+pub struct PyReportBundle {
+    name: String,
+    path: PathBuf,
+    artifacts: Arc<Mutex<Vec<Value>>>,
+    sections: Vec<Value>,
+    metrics: BTreeMap<String, f64>,
+}
+
+#[pymethods]
+impl PyReportBundle {
+    #[getter]
+    pub fn path(&self, py: Python<'_>) -> PyResult<PyObject> {
+        py_path(py, self.path.clone())
+    }
+
+    #[pyo3(signature = (name, payload))]
+    pub fn json(&mut self, py: Python<'_>, name: &str, payload: PyObject) -> PyResult<PyObject> {
+        let path = ensure_extension(self.path.join(safe_name(name)), "json");
+        let value = py_to_json(py, payload)?;
+        rlab_core::fs::write_json_atomic(&path, &value).map_err(to_py_error)?;
+        self.sections.push(json!({
+            "type": "json",
+            "name": name,
+            "path": relative_to(&path, &self.path),
+        }));
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, rows, *, fieldnames=None))]
+    pub fn table(
+        &mut self,
+        py: Python<'_>,
+        name: &str,
+        rows: PyObject,
+        fieldnames: Option<Vec<String>>,
+    ) -> PyResult<PyObject> {
+        let rows = json_array(py_to_json(py, rows)?, "table rows")?;
+        let columns = fieldnames.unwrap_or_else(|| table_columns(&rows));
+        let path = ensure_extension(self.path.join(safe_name(name)), "csv");
+        write_csv_file(&path, &rows, &columns)?;
+        self.sections.push(json!({
+            "type": "table",
+            "name": name,
+            "path": relative_to(&path, &self.path),
+            "format": "csv",
+            "row_count": rows.len(),
+            "columns": columns,
+        }));
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, text))]
+    pub fn markdown(&mut self, py: Python<'_>, name: &str, text: &str) -> PyResult<PyObject> {
+        let path = ensure_extension(self.path.join(safe_name(name)), "md");
+        write_text_file(&path, text)?;
+        self.sections.push(json!({
+            "type": "markdown",
+            "name": name,
+            "path": relative_to(&path, &self.path),
+        }));
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, path, metadata=None))]
+    pub fn figure(
+        &mut self,
+        py: Python<'_>,
+        name: &str,
+        path: PathBuf,
+        metadata: Option<PyObject>,
+    ) -> PyResult<PyObject> {
+        if !path.is_file() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "figure path does not exist: {}",
+                path.display()
+            )));
+        }
+        let figures = self.path.join("figures");
+        std::fs::create_dir_all(&figures)?;
+        let target = figures.join(
+            path.file_name()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_else(|| format!("{}.png", safe_name(name))),
+        );
+        if path != target {
+            std::fs::copy(&path, &target)?;
+        }
+        let metadata = figure_metadata(py, &target, metadata)?;
+        self.sections.push(json!({
+            "type": "figure",
+            "name": name,
+            "path": relative_to(&target, &self.path),
+            "metadata": metadata,
+        }));
+        py_path(py, target)
+    }
+
+    pub fn metric(&mut self, name: &str, value: f64) {
+        self.metrics.insert(name.to_string(), value);
+    }
+
+    pub fn save(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let manifest_path = self.path.join("report_manifest.json");
+        let manifest = json!({
+            "schema_version": 1,
+            "name": &self.name,
+            "sections": &self.sections,
+            "metrics": &self.metrics,
+        });
+        rlab_core::fs::write_json_atomic(&manifest_path, &manifest).map_err(to_py_error)?;
+        self.artifacts
+            .lock()
+            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("artifact lock poisoned"))?
+            .push(json!({
+                "schema_version": 1,
+                "path": self.path,
+                "name": format!("report.{}", safe_name(&self.name)),
+                "kind": "report",
+                "version": "1",
+                "metadata": {
+                    "manifest": "report_manifest.json",
+                    "sections": &self.sections,
+                    "metrics": &self.metrics,
+                },
+                "inputs": [],
+            }));
+        py_path(py, self.path.clone())
+    }
 }
 
 #[pymethods]
@@ -198,7 +335,7 @@ impl PyRuntimeContext {
             seed,
             strict,
             metrics: BTreeMap::new(),
-            artifacts: Vec::new(),
+            artifacts: Arc::new(Mutex::new(Vec::new())),
             logs: Vec::new(),
         })
     }
@@ -216,7 +353,13 @@ impl PyRuntimeContext {
     }
 
     pub fn artifacts_json(&self) -> PyResult<String> {
-        to_json(&self.artifacts)
+        to_json(
+            &self
+                .artifacts
+                .lock()
+                .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("artifact lock poisoned"))?
+                .clone(),
+        )
     }
 
     pub fn logs_json(&self) -> PyResult<String> {
@@ -233,7 +376,10 @@ impl PyRuntimeContext {
         rlab_core::host::event_lines(&rlab_core::host::execution_events(
             request_id,
             &self.metrics,
-            &self.artifacts,
+            &self
+                .artifacts
+                .lock()
+                .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("artifact lock poisoned"))?,
             &self.logs,
             result,
         ))
@@ -258,7 +404,12 @@ impl PyRuntimeContext {
     }
 
     #[pyo3(signature = (name, default=None))]
-    pub fn param(&self, py: Python<'_>, name: &str, default: Option<PyObject>) -> PyResult<PyObject> {
+    pub fn param(
+        &self,
+        py: Python<'_>,
+        name: &str,
+        default: Option<PyObject>,
+    ) -> PyResult<PyObject> {
         match self.param_obj(py, name)? {
             Some(value) => Ok(value.unbind()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -329,6 +480,11 @@ impl PyRuntimeContext {
         }
     }
 
+    pub fn resolve_path(&self, py: Python<'_>, value: PyObject) -> PyResult<PyObject> {
+        let path = self.resolve_py_path(py, value)?;
+        py_path(py, path)
+    }
+
     #[pyo3(signature = (name, default=None))]
     pub fn path_param(
         &self,
@@ -337,9 +493,10 @@ impl PyRuntimeContext {
         default: Option<PathBuf>,
     ) -> PyResult<PyObject> {
         let path = match self.param_obj(py, name)? {
-            Some(value) => self.resolve_project_path(value.extract()?),
+            Some(value) => self.resolve_bound_path(py, value)?,
             None => default
-                .map(|path| self.resolve_project_path(path))
+                .map(|path| self.resolve_pathbuf(path))
+                .transpose()?
                 .ok_or_else(|| param_type_error(name, "path"))?,
         };
         py_path(py, path)
@@ -412,7 +569,7 @@ impl PyRuntimeContext {
             .unbind())
     }
 
-    #[pyo3(signature = (first, second=None, kind="file", version="1", metadata=None, inputs=None))]
+    #[pyo3(signature = (first, second=None, kind="file", version="1", metadata=None, inputs=None, artifact_kind=None, artifact_name=None, artifact_version=None, alias=None))]
     pub fn save_artifact(
         &mut self,
         py: Python<'_>,
@@ -422,6 +579,10 @@ impl PyRuntimeContext {
         version: &str,
         metadata: Option<PyObject>,
         inputs: Option<Vec<String>>,
+        artifact_kind: Option<String>,
+        artifact_name: Option<String>,
+        artifact_version: Option<String>,
+        alias: Option<String>,
     ) -> PyResult<PyObject> {
         let (name, path) = self.artifact_args(py, first, second)?;
         if !path.exists() {
@@ -430,7 +591,19 @@ impl PyRuntimeContext {
                 path.display()
             )));
         }
-        self.record_artifact(py, &name, &path, kind, version, metadata, inputs)?;
+        self.record_artifact(
+            py,
+            &name,
+            &path,
+            kind,
+            version,
+            metadata,
+            inputs,
+            artifact_kind,
+            artifact_name,
+            artifact_version,
+            alias,
+        )?;
         py_path(py, path)
     }
 
@@ -442,7 +615,9 @@ impl PyRuntimeContext {
                 path.display()
             )));
         }
-        self.record_artifact(py, name, &path, "file", "1", None, None)?;
+        self.record_artifact(
+            py, name, &path, "file", "1", None, None, None, None, None, None,
+        )?;
         py_path(py, path)
     }
 
@@ -454,7 +629,19 @@ impl PyRuntimeContext {
                 path.display()
             )));
         }
-        self.record_artifact(py, name, &path, "directory", "1", None, None)?;
+        self.record_artifact(
+            py,
+            name,
+            &path,
+            "directory",
+            "1",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
         py_path(py, path)
     }
 
@@ -479,26 +666,172 @@ impl PyRuntimeContext {
             name.to_string_lossy()
                 .replace(std::path::MAIN_SEPARATOR, ".")
         });
-        self.record_artifact(py, &artifact_name, &path, kind, "1", None, None)?;
+        self.record_artifact(
+            py,
+            &artifact_name,
+            &path,
+            kind,
+            "1",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
         py_path(py, path)
     }
 
-    pub fn save_table(&mut self, py: Python<'_>, name: &str, rows: PyObject) -> PyResult<PyObject> {
-        let Some(run_dir) = &self.run_dir else {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "runtime context has no run_dir",
-            ));
-        };
-        let path = run_dir
-            .join("artifacts")
-            .join("tables")
-            .join(format!("{}.json", safe_name(name)));
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+    #[pyo3(signature = (name, payload, *, artifact=None, kind="file"))]
+    pub fn write_json(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        payload: PyObject,
+        artifact: Option<String>,
+        kind: &str,
+    ) -> PyResult<PyObject> {
+        let path = ensure_extension(self.output_pathbuf(name.clone())?, "json");
+        let value = py_to_json(py, payload)?;
+        rlab_core::fs::write_json_atomic(&path, &value).map_err(to_py_error)?;
+        self.record_output_artifact(py, artifact, &name, &path, kind, json!({}))?;
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, rows, *, artifact=None, kind="table"))]
+    pub fn write_jsonl(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        rows: PyObject,
+        artifact: Option<String>,
+        kind: &str,
+    ) -> PyResult<PyObject> {
+        let path = ensure_extension(self.output_pathbuf(name.clone())?, "jsonl");
+        let rows = json_array(py_to_json(py, rows)?, "jsonl rows")?;
+        write_jsonl_file(&path, &rows)?;
+        let metadata = table_metadata(&rows, "jsonl");
+        self.record_output_artifact(py, artifact, &name, &path, kind, metadata)?;
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, rows, *, fieldnames=None, artifact=None))]
+    pub fn write_csv(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        rows: PyObject,
+        fieldnames: Option<Vec<String>>,
+        artifact: Option<String>,
+    ) -> PyResult<PyObject> {
+        let path = ensure_extension(self.output_pathbuf(name.clone())?, "csv");
+        let rows = json_array(py_to_json(py, rows)?, "csv rows")?;
+        let columns = fieldnames.unwrap_or_else(|| table_columns(&rows));
+        write_csv_file(&path, &rows, &columns)?;
+        let metadata = json!({
+            "format": "csv",
+            "row_count": rows.len(),
+            "columns": columns,
+        });
+        self.record_output_artifact(py, artifact, &name, &path, "table", metadata)?;
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, text, *, artifact=None, kind="file"))]
+    pub fn write_text(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        text: &str,
+        artifact: Option<String>,
+        kind: &str,
+    ) -> PyResult<PyObject> {
+        let path = self.output_pathbuf(name.clone())?;
+        write_text_file(&path, text)?;
+        self.record_output_artifact(py, artifact, &name, &path, kind, json!({}))?;
+        py_path(py, path)
+    }
+
+    #[pyo3(signature = (name, text, *, artifact=None))]
+    pub fn write_markdown(
+        &mut self,
+        py: Python<'_>,
+        name: PathBuf,
+        text: &str,
+        artifact: Option<String>,
+    ) -> PyResult<PyObject> {
+        let path = ensure_extension(self.output_pathbuf(name.clone())?, "md");
+        write_text_file(&path, text)?;
+        self.record_output_artifact(
+            py,
+            artifact,
+            &name,
+            &path,
+            "report",
+            json!({"format": "markdown"}),
+        )?;
+        py_path(py, path)
+    }
+
+    pub fn figure_path(&self, py: Python<'_>, filename: PathBuf) -> PyResult<PyObject> {
+        py_path(
+            py,
+            self.output_pathbuf(PathBuf::from("figures").join(filename))?,
+        )
+    }
+
+    #[pyo3(signature = (name, path, metadata=None))]
+    pub fn save_figure(
+        &mut self,
+        py: Python<'_>,
+        name: &str,
+        path: PathBuf,
+        metadata: Option<PyObject>,
+    ) -> PyResult<PyObject> {
+        let path = self.resolve_project_path(path);
+        if !path.is_file() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "figure path does not exist: {}",
+                path.display()
+            )));
         }
+        let metadata = figure_metadata(py, &path, metadata)?;
+        self.record_artifact(
+            py,
+            name,
+            &path,
+            "figure",
+            "1",
+            Some(py_from_json(py, &metadata)?),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
+        py_path(py, path)
+    }
+
+    pub fn report(&self, name: &str) -> PyResult<PyReportBundle> {
+        let path = self.output_pathbuf(PathBuf::from("reports").join(safe_name(name)))?;
+        std::fs::create_dir_all(&path)?;
+        Ok(PyReportBundle {
+            name: name.to_string(),
+            path,
+            artifacts: Arc::clone(&self.artifacts),
+            sections: Vec::new(),
+            metrics: BTreeMap::new(),
+        })
+    }
+
+    pub fn save_table(&mut self, py: Python<'_>, name: &str, rows: PyObject) -> PyResult<PyObject> {
+        let path =
+            self.output_pathbuf(PathBuf::from("tables").join(format!("{}.json", safe_name(name))))?;
         let value = py_to_json(py, rows)?;
         rlab_core::fs::write_json_atomic(&path, &value).map_err(to_py_error)?;
-        self.record_artifact(py, name, &path, "table", "1", None, None)?;
+        self.record_artifact(
+            py, name, &path, "table", "1", None, None, None, None, None, None,
+        )?;
         py_path(py, path)
     }
 
@@ -679,6 +1012,10 @@ impl PyRuntimeContext {
             "1",
             None,
             None,
+            None,
+            None,
+            None,
+            None,
         )?;
         self.record_artifact(
             py,
@@ -686,6 +1023,10 @@ impl PyRuntimeContext {
             &stderr_path,
             "log",
             "1",
+            None,
+            None,
+            None,
+            None,
             None,
             None,
         )?;
@@ -803,6 +1144,27 @@ impl PyRuntimeContext {
         }
     }
 
+    fn resolve_py_path(&self, py: Python<'_>, value: PyObject) -> PyResult<PathBuf> {
+        let path = value.extract::<PathBuf>(py)?;
+        self.resolve_pathbuf(path)
+    }
+
+    fn resolve_bound_path(&self, _py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<PathBuf> {
+        let path = value.extract::<PathBuf>()?;
+        self.resolve_pathbuf(path)
+    }
+
+    fn resolve_pathbuf(&self, path: PathBuf) -> PyResult<PathBuf> {
+        let text = path.to_string_lossy();
+        if text.starts_with("artifact:") || text.starts_with('@') {
+            let config = rlab_core::load_effective_config(Some(&self.project_root), &[])
+                .map_err(to_py_error)?;
+            let paths = rlab_core::ProjectPaths::from_config(&config).map_err(to_py_error)?;
+            return rlab_core::resolve_path_reference(&paths, &text).map_err(to_py_error);
+        }
+        Ok(self.resolve_project_path(path))
+    }
+
     fn output_pathbuf(&self, value: PathBuf) -> PyResult<PathBuf> {
         let Some(run_dir) = &self.run_dir else {
             return Err(pyo3::exceptions::PyValueError::new_err(
@@ -838,6 +1200,7 @@ impl PyRuntimeContext {
         Ok((name, path))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_artifact(
         &mut self,
         py: Python<'_>,
@@ -847,8 +1210,12 @@ impl PyRuntimeContext {
         version: &str,
         metadata: Option<PyObject>,
         inputs: Option<Vec<String>>,
+        artifact_kind: Option<String>,
+        artifact_name: Option<String>,
+        artifact_version: Option<String>,
+        alias: Option<String>,
     ) -> PyResult<()> {
-        self.artifacts.push(json!({
+        let mut event = json!({
             "schema_version": 1,
             "path": path,
             "name": name,
@@ -859,8 +1226,55 @@ impl PyRuntimeContext {
                 None => json!({}),
             },
             "inputs": inputs.unwrap_or_default(),
-        }));
+        });
+        if let Some(object) = event.as_object_mut() {
+            if let Some(value) = artifact_kind {
+                object.insert("artifact_kind".to_string(), Value::String(value));
+            }
+            if let Some(value) = artifact_name {
+                object.insert("artifact_name".to_string(), Value::String(value));
+            }
+            if let Some(value) = artifact_version {
+                object.insert("artifact_version".to_string(), Value::String(value));
+            }
+            if let Some(value) = alias {
+                object.insert("alias".to_string(), Value::String(value));
+            }
+        }
+        self.artifacts
+            .lock()
+            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("artifact lock poisoned"))?
+            .push(event);
         Ok(())
+    }
+
+    fn record_output_artifact(
+        &mut self,
+        py: Python<'_>,
+        artifact: Option<String>,
+        requested_name: &Path,
+        path: &PathBuf,
+        kind: &str,
+        metadata: Value,
+    ) -> PyResult<()> {
+        let artifact_name = artifact.unwrap_or_else(|| {
+            requested_name
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, ".")
+        });
+        self.record_artifact(
+            py,
+            &artifact_name,
+            path,
+            kind,
+            "1",
+            Some(py_from_json(py, &metadata)?),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
     fn register_external_artifacts(
@@ -880,7 +1294,9 @@ impl PyRuntimeContext {
                 .any(|pattern| matches_artifact_pattern(relative, pattern))
             {
                 let artifact = format!("{}.{}", name, artifact_stem(relative));
-                self.record_artifact(py, &artifact, &path, "file", "1", None, None)?;
+                self.record_artifact(
+                    py, &artifact, &path, "file", "1", None, None, None, None, None, None,
+                )?;
             }
         }
         Ok(())
@@ -1055,6 +1471,143 @@ fn read_jsonl(path: &Path) -> PyResult<Vec<Value>> {
 
 fn py_json_error(error: serde_json::Error) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(error.to_string())
+}
+
+fn write_text_file(path: &Path, text: &str) -> PyResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, text)?;
+    Ok(())
+}
+
+fn write_jsonl_file(path: &Path, rows: &[Value]) -> PyResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    use std::io::Write;
+    let mut file = fs::File::create(path)?;
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(py_json_error)?;
+        writeln!(file, "{line}")?;
+    }
+    Ok(())
+}
+
+fn write_csv_file(path: &Path, rows: &[Value], columns: &[String]) -> PyResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    use std::io::Write;
+    let mut file = fs::File::create(path)?;
+    writeln!(
+        file,
+        "{}",
+        columns
+            .iter()
+            .map(|value| csv_escape(value))
+            .collect::<Vec<_>>()
+            .join(",")
+    )?;
+    for row in rows {
+        let object = row.as_object();
+        let values = columns
+            .iter()
+            .map(|column| {
+                object
+                    .and_then(|row| row.get(column))
+                    .unwrap_or(&Value::Null)
+            })
+            .map(csv_value)
+            .map(|value| csv_escape(&value))
+            .collect::<Vec<_>>();
+        writeln!(file, "{}", values.join(","))?;
+    }
+    Ok(())
+}
+
+fn csv_value(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(value) => value.clone(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        _ => serde_json::to_string(value).unwrap_or_default(),
+    }
+}
+
+fn csv_escape(value: &str) -> String {
+    if value
+        .chars()
+        .any(|ch| matches!(ch, ',' | '"' | '\n' | '\r'))
+    {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn json_array(value: Value, label: &str) -> PyResult<Vec<Value>> {
+    match value {
+        Value::Array(rows) => Ok(rows),
+        _ => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{label} must be a sequence"
+        ))),
+    }
+}
+
+fn table_columns(rows: &[Value]) -> Vec<String> {
+    let mut columns = BTreeSet::new();
+    for row in rows {
+        if let Some(object) = row.as_object() {
+            columns.extend(object.keys().cloned());
+        }
+    }
+    columns.into_iter().collect()
+}
+
+fn table_metadata(rows: &[Value], format: &str) -> Value {
+    json!({
+        "format": format,
+        "row_count": rows.len(),
+        "columns": table_columns(rows),
+    })
+}
+
+fn figure_metadata(py: Python<'_>, path: &Path, metadata: Option<PyObject>) -> PyResult<Value> {
+    let mut value = match metadata {
+        Some(value) => py_to_json(py, value)?,
+        None => json!({}),
+    };
+    if let Some(object) = value.as_object_mut() {
+        object.entry("format").or_insert_with(|| {
+            path.extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("figure")
+                .to_ascii_lowercase()
+                .into()
+        });
+        if let Ok(meta) = fs::metadata(path) {
+            object
+                .entry("size_bytes")
+                .or_insert_with(|| Value::from(meta.len()));
+        }
+    }
+    Ok(value)
+}
+
+fn ensure_extension(mut path: PathBuf, extension: &str) -> PathBuf {
+    if path.extension().is_none() {
+        path.set_extension(extension);
+    }
+    path
+}
+
+fn relative_to(path: &Path, root: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 fn param_type_error(name: &str, kind: &str) -> PyErr {

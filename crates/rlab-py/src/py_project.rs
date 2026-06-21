@@ -85,12 +85,7 @@ impl PyProjectCore {
     }
 
     #[pyo3(signature = (kind, name, param_type=None))]
-    pub fn set_params_type(
-        &mut self,
-        kind: &str,
-        name: &str,
-        param_type: Option<Py<PyAny>>,
-    ) {
+    pub fn set_params_type(&mut self, kind: &str, name: &str, param_type: Option<Py<PyAny>>) {
         let key = registry_key(kind, name);
         if let Some(param_type) = param_type {
             self.params_types.insert(key, param_type);

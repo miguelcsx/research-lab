@@ -13,6 +13,12 @@ pub fn sha256_file(path: &Path) -> RlabResult<String> {
     Ok(hex::encode(digest))
 }
 
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
+
 fn open_file(path: &Path) -> RlabResult<File> {
     File::open(path).map_err(|error| RlabError::io(path, error))
 }

@@ -46,8 +46,9 @@ pub mod stats;
 pub mod study;
 
 pub use artifact::{
-    describe_artifact_reference, parse_artifact_name, parse_artifact_reference, ArtifactManifest,
-    ArtifactReference, ArtifactStore, PromoteRequest,
+    describe_artifact_reference, gc_artifacts, parse_artifact_name, parse_artifact_reference,
+    prune_runs, resolve_param_refs, resolve_path_reference, ArtifactManifest, ArtifactReference,
+    ArtifactStore, PromoteRequest,
 };
 pub use baselines::{add_baseline, compare_baseline, list_baselines, BaselineComparison};
 pub use benchmarks::{BenchmarkContext, BenchmarkResult, BenchmarkSpec};
@@ -96,9 +97,7 @@ pub use reports::{
     write_compare_report, write_handoff, write_markdown_card, write_markdown_report,
     write_run_report,
 };
-pub use result::{
-    FileArtifact, LogArtifact, Metric, MetricDirection, ResultBundle, TableArtifact,
-};
+pub use result::{FileArtifact, LogArtifact, Metric, MetricDirection, ResultBundle, TableArtifact};
 pub use run::{
     all_run_records, query_run_records, RunDirectory, RunId, RunRecord, RunSession, RunStatus,
 };

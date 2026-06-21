@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 const LOG_SCHEMA_VERSION: u32 = 1;
@@ -9,6 +8,7 @@ const ENV_PARENT_TARGET: &str = "RLAB_PARENT_TARGET";
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
+use crate::artifact::{ArtifactStore, PromoteRequest};
 use crate::config::ProjectPaths;
 use crate::error::{RlabError, RlabResult};
 use crate::fs::{
@@ -30,6 +30,7 @@ use super::{RunId, RunStatus};
 #[derive(Debug)]
 pub struct RunSession {
     pub directory: RunDirectory,
+    paths: ProjectPaths,
     lock: RunLock,
 }
 
@@ -70,7 +71,11 @@ impl RunSession {
         write_initial_run_files(&path, &directory)?;
         capture_reproducibility(paths, &directory)?;
 
-        let mut session = Self { directory, lock };
+        let mut session = Self {
+            directory,
+            paths: paths.clone(),
+            lock,
+        };
         session.transition(RunStatus::Running)?;
 
         Ok(session)
@@ -151,16 +156,28 @@ impl RunSession {
         let source = artifact_source(artifact)?;
         let name = artifact_name(artifact)?;
         let kind = artifact_kind(artifact);
-        let file_name = safe_artifact_file_name(name, &source)?;
-        let target_dir = self.artifact_dir().join(kind);
+        let store = ArtifactStore::new(&self.paths);
+        let stored = store.ingest_path(&source)?;
+        let semantic = semantic_promote_request(artifact, &source)?;
+        let manifest = match semantic {
+            Some(request) => Some(store.promote(request)?),
+            None => None,
+        };
+        let artifact_ref = manifest.as_ref().map(|value| {
+            format!(
+                "artifact:{}/{}@{}",
+                value.reference.kind, value.reference.name, value.reference.version
+            )
+        });
 
-        ensure_dir(&target_dir)?;
-
-        let target = target_dir.join(file_name);
-
-        copy_artifact(&source, &target)?;
-
-        Ok(staged_artifact(artifact, &target))
+        Ok(staged_artifact(
+            artifact,
+            name,
+            kind,
+            &source,
+            &stored,
+            artifact_ref,
+        ))
     }
 
     fn write_metric_summary(&self) -> RlabResult<()> {
@@ -295,35 +312,6 @@ fn artifact_source(artifact: &Value) -> RlabResult<PathBuf> {
     })
 }
 
-fn copy_artifact(source: &Path, target: &Path) -> RlabResult<()> {
-    if source.is_dir() {
-        copy_dir_recursive(source, target)
-    } else {
-        fs::copy(source, target)
-            .map(|_| ())
-            .map_err(|error| RlabError::io(target, error))
-    }
-}
-
-fn copy_dir_recursive(source: &Path, target: &Path) -> RlabResult<()> {
-    ensure_dir(target)?;
-    for entry in fs::read_dir(source).map_err(|error| RlabError::io(source, error))? {
-        let entry = entry.map_err(|error| RlabError::io(source, error))?;
-        let entry_source = entry.path();
-        let entry_target = target.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .map_err(|error| RlabError::io(&entry_source, error))?;
-        if file_type.is_dir() {
-            copy_dir_recursive(&entry_source, &entry_target)?;
-        } else if file_type.is_file() {
-            fs::copy(&entry_source, &entry_target)
-                .map_err(|error| RlabError::io(&entry_target, error))?;
-        }
-    }
-    Ok(())
-}
-
 fn artifact_name(artifact: &Value) -> RlabResult<&str> {
     artifact
         .get("name")
@@ -341,38 +329,74 @@ fn artifact_kind(artifact: &Value) -> &str {
     }
 }
 
-fn staged_artifact(artifact: &Value, target: &Path) -> Value {
+fn staged_artifact(
+    artifact: &Value,
+    name: &str,
+    kind: &str,
+    source: &Path,
+    stored: &crate::artifact::StoredArtifact,
+    artifact_ref: Option<String>,
+) -> Value {
     let mut staged = artifact.clone();
 
     if let Some(object) = staged.as_object_mut() {
         object.insert(
-            "staged_path".to_string(),
-            Value::String(target.display().to_string()),
-        );
-        object.insert(
             "schema_version".to_string(),
             Value::Number(ARTIFACT_SCHEMA_VERSION.into()),
         );
+        object.insert("name".to_string(), Value::String(name.to_string()));
+        object.insert("kind".to_string(), Value::String(kind.to_string()));
+        object.insert(
+            "path".to_string(),
+            Value::String(source.display().to_string()),
+        );
+        object.insert("sha256".to_string(), Value::String(stored.sha256.clone()));
+        object.insert(
+            "storage_type".to_string(),
+            Value::String(stored.storage_type.as_str().to_string()),
+        );
+        object.insert(
+            "object_path".to_string(),
+            Value::String(stored.object_path.display().to_string()),
+        );
+        object.insert(
+            "size_bytes".to_string(),
+            Value::Number(stored.size_bytes.into()),
+        );
+        if let Some(reference) = artifact_ref {
+            object.insert("artifact_ref".to_string(), Value::String(reference));
+        }
     }
 
     staged
 }
 
-fn safe_artifact_file_name(name: &str, source: &Path) -> RlabResult<String> {
-    if contains_path_separator(name) {
-        return Err(RlabError::Artifact {
-            message: format!("artifact name must not contain path separators: {name}"),
-        });
-    }
-
-    match source.extension().and_then(|value| value.to_str()) {
-        Some(extension) if !extension.trim().is_empty() => Ok(format!("{name}.{extension}")),
-        _ => Ok(name.to_string()),
-    }
+fn semantic_promote_request(artifact: &Value, source: &Path) -> RlabResult<Option<PromoteRequest>> {
+    let Some(artifact_kind) = optional_text(artifact, "artifact_kind") else {
+        return Ok(None);
+    };
+    let artifact_name =
+        optional_text(artifact, "artifact_name").ok_or_else(|| RlabError::Artifact {
+            message: "artifact_name is required when artifact_kind is set".to_string(),
+        })?;
+    let version = optional_text(artifact, "artifact_version")
+        .or_else(|| optional_text(artifact, "version"))
+        .unwrap_or("")
+        .to_string();
+    Ok(Some(PromoteRequest {
+        source: source.to_path_buf(),
+        artifact_kind: artifact_kind.to_string(),
+        name: artifact_name.to_string(),
+        version,
+        alias: optional_text(artifact, "alias").map(str::to_string),
+    }))
 }
 
-fn contains_path_separator(value: &str) -> bool {
-    value.contains(std::path::MAIN_SEPARATOR) || value.contains('/') || value.contains('\\')
+fn optional_text<'a>(artifact: &'a Value, key: &str) -> Option<&'a str> {
+    artifact
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
 }
 
 #[cfg(test)]
@@ -386,10 +410,10 @@ mod tests {
     #[test]
     fn stages_directory_artifacts() {
         let root = std::env::temp_dir().join(format!("rlab-dir-artifact-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&root);
         let source = root.join("source");
         ensure_dir(&source).unwrap();
-        fs::write(source.join("manifest.json"), "{}").unwrap();
+        std::fs::write(source.join("manifest.json"), "{}").unwrap();
 
         let paths = ProjectPaths {
             root: root.clone(),
@@ -409,12 +433,10 @@ mod tests {
             }))
             .unwrap();
 
-        assert!(session
-            .artifact_dir()
-            .join("directory")
-            .join("tokenizer")
-            .join("manifest.json")
-            .exists());
-        let _ = fs::remove_dir_all(root);
+        let manifest = session.artifact_dir().join("artifacts.jsonl");
+        let content = std::fs::read_to_string(manifest).unwrap();
+        assert!(content.contains("object_path"));
+        assert!(content.contains("storage_type"));
+        let _ = std::fs::remove_dir_all(root);
     }
 }

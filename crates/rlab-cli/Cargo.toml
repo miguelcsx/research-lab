@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
+ctrlc.workspace = true
 indicatif.workspace = true
 rlab-core = { path = "../rlab-core" }
 serde.workspace = true

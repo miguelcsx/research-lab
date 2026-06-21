@@ -233,6 +233,27 @@ class RunHandle:
     def metrics(self) -> dict[str, object]: ...
     def artifact(self, name: str) -> Path: ...
 
+class ReportBundle:
+    @property
+    def path(self) -> Path: ...
+    def json(self, name: str, payload: object) -> Path: ...
+    def table(
+        self,
+        name: str,
+        rows: object,
+        *,
+        fieldnames: Sequence[str] | None = None,
+    ) -> Path: ...
+    def markdown(self, name: str, text: str) -> Path: ...
+    def figure(
+        self,
+        name: str,
+        path: Path,
+        metadata: Mapping[str, object] | None = None,
+    ) -> Path: ...
+    def metric(self, name: str, value: float) -> None: ...
+    def save(self) -> Path: ...
+
 class RuntimeContext:
     def __init__(
         self,
@@ -262,6 +283,10 @@ class RuntimeContext:
         version: str = "1",
         metadata: object | None = None,
         inputs: Sequence[str] | None = None,
+        artifact_kind: str | None = None,
+        artifact_name: str | None = None,
+        artifact_version: str | None = None,
+        alias: str | None = None,
     ) -> Path: ...
     def save_file(self, name: str, path: Path) -> Path: ...
     def save_dir(self, name: str, path: Path) -> Path: ...
@@ -273,6 +298,53 @@ class RuntimeContext:
         artifact: str | None = None,
         kind: str = "file",
     ) -> Path: ...
+    def write_json(
+        self,
+        name: str | Path,
+        payload: object,
+        *,
+        artifact: str | None = None,
+        kind: str = "file",
+    ) -> Path: ...
+    def write_jsonl(
+        self,
+        name: str | Path,
+        rows: object,
+        *,
+        artifact: str | None = None,
+        kind: str = "table",
+    ) -> Path: ...
+    def write_csv(
+        self,
+        name: str | Path,
+        rows: object,
+        *,
+        fieldnames: Sequence[str] | None = None,
+        artifact: str | None = None,
+    ) -> Path: ...
+    def write_text(
+        self,
+        name: str | Path,
+        text: str,
+        *,
+        artifact: str | None = None,
+        kind: str = "file",
+    ) -> Path: ...
+    def write_markdown(
+        self,
+        name: str | Path,
+        text: str,
+        *,
+        artifact: str | None = None,
+    ) -> Path: ...
+    def figure_path(self, filename: str | Path) -> Path: ...
+    def save_figure(
+        self,
+        name: str,
+        path: Path,
+        metadata: Mapping[str, object] | None = None,
+    ) -> Path: ...
+    def report(self, name: str) -> ReportBundle: ...
     def save_table(self, name: str, rows: object) -> Path: ...
     def note(self, text: str) -> None: ...
     def log(self, text: str) -> None: ...
@@ -313,6 +385,7 @@ class RuntimeContext:
     def bool_param(self, name: str, default: bool | None = None) -> bool: ...
     def number_param(self, name: str, default: float | None = None) -> float: ...
     def path_param(self, name: str, default: Path | None = None) -> Path: ...
+    def resolve_path(self, value: str | Path) -> Path: ...
     def overrides(
         self,
         exclude: Sequence[str] | None = None,
@@ -370,6 +443,10 @@ class ArtifactManifest:
     def version(self) -> str: ...
     @property
     def sha256(self) -> str: ...
+    @property
+    def storage_type(self) -> str: ...
+    @property
+    def size_bytes(self) -> int: ...
     @property
     def object_path(self) -> Path: ...
     @property

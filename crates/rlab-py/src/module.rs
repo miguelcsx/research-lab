@@ -33,7 +33,8 @@ use crate::py_result::{
     PyTableArtifact,
 };
 use crate::py_run::{
-    failed_host_event_line, PyRunDirectory, PyRunHandle, PyRunQuery, PyRunRecord, PyRuntimeContext,
+    failed_host_event_line, PyReportBundle, PyRunDirectory, PyRunHandle, PyRunQuery, PyRunRecord,
+    PyRuntimeContext,
 };
 use crate::py_stats::{compare_metric_arrays_py, paired_bootstrap_py, PyMetricComparison};
 use crate::py_strict::PyProductionPolicy;
@@ -96,6 +97,7 @@ fn register_classes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTableArtifact>()?;
     module.add_class::<PyLogArtifact>()?;
     module.add_class::<PyRuntimeContext>()?;
+    module.add_class::<PyReportBundle>()?;
     module.add_class::<PyRunDirectory>()?;
     module.add_class::<PyRunHandle>()?;
     module.add_class::<PyRunRecord>()?;

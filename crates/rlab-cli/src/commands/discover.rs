@@ -35,7 +35,10 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
     paths.ensure_base_dirs()?;
     let strict = command.strict || config.production.strict;
     let registry = discover_registry(&config, &paths, strict, command.refresh || command.no_cache)?;
-    render(filter_registry(registry, command.kind.as_deref(), command.all)?, json)?;
+    render(
+        filter_registry(registry, command.kind.as_deref(), command.all)?,
+        json,
+    )?;
     Ok(0)
 }
 
@@ -59,7 +62,9 @@ pub fn discover_registry(
 fn filter_registry(mut registry: Registry, kind: Option<&str>, all: bool) -> RlabResult<Registry> {
     let Some(kind) = kind else {
         if !all {
-            registry.records.retain(|record| record.kind.is_runtime_visible());
+            registry
+                .records
+                .retain(|record| record.kind.is_runtime_visible());
         }
         return Ok(registry);
     };
@@ -196,7 +201,10 @@ mod tests {
         for (kind, name) in [
             (RegistryKind::EXPERIMENT, "train"),
             (RegistryKind::LOADER, "artifact"),
-            (RegistryKind::parse("tokenizer").expect("custom kind"), "bpe"),
+            (
+                RegistryKind::parse("tokenizer").expect("custom kind"),
+                "bpe",
+            ),
         ] {
             registry
                 .insert(RegistryRecord::from_spec(RegistryRecordSpec {
@@ -255,7 +263,10 @@ mod tests {
     fn default_filter_hides_custom_records() {
         let filtered = filter_registry(registry(), None, false).expect("valid filter");
         assert_eq!(filtered.records.len(), 2);
-        assert!(filtered.records.iter().all(|record| record.kind.is_runtime_visible()));
+        assert!(filtered
+            .records
+            .iter()
+            .all(|record| record.kind.is_runtime_visible()));
     }
 
     #[test]

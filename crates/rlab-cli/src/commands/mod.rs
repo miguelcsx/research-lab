@@ -14,6 +14,7 @@ pub mod evaluate;
 pub mod exec;
 pub mod explain;
 pub mod freeze;
+pub mod gc;
 pub mod graph;
 pub mod handoff;
 pub mod impact;
@@ -25,6 +26,7 @@ pub mod lint;
 pub mod migrate;
 pub mod modules;
 pub mod notes;
+pub mod open;
 pub mod plan;
 pub mod report;
 pub mod run;
@@ -33,7 +35,9 @@ pub mod search;
 pub mod stats;
 pub mod study;
 pub mod table;
+pub mod ui;
 pub mod validate;
+pub mod view;
 
 use rlab_core::{RegistryKind, RegistryRecord};
 
