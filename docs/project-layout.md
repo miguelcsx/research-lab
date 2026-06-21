@@ -33,7 +33,7 @@ project/
 ├── experiments/
 ├── workflows/
 ├── benchmarks/
-├── components/
+├── evaluations/
 └── .rlab/
     ├── runs/
     ├── artifacts/
@@ -48,7 +48,7 @@ Module loading is conservative.
 
 1. `[python].modules` in `lab.toml`;
 2. `[tool.rlab].modules` in `pyproject.toml`;
-3. safe conventional modules such as `experiments`, `workflows`, `benchmarks`, and `components`.
+3. safe conventional modules such as `experiments`, `workflows`, `benchmarks`, and `evaluations`.
 
 `rlab` does not recursively import every Python file in a project by default. This avoids slow startup and accidental side effects.
 

@@ -4,8 +4,7 @@ import math
 
 import pytest
 
-from rlab import BaselineEntry, BaselineStore
-from rlab.baselines import BaselineStore as ModuleBaselineStore
+from rlab.baselines import BaselineEntry, BaselineStore
 
 
 def test_baselines_are_rust_backed() -> None:
@@ -18,7 +17,7 @@ def test_baselines_are_rust_backed() -> None:
     assert entries[0].metric == "accuracy"
     assert entries[0].value == 0.75
     assert entries[0].description == "tiny baseline"
-    assert ModuleBaselineStore().list() == []
+    assert BaselineStore().list() == []
 
 
 def test_baseline_store_validates_entries_in_rust() -> None:

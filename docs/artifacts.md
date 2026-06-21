@@ -22,11 +22,11 @@ rlab artifact describe artifact:model/small@candidate
 
 ```text
 .rlab/artifacts/
-├── .index.jsonl
+├── index.jsonl
 ├── objects/
 │   └── <sha-prefix>/<sha-rest>
 └── model/
-    ├── small@1.yaml
+    ├── small@1.json
     └── small/
         └── candidate
 ```
@@ -51,8 +51,8 @@ Cite immutable versions in papers, not `latest`.
 
 ```bash
 rlab graph lineage run:<run-id>
-rlab impact artifact:dataset/clean@1
-rlab invalidate artifact:dataset/clean@1 --reason "contaminated source"
+rlab impact artifact:model/small@1
+rlab invalidate artifact:model/small@1 --reason "bad upstream input"
 ```
 
 Invalidation records an audit event and can mark downstream runs stale when the run directories are available.

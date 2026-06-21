@@ -21,8 +21,7 @@ def test_cli_nested_run_uses_runtime_context_run(tmp_path: Path) -> None:
     ) == "hello"
 
     parent_result = json.loads((parent_run / "results.json").read_text(encoding="utf-8"))
-    parent_step = parent_result["data"]["steps"][0]["result"]
-    assert parent_step == {
+    assert parent_result["data"] == {
         "child_message": "hello",
         "child_score": 0.5,
         "child_status": "completed",
@@ -38,7 +37,7 @@ def test_cli_nested_run_failure_modes(tmp_path: Path) -> None:
     allowed = _run(tmp_path, "workflow:parent_allow_failure")
     parent_run = tmp_path / ".rlab" / "runs" / str(allowed["data"]["id"])
     parent_result = json.loads((parent_run / "results.json").read_text(encoding="utf-8"))
-    assert parent_result["data"]["steps"][0]["result"] == {"child_status": "failed"}
+    assert parent_result["data"] == {"child_status": "failed"}
 
 
 def _run(root: Path, target: str) -> dict[str, object]:
@@ -84,7 +83,7 @@ import rlab
 
 lab = rlab.Project()
 
-@lab.workflow("child", step="run")
+@lab.workflow("child")
 def child(ctx):
     output = ctx.output_path("message.txt")
     output.write_text(ctx.str_param("message"), encoding="utf-8")
@@ -92,11 +91,11 @@ def child(ctx):
     ctx.save_file("message", output)
     return {"ok": True}
 
-@lab.workflow("child_fail", step="run")
+@lab.workflow("child_fail")
 def child_fail(ctx):
     raise RuntimeError("planned child failure")
 
-@lab.workflow("parent", step="run")
+@lab.workflow("parent")
 def parent(ctx):
     child = ctx.run("workflow:child", {"message": "hello"}, seed=7)
     return {
@@ -105,11 +104,11 @@ def parent(ctx):
         "child_message": child.artifact("message").read_text(encoding="utf-8"),
     }
 
-@lab.workflow("parent_default_failure", step="run")
+@lab.workflow("parent_default_failure")
 def parent_default_failure(ctx):
     ctx.run("workflow:child_fail")
 
-@lab.workflow("parent_allow_failure", step="run")
+@lab.workflow("parent_allow_failure")
 def parent_allow_failure(ctx):
     child = ctx.run("workflow:child_fail", allow_failure=True)
     return {"child_status": child.status}

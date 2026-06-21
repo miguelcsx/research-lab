@@ -12,13 +12,36 @@ pub fn print_line(value: &str) {
 
 pub fn print_registry(registry: &Registry) -> RlabResult<()> {
     print_line(&registry_summary(registry));
+    print_registry_group(registry, "Runnable", |kind| kind.is_runnable())?;
+    print_registry_group(registry, "Support", |kind| kind.is_support())?;
+    print_registry_group(registry, "Internal", |kind| kind.is_internal())?;
+    print_registry_group(registry, "Custom", |kind| {
+        !kind.is_runnable() && !kind.is_support() && !kind.is_internal()
+    })?;
+    Ok(())
+}
+
+fn print_registry_group(
+    registry: &Registry,
+    label: &str,
+    include: impl Fn(&rlab_core::RegistryKind) -> bool,
+) -> RlabResult<()> {
+    let records = registry
+        .records
+        .iter()
+        .filter(|record| include(&record.kind))
+        .collect::<Vec<_>>();
+    if records.is_empty() {
+        return Ok(());
+    }
+    print_line(label);
     let mut table = Table::new(vec![
         "kind".to_string(),
         "ref".to_string(),
         "version".to_string(),
         "source".to_string(),
     ])?;
-    for record in &registry.records {
+    for record in records {
         table.push_row(vec![
             record.kind.as_str().to_string(),
             registry_reference(record),
@@ -106,8 +129,8 @@ mod tests {
     #[test]
     fn renders_standard_registry_reference() {
         assert_eq!(
-            registry_reference(&record(RegistryKind::DATASET, "project.clean")),
-            "dataset:project.clean"
+            registry_reference(&record(RegistryKind::EXPERIMENT, "project.clean")),
+            "experiment:project.clean"
         );
     }
 
@@ -126,7 +149,7 @@ mod tests {
     fn renders_registry_summary_counts_by_kind() {
         let mut registry = Registry::new();
         registry
-            .insert(record(RegistryKind::DATASET, "project.clean"))
+            .insert(record(RegistryKind::EXPERIMENT, "project.clean"))
             .expect("insert");
         registry
             .insert(record(
@@ -137,7 +160,7 @@ mod tests {
 
         assert_eq!(
             registry_summary(&registry),
-            "registry: 2 records (dataset=1, tokenizer=1)"
+            "registry: 2 records (experiment=1, tokenizer=1)"
         );
     }
 }

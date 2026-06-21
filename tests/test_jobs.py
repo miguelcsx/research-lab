@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from rlab import JobRecord
-from rlab.jobs import JobRecord as ModuleJobRecord
+from rlab.jobs import JobRecord
 
 
 def test_job_record_is_rust_backed(tmp_path: Path) -> None:
@@ -22,7 +21,7 @@ def test_job_record_is_rust_backed(tmp_path: Path) -> None:
     assert record.status == "completed"
     assert record.log_path == tmp_path / "job.log"
     assert record.exit_code == 0
-    assert ModuleJobRecord("job-2", "echo ok", "running", tmp_path / "run.log").exit_code is None
+    assert JobRecord("job-2", "echo ok", "running", tmp_path / "run.log").exit_code is None
 
 
 def test_job_record_validates_in_rust(tmp_path: Path) -> None:

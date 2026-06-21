@@ -1,6 +1,7 @@
 # Core concepts
 
-`rlab` has four core concepts: project, registry, runtime, and run.
+`rlab` has five core concepts: project, execution catalog, jobs, runs, and
+artifacts.
 
 ## Project
 
@@ -22,25 +23,32 @@ import rlab
 lab = rlab.Project()
 ```
 
-A project owns a registry of declarations.
+A project exposes runtime entries through decorators.
 
-## Registry
+## Execution Catalog
 
-The registry is the in-memory catalog of declarations discovered by importing project modules.
+The execution catalog is discovered by importing configured project modules.
 
-Examples of registry records:
+Runnable entries:
 
 - experiment;
+- study;
 - workflow;
-- component;
 - benchmark;
-- evaluation;
-- source;
-- transform;
-- dataset;
-- adapter.
+- evaluation.
 
-Durable registry records are declarative and reproducible. They store module, qualname, source, kind, name, version, tags, description, and metadata. They do not store process-local Python callable IDs.
+Support entries:
+
+- adapter;
+- loader;
+- executor;
+- resolver;
+- exporter;
+- reporter;
+- notifier.
+
+Catalog entries store module, qualname, source, kind, name, version, tags,
+description, and metadata. They do not store process-local Python callable IDs.
 
 ## Runtime context
 

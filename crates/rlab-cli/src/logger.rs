@@ -223,16 +223,16 @@ mod tests {
     fn formats_progress_with_counts() {
         assert_eq!(
             progress_message(
-                "dataset",
+                "run",
                 "smoke",
                 "completed",
                 42,
                 Some(100),
-                "rows",
+                "items",
                 "",
-                "wrote rows"
+                "wrote outputs"
             ),
-            "[dataset.smoke] completed 42/100 rows: wrote rows"
+            "[run.smoke] completed 42/100 items: wrote outputs"
         );
     }
 }

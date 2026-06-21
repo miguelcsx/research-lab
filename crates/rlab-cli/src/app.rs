@@ -27,7 +27,6 @@ pub enum Command {
     Config(commands::config::ConfigCommand),
     Discover(commands::discover::DiscoverCommand),
     Explain(commands::explain::ExplainCommand),
-    Check(commands::check::CheckCommand),
     Benchmark(commands::benchmark::BenchmarkCommand),
     Evaluate(commands::evaluate::EvaluateCommand),
     Run(commands::run::RunCommand),
@@ -42,7 +41,6 @@ pub enum Command {
     Journal(commands::journal::JournalCommand),
     Report(commands::report::ReportCommand),
     Jobs(commands::jobs::JobsCommand),
-    Data(commands::data::DataCommand),
     Graph(commands::graph::GraphCommand),
     Search(commands::search::SearchCommand),
     Lint(commands::lint::LintCommand),
@@ -83,7 +81,6 @@ where
             commands::discover::run(command, cli.root.as_deref(), cli.json)
         }
         Command::Explain(command) => commands::explain::run(command, cli.root.as_deref(), cli.json),
-        Command::Check(command) => commands::check::run(command, cli.root.as_deref(), cli.json),
         Command::Benchmark(command) => {
             commands::benchmark::run(command, cli.root.as_deref(), cli.json)
         }
@@ -104,7 +101,6 @@ where
         Command::Journal(command) => commands::journal::run(command, cli.root.as_deref(), cli.json),
         Command::Report(command) => commands::report::run(command, cli.root.as_deref(), cli.json),
         Command::Jobs(command) => commands::jobs::run(command, cli.root.as_deref(), cli.json),
-        Command::Data(command) => commands::data::run(command, cli.root.as_deref(), cli.json),
         Command::Graph(command) => commands::graph::run(command, cli.root.as_deref(), cli.json),
         Command::Search(command) => commands::search::run(command, cli.root.as_deref(), cli.json),
         Command::Lint(command) => commands::lint::run(command, cli.root.as_deref(), cli.json),
@@ -152,17 +148,6 @@ mod tests {
         let cli = Cli::parse_from(["rlab", "--json", "clean"]);
         assert!(cli.json);
         assert!(matches!(cli.command, Command::Clean(command) if !command.force));
-    }
-
-    #[test]
-    fn parses_check_command() {
-        let cli = Cli::parse_from(["rlab", "check", "attention.shape", "attention:sdpa"]);
-        assert!(matches!(
-            cli.command,
-            Command::Check(command)
-                if command.check_or_target == "attention.shape"
-                    && command.target.as_deref() == Some("attention:sdpa")
-        ));
     }
 
     #[test]

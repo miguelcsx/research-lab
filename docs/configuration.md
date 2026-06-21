@@ -64,7 +64,7 @@ artifacts = ".rlab/artifacts"
 cache = ".rlab/cache"
 
 [python]
-modules = ["experiments", "components", "benchmarks"]
+modules = ["experiments", "workflows", "benchmarks", "evaluations"]
 runner_module = "rlab._runner"
 
 [production]

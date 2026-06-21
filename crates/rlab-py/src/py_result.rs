@@ -301,46 +301,6 @@ impl PyLogArtifact {
     }
 }
 
-#[pyclass(name = "ResultSchema")]
-#[derive(Clone)]
-pub struct PyResultSchema {
-    inner: rlab_core::ResultSchema,
-}
-
-#[pymethods]
-impl PyResultSchema {
-    #[new]
-    #[pyo3(signature = (name, fields=None, version="1"))]
-    pub fn new(name: String, fields: Option<BTreeMap<String, String>>, version: &str) -> Self {
-        Self {
-            inner: rlab_core::ResultSchema::new(
-                name,
-                fields.unwrap_or_default(),
-                version.to_string(),
-            ),
-        }
-    }
-
-    #[getter]
-    pub fn name(&self) -> String {
-        self.inner.name.clone()
-    }
-
-    #[getter]
-    pub fn fields(&self) -> BTreeMap<String, String> {
-        self.inner.fields.clone()
-    }
-
-    #[getter]
-    pub fn version(&self) -> String {
-        self.inner.version.clone()
-    }
-
-    pub fn to_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
-        py_from_json(py, &from_json_str(&to_json(&self.inner)?)?)
-    }
-}
-
 #[pyfunction]
 pub fn bundle_from_metrics(metrics: BTreeMap<String, f64>) -> PyResult<PyResultBundle> {
     Ok(PyResultBundle {

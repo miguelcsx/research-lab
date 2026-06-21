@@ -133,7 +133,7 @@ import rlab
 
 lab = rlab.Project()
 
-@lab.workflow("child", step="run")
+@lab.workflow("child")
 def child(ctx):
     output = ctx.output_path("artifact.txt")
     output.write_text(ctx.str_param("message"), encoding="utf-8")

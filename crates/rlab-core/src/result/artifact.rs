@@ -83,20 +83,3 @@ impl LogArtifact {
         }
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResultSchema {
-    pub name: String,
-    pub fields: BTreeMap<String, String>,
-    pub version: String,
-}
-
-impl ResultSchema {
-    pub fn new(name: String, fields: BTreeMap<String, String>, version: String) -> Self {
-        Self {
-            name,
-            fields,
-            version,
-        }
-    }
-}

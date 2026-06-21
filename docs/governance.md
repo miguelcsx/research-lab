@@ -48,8 +48,8 @@ Policy checks are project/CI decisions. `rlab` exposes the primitives and diagno
 from rlab.governance import LicenseManifest, check_compatibility
 
 summary = check_compatibility([
-    LicenseManifest(name="dataset_a", license="MIT"),
-    LicenseManifest(name="dataset_b", license="Apache-2.0"),
+    LicenseManifest(name="corpus_a", license="MIT"),
+    LicenseManifest(name="corpus_b", license="Apache-2.0"),
 ])
 ```
 

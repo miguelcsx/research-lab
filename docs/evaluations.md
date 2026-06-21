@@ -2,21 +2,17 @@
 
 An evaluation suite measures a model/system across one or more tasks.
 
-## Define a component and evaluation task
+## Define an Evaluation
 
 ```python
 import rlab
 
 lab = rlab.Project()
 
-@lab.component("model", "project.constant")
-class ConstantModel:
-    def predict(self, x):
-        return 1
-
-@lab.evaluation("project.quick", "score")
-def score(model, ctx):
-    value = float(model.predict("x") == 1)
+@lab.evaluation("project.quick")
+def score(ctx):
+    prediction = int(ctx.param("prediction", 1))
+    value = float(prediction == 1)
     ctx.log_metric("score.score", value)
     return {"score": value}
 ```
@@ -24,7 +20,7 @@ def score(model, ctx):
 Run:
 
 ```bash
-rlab evaluate project.quick --model model:project.constant
+rlab run evaluation:project.quick --set prediction=1
 ```
 
 Successful evaluations print their metrics and an inspection command. A

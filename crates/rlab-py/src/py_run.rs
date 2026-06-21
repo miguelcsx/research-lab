@@ -244,6 +244,27 @@ impl PyRuntimeContext {
         to_json(&py_to_json(py, self.params.clone_ref(py).into())?)
     }
 
+    #[pyo3(signature = (schema=None))]
+    pub fn params(&self, py: Python<'_>, schema: Option<PyObject>) -> PyResult<PyObject> {
+        let params = self.params.clone_ref(py).into();
+        match schema {
+            Some(schema) => validate_params(py, schema, params),
+            None => Ok(params),
+        }
+    }
+
+    pub fn params_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
+        Ok(self.params.clone_ref(py).into())
+    }
+
+    #[pyo3(signature = (name, default=None))]
+    pub fn param(&self, py: Python<'_>, name: &str, default: Option<PyObject>) -> PyResult<PyObject> {
+        match self.param_obj(py, name)? {
+            Some(value) => Ok(value.unbind()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
     #[pyo3(signature = (name, default=None))]
     pub fn str_param(
         &self,
@@ -728,11 +749,6 @@ impl PyRuntimeContext {
     }
 
     #[getter]
-    pub fn params(&self, py: Python<'_>) -> PyObject {
-        self.params.clone_ref(py).into()
-    }
-
-    #[getter]
     pub fn output_dir(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         let Some(run_dir) = &self.run_dir else {
             return Ok(None);
@@ -937,6 +953,38 @@ fn py_from_json(py: Python<'_>, value: &Value) -> PyResult<PyObject> {
         .import_bound("json")?
         .call_method1("loads", (to_json(value)?,))?
         .unbind())
+}
+
+fn validate_params(py: Python<'_>, schema: PyObject, params: PyObject) -> PyResult<PyObject> {
+    let schema = schema.bind(py);
+    if let Ok(validate) = schema.getattr("model_validate") {
+        if validate.is_callable() {
+            return Ok(validate.call1((params,))?.unbind());
+        }
+    }
+
+    let dataclasses = py.import_bound("dataclasses")?;
+    if dataclasses
+        .getattr("is_dataclass")?
+        .call1((schema,))?
+        .extract::<bool>()?
+    {
+        return instantiate_with_kwargs(schema, params);
+    }
+
+    if schema.is_callable() {
+        return instantiate_with_kwargs(schema, params);
+    }
+
+    Err(pyo3::exceptions::PyTypeError::new_err(
+        "params schema must be callable or define model_validate()",
+    ))
+}
+
+fn instantiate_with_kwargs(schema: &Bound<'_, PyAny>, params: PyObject) -> PyResult<PyObject> {
+    let params = params.bind(schema.py());
+    let kwargs = params.downcast::<PyDict>()?;
+    Ok(schema.call((), Some(kwargs))?.unbind())
 }
 
 fn write_host_event(py: Python<'_>, event: HostEvent) -> PyResult<()> {

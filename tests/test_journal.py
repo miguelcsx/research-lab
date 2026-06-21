@@ -4,8 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from rlab import DecisionEntry, IdeaEntry, NegativeResultEntry, NoteEntry
-from rlab.journal import DecisionEntry as ModuleDecisionEntry
+from rlab.journal import DecisionEntry, IdeaEntry, NegativeResultEntry, NoteEntry
 
 
 def test_journal_entries_are_rust_backed() -> None:
@@ -27,7 +26,7 @@ def test_journal_entries_are_rust_backed() -> None:
     assert idea.status == "planned"
     assert idea.id.startswith("idea_")
     assert note.run_id == "run-1"
-    assert ModuleDecisionEntry("ok").criteria == {}
+    assert DecisionEntry("ok").criteria == {}
 
 
 def test_idea_status_validates_in_rust() -> None:

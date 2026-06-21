@@ -1,44 +1,32 @@
 # Benchmarks
 
-A benchmark measures one target component.
+A benchmark is a runnable target for repeatable measurement. The benchmark
+decides what to load, compare, or measure from runtime params.
 
-## Component and benchmark
+## Define a Benchmark
 
 ```python
 import rlab
 
 lab = rlab.Project()
 
-@lab.component("tokenizer", "project.byte")
-class ByteTokenizer:
-    def encode(self, text: str) -> list[int]:
-        return list(text.encode())
-
-@lab.benchmark("project.tokenizer.length", target="tokenizer")
-def length(target, ctx):
-    return {"tokens": float(len(target.encode("research")))}
+@lab.benchmark("project.tokenizer.length")
+def length(ctx):
+    text = ctx.param("text", "research")
+    tokens = list(str(text).encode())
+    value = float(len(tokens))
+    ctx.log_metric("tokens", value)
+    return {"tokens": value}
 ```
 
 Run:
 
 ```bash
-rlab benchmark tokenizer:project.byte project.tokenizer.length
+rlab run benchmark:project.tokenizer.length --set text=research
 ```
 
-## Target references
+## Targets
 
-A target reference has the shape:
-
-```text
-<kind>:<name>
-```
-
-Example:
-
-```text
-tokenizer:project.byte
-model:project.constant
-solver:fdtd_v1
-```
-
-Rust validates that the benchmark target kind matches the requested component kind.
+If a benchmark needs a model, tokenizer, solver, corpus, or external system,
+encode that lookup in project code or pass an artifact/run reference through
+params. `rlab` stores the run evidence; it does not own the scientific object.

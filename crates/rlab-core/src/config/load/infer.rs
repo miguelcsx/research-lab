@@ -11,7 +11,6 @@ const CONVENTIONAL_MODULES: &[&str] = &[
     "workflows",
     "benchmarks",
     "evaluations",
-    "components",
 ];
 
 const PACKAGE_SOURCE_DIR: &str = "src";

@@ -5,26 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Final, Protocol, TypeVar
 
-from rlab._rlab import (
-    DataDecision,
-    data_boundary,
-    data_drop,
-    data_keep,
-    data_update,
-)
-
 T = TypeVar("T")
 
 REF_SEPARATOR: Final = ":"
 ATTR_RLAB_REF: Final = "__rlab_ref__"
 
 __all__ = [
-    "DataDecision",
     "RegistryProject",
-    "data_boundary",
-    "data_drop",
-    "data_keep",
-    "data_update",
     "decorator_factory",
 ]
 

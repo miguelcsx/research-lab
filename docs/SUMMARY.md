@@ -14,7 +14,6 @@
 - [Workflows](workflows.md)
 - [Benchmarks](benchmarks.md)
 - [Evaluations](evaluations.md)
-- [Data pipelines](data.md)
 - [Runs](runs.md)
 - [Artifacts and lineage](artifacts.md)
 - [Reproducibility](reproducibility.md)

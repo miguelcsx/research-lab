@@ -8,7 +8,6 @@ from rlab import (
     FigureArtifact,
     FileArtifact,
     LogArtifact,
-    ResultSchema,
     TableArtifact,
 )
 from rlab.results import FileArtifact as ModuleFileArtifact
@@ -39,18 +38,10 @@ def test_result_artifacts_are_rust_backed(tmp_path: Path) -> None:
     assert ModuleFileArtifact("x", path).kind == "file"
 
 
-def test_specialized_artifacts_and_result_schema_are_rust_backed(tmp_path: Path) -> None:
+def test_specialized_artifacts_are_rust_backed(tmp_path: Path) -> None:
     assert FigureArtifact("plot", tmp_path / "plot.png").kind == "figure"
     assert TableArtifact("rows", tmp_path / "rows.json").kind == "table"
     assert LogArtifact("stdout", tmp_path / "stdout.txt").kind == "log"
-
-    schema = ResultSchema("eval", {"accuracy": "float"})
-
-    assert schema.to_dict() == {
-        "name": "eval",
-        "fields": {"accuracy": "float"},
-        "version": "1",
-    }
 
 
 def test_artifact_store_resolves_versions_and_aliases(tmp_path: Path) -> None:

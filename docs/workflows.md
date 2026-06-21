@@ -2,19 +2,16 @@
 
 A workflow composes multiple steps into one execution.
 
-## Decorated workflow steps
+## Decorated workflow
 
 ```python
 import rlab
 
 lab = rlab.Project()
 
-@lab.workflow("project.pipeline", step="prepare")
-def prepare(ctx):
+@lab.workflow("project.training_flow", steps=("prepare", "train"))
+def training_flow(ctx):
     ctx.log_metric("prepared", 1.0)
-
-@lab.workflow("project.pipeline", step="train")
-def train(ctx):
     ctx.log_metric("loss", 0.2)
     return {"loss": 0.2}
 ```
@@ -22,36 +19,9 @@ def train(ctx):
 Run:
 
 ```bash
-rlab run workflow:project.pipeline
+rlab run workflow:project.training_flow
 ```
 
-Repeated declarations with the same workflow name are composed in declaration order.
-
-## Imperative workflow definition
-
-```python
-workflow = lab.define_workflow(
-    "project.small",
-    steps=(
-        rlab.WorkflowStep(name="train", fn=train),
-    ),
-)
-```
-
-## External steps
-
-```python
-workflow = lab.define_workflow(
-    "project.external",
-    steps=(
-        rlab.ExternalStep(
-            name="compile",
-            command=("make", "benchmark"),
-            cwd="external/project",
-            timeout_seconds=300,
-        ),
-    ),
-)
-```
-
-External step stdout/stderr are captured as run artifacts/logs.
+The `steps` metadata is descriptive. Python still exposes one callable:
+`def training_flow(ctx)`. If the workflow needs child runs, call `ctx.run(...)` from
+inside the workflow and rlab records the child job evidence.

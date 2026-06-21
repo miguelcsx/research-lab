@@ -25,6 +25,8 @@ pub struct DiscoverCommand {
     pub no_cache: bool,
     #[arg(long)]
     pub strict: bool,
+    #[arg(long)]
+    pub all: bool,
 }
 
 pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabResult<u8> {
@@ -33,7 +35,7 @@ pub fn run(command: DiscoverCommand, root: Option<&Path>, json: bool) -> RlabRes
     paths.ensure_base_dirs()?;
     let strict = command.strict || config.production.strict;
     let registry = discover_registry(&config, &paths, strict, command.refresh || command.no_cache)?;
-    render(filter_registry(registry, command.kind.as_deref())?, json)?;
+    render(filter_registry(registry, command.kind.as_deref(), command.all)?, json)?;
     Ok(0)
 }
 
@@ -54,10 +56,17 @@ pub fn discover_registry(
     Ok(registry)
 }
 
-fn filter_registry(mut registry: Registry, kind: Option<&str>) -> RlabResult<Registry> {
+fn filter_registry(mut registry: Registry, kind: Option<&str>, all: bool) -> RlabResult<Registry> {
     let Some(kind) = kind else {
+        if !all {
+            registry.records.retain(|record| record.kind.is_runtime_visible());
+        }
         return Ok(registry);
     };
+    if normalize_kind(kind) == "support" {
+        registry.records.retain(|record| record.kind.is_support());
+        return Ok(registry);
+    }
     let kind = rlab_core::RegistryKind::parse(normalize_kind(kind))?;
     registry.records.retain(|record| record.kind == kind);
     Ok(registry)
@@ -186,7 +195,8 @@ mod tests {
         let mut registry = Registry::new();
         for (kind, name) in [
             (RegistryKind::EXPERIMENT, "train"),
-            (RegistryKind::DATASET, "corpus"),
+            (RegistryKind::LOADER, "artifact"),
+            (RegistryKind::parse("tokenizer").expect("custom kind"), "bpe"),
         ] {
             registry
                 .insert(RegistryRecord::from_spec(RegistryRecordSpec {
@@ -207,16 +217,16 @@ mod tests {
 
     #[test]
     fn filters_by_singular_kind() {
-        let filtered = filter_registry(registry(), Some("experiment")).expect("valid kind");
+        let filtered = filter_registry(registry(), Some("experiment"), false).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
         assert_eq!(filtered.records[0].kind, RegistryKind::EXPERIMENT);
     }
 
     #[test]
-    fn filters_by_plural_kind() {
-        let filtered = filter_registry(registry(), Some("datasets")).expect("valid kind");
+    fn filters_by_support_pseudo_kind() {
+        let filtered = filter_registry(registry(), Some("support"), false).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
-        assert_eq!(filtered.records[0].kind, RegistryKind::DATASET);
+        assert_eq!(filtered.records[0].kind, RegistryKind::LOADER);
     }
 
     #[test]
@@ -236,9 +246,22 @@ mod tests {
             }))
             .expect("valid registry record");
 
-        let filtered = filter_registry(registry, Some("studies")).expect("valid kind");
+        let filtered = filter_registry(registry, Some("studies"), false).expect("valid kind");
         assert_eq!(filtered.records.len(), 1);
         assert_eq!(filtered.records[0].kind, RegistryKind::STUDY);
+    }
+
+    #[test]
+    fn default_filter_hides_custom_records() {
+        let filtered = filter_registry(registry(), None, false).expect("valid filter");
+        assert_eq!(filtered.records.len(), 2);
+        assert!(filtered.records.iter().all(|record| record.kind.is_runtime_visible()));
+    }
+
+    #[test]
+    fn all_filter_keeps_custom_records() {
+        let filtered = filter_registry(registry(), None, true).expect("valid filter");
+        assert_eq!(filtered.records.len(), 3);
     }
 
     #[test]

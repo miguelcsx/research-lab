@@ -39,7 +39,6 @@ Rust owns:
 - file locking;
 - schema versions;
 - CLI orchestration.
-- dataset execution loops, decisions, audit artifacts, and sink dispatch;
 - external command execution.
 
 Python owns:

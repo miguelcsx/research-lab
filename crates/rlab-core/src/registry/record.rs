@@ -17,21 +17,14 @@ const KIND_EXPERIMENT: &str = "experiment";
 const KIND_BENCHMARK: &str = "benchmark";
 const KIND_WORKFLOW: &str = "workflow";
 const KIND_EVALUATION: &str = "evaluation";
-const KIND_EXTERNAL_EVALUATION: &str = "external_evaluation";
-const KIND_RESULT_SCHEMA: &str = "result_schema";
 const KIND_STUDY: &str = "study";
-const KIND_SOURCE: &str = "source";
-const KIND_TRANSFORM: &str = "transform";
-const KIND_FILTER: &str = "filter";
-const KIND_GROUP: &str = "group";
-const KIND_DEDUP: &str = "dedup";
-const KIND_SINK: &str = "sink";
-const KIND_CHECK: &str = "check";
-const KIND_METRIC: &str = "metric";
-const KIND_PIPELINE: &str = "pipeline";
-const KIND_DATASET: &str = "dataset";
 const KIND_ADAPTER: &str = "adapter";
 const KIND_LOADER: &str = "loader";
+const KIND_EXECUTOR: &str = "executor";
+const KIND_RESOLVER: &str = "resolver";
+const KIND_EXPORTER: &str = "exporter";
+const KIND_REPORTER: &str = "reporter";
+const KIND_NOTIFIER: &str = "notifier";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -42,21 +35,14 @@ impl RegistryKind {
     pub const BENCHMARK: Self = Self::constant(KIND_BENCHMARK);
     pub const WORKFLOW: Self = Self::constant(KIND_WORKFLOW);
     pub const EVALUATION: Self = Self::constant(KIND_EVALUATION);
-    pub const EXTERNAL_EVALUATION: Self = Self::constant(KIND_EXTERNAL_EVALUATION);
-    pub const RESULT_SCHEMA: Self = Self::constant(KIND_RESULT_SCHEMA);
     pub const STUDY: Self = Self::constant(KIND_STUDY);
-    pub const SOURCE: Self = Self::constant(KIND_SOURCE);
-    pub const TRANSFORM: Self = Self::constant(KIND_TRANSFORM);
-    pub const FILTER: Self = Self::constant(KIND_FILTER);
-    pub const GROUP: Self = Self::constant(KIND_GROUP);
-    pub const DEDUP: Self = Self::constant(KIND_DEDUP);
-    pub const SINK: Self = Self::constant(KIND_SINK);
-    pub const CHECK: Self = Self::constant(KIND_CHECK);
-    pub const METRIC: Self = Self::constant(KIND_METRIC);
-    pub const PIPELINE: Self = Self::constant(KIND_PIPELINE);
-    pub const DATASET: Self = Self::constant(KIND_DATASET);
     pub const ADAPTER: Self = Self::constant(KIND_ADAPTER);
     pub const LOADER: Self = Self::constant(KIND_LOADER);
+    pub const EXECUTOR: Self = Self::constant(KIND_EXECUTOR);
+    pub const RESOLVER: Self = Self::constant(KIND_RESOLVER);
+    pub const EXPORTER: Self = Self::constant(KIND_EXPORTER);
+    pub const REPORTER: Self = Self::constant(KIND_REPORTER);
+    pub const NOTIFIER: Self = Self::constant(KIND_NOTIFIER);
 
     const fn constant(value: &'static str) -> Self {
         Self(Cow::Borrowed(value))
@@ -70,21 +56,14 @@ impl RegistryKind {
             KIND_BENCHMARK => Self::BENCHMARK,
             KIND_WORKFLOW => Self::WORKFLOW,
             KIND_EVALUATION => Self::EVALUATION,
-            KIND_EXTERNAL_EVALUATION => Self::EXTERNAL_EVALUATION,
-            KIND_RESULT_SCHEMA => Self::RESULT_SCHEMA,
             KIND_STUDY => Self::STUDY,
-            KIND_SOURCE => Self::SOURCE,
-            KIND_TRANSFORM => Self::TRANSFORM,
-            KIND_FILTER => Self::FILTER,
-            KIND_GROUP => Self::GROUP,
-            KIND_DEDUP => Self::DEDUP,
-            KIND_SINK => Self::SINK,
-            KIND_CHECK => Self::CHECK,
-            KIND_METRIC => Self::METRIC,
-            KIND_PIPELINE => Self::PIPELINE,
-            KIND_DATASET => Self::DATASET,
             KIND_ADAPTER => Self::ADAPTER,
             KIND_LOADER => Self::LOADER,
+            KIND_EXECUTOR => Self::EXECUTOR,
+            KIND_RESOLVER => Self::RESOLVER,
+            KIND_EXPORTER => Self::EXPORTER,
+            KIND_REPORTER => Self::REPORTER,
+            KIND_NOTIFIER => Self::NOTIFIER,
             _ => Self(Cow::Owned(value.to_string())),
         })
     }
@@ -95,6 +74,46 @@ impl RegistryKind {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn is_runnable(&self) -> bool {
+        matches!(
+            self.as_str(),
+            KIND_EXPERIMENT | KIND_STUDY | KIND_WORKFLOW | KIND_BENCHMARK | KIND_EVALUATION
+        )
+    }
+
+    pub fn is_support(&self) -> bool {
+        matches!(
+            self.as_str(),
+            KIND_ADAPTER
+                | KIND_LOADER
+                | KIND_EXECUTOR
+                | KIND_RESOLVER
+                | KIND_EXPORTER
+                | KIND_REPORTER
+                | KIND_NOTIFIER
+        )
+    }
+
+    pub fn is_internal(&self) -> bool {
+        false
+    }
+
+    pub fn is_runtime_visible(&self) -> bool {
+        self.is_runnable() || self.is_support()
+    }
+
+    pub fn category(&self) -> &'static str {
+        if self.is_runnable() {
+            "runnable"
+        } else if self.is_support() {
+            "support"
+        } else if self.is_internal() {
+            "internal"
+        } else {
+            "custom"
+        }
     }
 }
 
@@ -309,10 +328,7 @@ mod tests {
             expect_ok(RegistryKind::parse(KIND_BENCHMARK)),
             RegistryKind::BENCHMARK
         );
-        assert_eq!(
-            expect_ok(RegistryKind::parse(KIND_DATASET)),
-            RegistryKind::DATASET
-        );
+        assert_eq!(expect_ok(RegistryKind::parse(KIND_LOADER)), RegistryKind::LOADER);
     }
 
     #[test]
@@ -331,10 +347,22 @@ mod tests {
             RegistryKind::EXPERIMENT,
             RegistryKind::BENCHMARK,
             RegistryKind::STUDY,
-            RegistryKind::DATASET,
+            RegistryKind::ADAPTER,
+            RegistryKind::LOADER,
         ] {
             assert_eq!(expect_ok(RegistryKind::parse(kind.as_str())), kind);
         }
+    }
+
+    #[test]
+    fn registry_kind_categories_are_runtime_owned() {
+        assert!(RegistryKind::EXPERIMENT.is_runnable());
+        assert!(RegistryKind::LOADER.is_support());
+        assert_eq!(
+            expect_ok(RegistryKind::parse("tokenizer")).category(),
+            "custom"
+        );
+        assert!(!expect_ok(RegistryKind::parse("tokenizer")).is_internal());
     }
 
     #[test]

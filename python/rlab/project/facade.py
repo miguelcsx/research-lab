@@ -1,90 +1,52 @@
-"""Thin Project facade over the Rust registry core."""
+"""Thin runtime decorator facade over the Rust registry core."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import is_dataclass
-from inspect import Parameter, signature
+from dataclasses import fields, is_dataclass
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TypeVar, cast
 
 from rlab._decorators import decorator_factory
-from rlab._rlab import ComponentSpec, ProjectCore
+from rlab._rlab import ProjectCore
 from rlab._typing import JsonObject
-from rlab.components import (
-    ComponentContract,
-    Requirements,
-    collect_contracts,
-    collect_component_requirements,
-)
 
-from .components import (
-    component_identity,
-    component_metadata,
-    schema_dict,
-    validate_model_schema,
-)
 from .constants import (
     DEFAULT_VERSION,
-    ERROR_COMPONENT_NOT_CALLABLE,
-    ERROR_COMPONENT_PARAMS_MAPPING,
-    KEY_DESCRIPTION,
+    KEY_ADAPTER,
+    KEY_AXES,
     KEY_EXPERIMENT_TYPE,
-    KEY_PARAMS_SCHEMA,
-    KEY_PROVIDES,
-    KEY_SPEC,
-    KEY_STAGES,
-    KEY_STEP,
+    KEY_PARAM_SCHEMA,
+    KEY_PARAMS,
+    KEY_SEEDS,
     KEY_STEPS,
     KEY_TAGS,
     KEY_TARGET,
-    KEY_TASK,
-    KEY_SUITE,
+    KEY_TARGETS,
     KEY_VERSION,
+    KIND_ADAPTER,
     KIND_BENCHMARK,
-    KIND_COMPONENT_EXTERNAL_EVALUATION,
-    KIND_DATASET,
-    KIND_DATASET_SINK,
-    KIND_DATASET_SOURCE,
     KIND_EVALUATION,
+    KIND_EXECUTOR,
     KIND_EXPERIMENT,
-    KIND_PIPELINE,
+    KIND_EXPORTER,
+    KIND_LOADER,
+    KIND_NOTIFIER,
+    KIND_REPORTER,
+    KIND_RESOLVER,
     KIND_STUDY,
     KIND_WORKFLOW,
-    REFERENCE_SEPARATOR,
 )
 from .registry import default_project_name, pinned_or_registered_project
-from .registry_helpers import dataset_sinks
-from .schemas import signature_schema, validate_signature_params
-from .sentinels import SentinelCallable, declaration_sentinel, object_origin, strict_unstable_declaration
+from .sentinels import object_origin, strict_unstable_declaration
 from .serde import first_doc_line, jsonable_mapping, jsonable_spec, string_list
 
 T = TypeVar("T")
 
 
-class Builder:
-    """Runtime-only component resolver injected into component builders."""
-
-    def __init__(self, project: "Project") -> None:
-        self._project = project
-
-    def __call__(
-        self,
-        spec: object,
-        *inject: object,
-        kind: str | None = None,
-        **kwargs: object,
-    ) -> object:
-        component = self._project._component_spec(spec, kind)
-        return self._project.build(component.ref, component, *inject, **kwargs)
-
-    def spec(self, value: object, kind: str | None = None) -> JsonObject:
-        return cast(JsonObject, self._project._component_spec(value, kind).to_dict())
-
-
 class Project:
-    """Python decorator ergonomics backed by Rust-owned registry state."""
+    """Runtime entry decorator facade backed by Rust-owned registry state."""
 
     def __new__(
         cls,
@@ -113,92 +75,14 @@ class Project:
     def record(self, kind: str, name: str) -> JsonObject:
         return cast(JsonObject, json.loads(self._core.record_json(kind, name)))
 
-    def config(
-        self,
-        reference: str,
-        *,
-        schema: type[object] | None = None,
-        overrides: Mapping[str, object] | None = None,
-        strict: bool = False,
-        **metadata: object,
-    ) -> Callable[[T], T] | object:
-        """Declare or resolve a typed config by registry reference."""
-        if schema is None and not metadata:
-            return self._core.resolve_config(
-                reference,
-                json.dumps(dict(overrides or {}), sort_keys=True),
-                strict,
-            )
-        if overrides is not None:
-            raise TypeError("lab.config declaration cannot include overrides")
-        if schema is None:
-            raise TypeError("lab.config declaration requires schema=")
-
-        def register(factory: T) -> T:
-            values = dict(metadata)
-            values["config_reference"] = reference
-            values[KEY_PARAMS_SCHEMA] = schema_dict(
-                schema,
-                f"config schema for {reference}",
-            )
-            result = self._decorator("config", reference, values)(factory)
-            self._core.set_component_extras("config", reference, schema, None)
-            return result
-
-        return register
-
     def experiment(
         self,
         name: str,
         *,
-        params_schema: type[object] | None = None,
+        params: object | None = None,
         **metadata: object,
     ) -> Callable[[T], T]:
-        values = dict(metadata)
-        if params_schema is not None:
-            values[KEY_PARAMS_SCHEMA] = schema_dict(
-                params_schema,
-                f"params schema for experiment:{name}",
-            )
-            if "params" in values:
-                validate_model_schema(params_schema, values["params"], "experiment", name)
-
-        def register(obj: T) -> T:
-            result = self._decorator(KIND_EXPERIMENT, name, values)(obj)
-            if params_schema is not None:
-                self._core.set_component_extras(
-                    KIND_EXPERIMENT,
-                    name,
-                    params_schema,
-                    None,
-                )
-            return result
-
-        return register
-
-    def declare(
-        self,
-        kind: str,
-        name: str,
-        *,
-        run: object | None = None,
-        **metadata: object,
-    ) -> str:
-        self._register(
-            kind=kind,
-            name=name,
-            obj=run if run is not None else declaration_sentinel(name),
-            metadata=metadata,
-        )
-        return name
-
-    def declaration(
-        self,
-        kind: str,
-        name: str,
-        **metadata: object,
-    ) -> Callable[[T], T]:
-        return self._decorator(kind, name, metadata)
+        return self._runtime_decorator(KIND_EXPERIMENT, name, params=params, metadata=metadata)
 
     def sweep(self, name: str, **metadata: object) -> Callable[[T], T]:
         return self._planned_experiment("sweep", name, metadata)
@@ -209,260 +93,85 @@ class Project:
     def submission(self, name: str, **metadata: object) -> Callable[[T], T]:
         return self._planned_experiment("submission", name, metadata)
 
-    def study(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator(KIND_STUDY, name, metadata)
-
-    def study_from_spec(self, name: str, spec: object) -> Callable[[T], T]:
-        return self._decorator(KIND_STUDY, name, {KEY_SPEC: jsonable_spec(spec)})
-
-    def experiment_from_spec(self, name: str, spec: object) -> Callable[[T], T]:
-        return self._decorator(KIND_EXPERIMENT, name, {KEY_SPEC: jsonable_spec(spec)})
-
-    def external_evaluation(self, name: str, **metadata: object) -> Callable[[T], T]:
-        def decorate(obj: T | None = None) -> T:
-            target = obj if obj is not None else SentinelCallable(name)
-            self._register(
-                kind=KIND_COMPONENT_EXTERNAL_EVALUATION,
-                name=name,
-                obj=target,
-                metadata=metadata,
-            )
-            return cast(T, target)
-
-        return decorate
-
-    def adapter(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("adapter", name, metadata)
-
-    def source(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("source", name, metadata)
-
-    def transform(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("transform", name, metadata)
-
-    def filter(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("filter", name, metadata)
-
-    def group(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("group", name, metadata)
-
-    def dedup(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("dedup", name, metadata)
-
-    def sink(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("sink", name, metadata)
-
-    def check(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("check", name, metadata)
-
-    def metric(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("metric", name, metadata)
-
-    def loader(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("loader", name, metadata)
-
-    def pipeline(
+    def study(
         self,
         name: str,
-        *stages: object,
-        version: str = DEFAULT_VERSION,
-        tags: list[str] | tuple[str, ...] = (),
-        description: str | None = None,
-    ) -> str:
-        self._declare_data(
-            KIND_PIPELINE,
-            name,
-            {
-                KEY_STAGES: [jsonable_spec(stage) for stage in stages],
-                KEY_VERSION: version,
-                KEY_TAGS: list(tags),
-                KEY_DESCRIPTION: description,
-            },
-        )
-        return name
-
-    def dataset(self, name: str, **metadata: object) -> str:
-        metadata = self._dataset_metadata(name, metadata)
-        self._declare_data(KIND_DATASET, name, metadata)
-        self._bind_dataset_callables(name, metadata)
-        return name
-
-    def define_workflow(self, name: str, *, steps: Iterable[object]) -> object:
-        return self._declare_data(
-            KIND_WORKFLOW,
-            name,
-            {KEY_STEPS: [jsonable_spec(step) for step in steps]},
-        )
-
-    def component(
-        self,
-        reference: str | None = None,
         *,
-        kind: str | None = None,
-        name: str | None = None,
-        spec: type[object] | None = None,
-        params_schema: type[object] | None = None,
-        requires: Requirements = Requirements(),
-        provides: Requirements = Requirements(),
+        targets: Iterable[object] = (),
+        params: object | None = None,
+        axes: object | None = None,
+        seeds: Iterable[object] = (),
         **metadata: object,
     ) -> Callable[[T], T]:
-        if spec is not None and params_schema is not None:
-            raise TypeError("lab.component accepts spec= or params_schema=, not both")
-        component_kind, component_name = component_identity(reference, kind, name)
-        values = component_metadata(
-            component_kind,
-            component_name,
-            requires,
-            provides,
-            metadata,
-        )
-        schema: object | None = spec or params_schema
+        values = dict(metadata)
+        if targets:
+            values[KEY_TARGETS] = [jsonable_spec(target) for target in targets]
+        if params is not None:
+            values[KEY_PARAMS] = jsonable_spec(params)
+        if axes is not None:
+            values[KEY_AXES] = jsonable_spec(axes)
+        if seeds:
+            values[KEY_SEEDS] = [jsonable_spec(seed) for seed in seeds]
+        return self._runtime_decorator(KIND_STUDY, name, metadata=values)
 
-        if spec is not None:
-            setattr(spec, "__rlab_ref__", f"{component_kind}:{component_name}")
-            setattr(spec, "__rlab_kind__", component_kind)
-            setattr(spec, "__rlab_name__", component_name)
-
-        if schema is not None:
-            values[KEY_PARAMS_SCHEMA] = schema_dict(
-                cast(type[object], schema),
-                f"params schema for {component_kind}:{component_name}",
-            )
-
-        def register(obj: T) -> T:
-            nonlocal schema
-            if schema is None:
-                values[KEY_PARAMS_SCHEMA] = signature_schema(obj)
-                schema = None
-
-            result = self._decorator(component_kind, component_name, values)(obj)
-            self._core.set_component_extras(
-                component_kind,
-                component_name,
-                schema,
-                json.dumps(requires.to_dict(), sort_keys=True),
-            )
-            return result
-
-        return register
-
-    def build(
+    def workflow(
         self,
-        reference: str,
-        spec: object | None = None,
-        *inject: object,
-        **legacy_kwargs: object,
-    ) -> object:
-        kind, name, params = self._build_parts(reference, spec)
-        factory = self.resolve(kind, name)
-
-        if not callable(factory):
-            raise TypeError(ERROR_COMPONENT_NOT_CALLABLE.format(kind=kind, name=name))
-
-        schema = self._core.schema(kind, name)
-        builder_kwargs = self._builder_kwargs(factory, legacy_kwargs)
-        if schema is not None:
-            validated = validate_model_schema(
-                cast(type[object], schema), params, kind, name
-            )
-            if not self._accepts_schema_arg(factory, len(inject)):
-                return cast(Callable[..., object], factory)(
-                    *inject,
-                    **builder_kwargs,
-                    **legacy_kwargs,
-                )
-            return cast(Callable[..., object], factory)(
-                *inject,
-                validated,
-                **builder_kwargs,
-                **legacy_kwargs,
-            )
-
-        if not isinstance(params, Mapping):
-            raise TypeError(ERROR_COMPONENT_PARAMS_MAPPING.format(kind=kind, name=name))
-
-        return cast(Callable[..., object], factory)(
-            *inject,
-            **validate_signature_params(factory, params, injected=len(inject)),
-            **builder_kwargs,
-            **legacy_kwargs,
-        )
-
-    def build_spec(
-        self,
-        spec: object,
-        *inject: object,
-        kind: str | None = None,
-        **kwargs: object,
-    ) -> object:
-        component = self._component_spec(spec, kind)
-        return self.build(component.ref, component, *inject, **kwargs)
-
-    def requirements(self, kind: str, name: str) -> Requirements:
-        value = self._core.requirements_json(kind, name)
-        if value is None:
-            return Requirements()
-        data = json.loads(value)
-        return _requirements_from_mapping(data)
-
-    def requirements_for(
-        self,
-        kind: str,
-        specs: Iterable[object],
-    ) -> Requirements:
-        return self.contracts_for(kind, specs).requires
-
-    def contract(self, kind: str, name: str) -> ComponentContract:
-        record = self.record(kind, name)
-        metadata = record.get("metadata", {})
-        if not isinstance(metadata, Mapping):
-            metadata = {}
-        return ComponentContract(
-            requires=self.requirements(kind, name),
-            provides=_requirements_from_mapping(metadata.get(KEY_PROVIDES, {})),
-        )
-
-    def contracts_for(
-        self,
-        kind: str,
-        specs: Iterable[object],
-    ) -> ComponentContract:
-        return collect_contracts(
-            [self.contract(*self._component_lookup(kind, spec)) for spec in specs]
-        )
-
-    def component_requirements(
-        self,
-        kind: str,
-        specs: Iterable[object],
-    ) -> Requirements:
-        return collect_component_requirements(self.requirements, kind, specs)
+        name: str,
+        *,
+        steps: Iterable[object] = (),
+        **metadata: object,
+    ) -> Callable[[T], T]:
+        values = dict(metadata)
+        if steps:
+            values[KEY_STEPS] = [jsonable_spec(step) for step in steps]
+        return self._runtime_decorator(KIND_WORKFLOW, name, metadata=values)
 
     def benchmark(
-        self, name: str, *, target: str, **metadata: object
-    ) -> Callable[[T], T]:
-        return self._decorator(KIND_BENCHMARK, name, {**metadata, KEY_TARGET: target})
-
-    def workflow(self, name: str, *, step: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator(KIND_WORKFLOW, name, {**metadata, KEY_STEP: step})
-
-    def evaluation(self, suite: str, task: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator(
-            KIND_EVALUATION,
-            f"{suite}.{task}",
-            {**metadata, KEY_SUITE: suite, KEY_TASK: task},
-        )
-
-    def result_schema(self, name: str, **metadata: object) -> Callable[[T], T]:
-        return self._decorator("result_schema", name, metadata)
-
-    def _decorator(
         self,
-        kind: str,
         name: str,
-        metadata: Mapping[str, object],
+        *,
+        target: object | None = None,
+        params: object | None = None,
+        **metadata: object,
     ) -> Callable[[T], T]:
-        return decorator_factory(self, kind, name, dict(metadata))
+        values = dict(metadata)
+        if target is not None:
+            values[KEY_TARGET] = jsonable_spec(target)
+        return self._runtime_decorator(KIND_BENCHMARK, name, params=params, metadata=values)
+
+    def evaluation(
+        self,
+        name: str,
+        *,
+        params: object | None = None,
+        adapter: str | None = None,
+        **metadata: object,
+    ) -> Callable[[T], T]:
+        values = dict(metadata)
+        if adapter is not None:
+            values[KEY_ADAPTER] = adapter
+        return self._runtime_decorator(KIND_EVALUATION, name, params=params, metadata=values)
+
+    def adapter(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_ADAPTER, name, metadata)
+
+    def loader(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_LOADER, name, metadata)
+
+    def executor(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_EXECUTOR, name, metadata)
+
+    def resolver(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_RESOLVER, name, metadata)
+
+    def exporter(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_EXPORTER, name, metadata)
+
+    def reporter(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_REPORTER, name, metadata)
+
+    def notifier(self, name: str, **metadata: object) -> Callable[[T], T]:
+        return self._support_decorator(KIND_NOTIFIER, name, metadata)
 
     def _planned_experiment(
         self,
@@ -470,60 +179,42 @@ class Project:
         name: str,
         metadata: dict[str, object],
     ) -> Callable[[T], T]:
-        return self._decorator(
+        return self._runtime_decorator(
             KIND_EXPERIMENT,
             name,
-            {**metadata, KEY_EXPERIMENT_TYPE: experiment_type},
+            metadata={**metadata, KEY_EXPERIMENT_TYPE: experiment_type},
         )
 
-    def _declare_data(
+    def _support_decorator(
         self,
         kind: str,
         name: str,
         metadata: Mapping[str, object],
-    ) -> object:
-        sentinel = declaration_sentinel(name)
-        self._register(kind=kind, name=name, obj=sentinel, metadata=dict(metadata))
-        return sentinel
+    ) -> Callable[[T], T]:
+        return self._runtime_decorator(kind, name, metadata=metadata)
 
-    def _bind_dataset_callables(
+    def _runtime_decorator(
         self,
+        kind: str,
         name: str,
+        *,
+        params: object | None = None,
         metadata: Mapping[str, object],
-    ) -> None:
-        source = metadata.get("_source_callable")
-        if source is not None:
-            self._core.bind_callable(KIND_DATASET_SOURCE, name, source)
-
-        sink_callables = metadata.get("_sink_callables", ())
-        if not isinstance(sink_callables, list):
-            sink_callables = []
-        for index, sink in enumerate(sink_callables):
-            self._core.bind_callable(KIND_DATASET_SINK, f"{name}:{index}", sink)
-
-    def _dataset_metadata(
-        self,
-        name: str,
-        metadata: Mapping[str, object],
-    ) -> dict[str, object]:
+    ) -> Callable[[T], T]:
         values = dict(metadata)
-        source = values.get("source")
-        if _is_dataset_callable(source):
-            values["_source_callable"] = source
-            values["source"] = f"{KIND_DATASET_SOURCE}:{name}"
+        param_type = _params_type(kind, name, params)
+        if param_type is not None:
+            values[KEY_PARAM_SCHEMA] = schema_dict(param_type, f"params for {kind}:{name}")
+        elif params is not None:
+            values[KEY_PARAMS] = jsonable_spec(params)
 
-        sink_callables = [
-            sink
-            for sink in dataset_sinks(values)
-            if _is_dataset_callable(sink)
-        ]
-        if sink_callables:
-            values["_sink_callables"] = sink_callables
-            values["sinks"] = [
-                f"{KIND_DATASET_SINK}:{name}:{index}"
-                for index, _ in enumerate(sink_callables)
-            ]
-        return values
+        def register(obj: T) -> T:
+            result = decorator_factory(self, kind, name, values)(obj)
+            if param_type is not None:
+                self._core.set_params_type(kind, name, param_type)
+            return result
+
+        return register
 
     def _register(
         self,
@@ -538,11 +229,7 @@ class Project:
             raise ValueError(f"unstable strict declaration: {kind}:{name}")
 
         metadata_copy = jsonable_mapping(
-            {
-                key: value
-                for key, value in metadata.items()
-                if not key.startswith("_")
-            },
+            {key: value for key, value in metadata.items() if not key.startswith("_")},
             f"metadata for {kind}:{name}",
         )
         version = str(metadata_copy.pop(KEY_VERSION, DEFAULT_VERSION))
@@ -560,109 +247,27 @@ class Project:
             tags,
         )
 
-    def _component_lookup(
-        self,
-        kind: str,
-        spec: object,
-    ) -> tuple[str, str]:
-        component = self._component_spec(spec, kind)
-        spec_kind = component.kind
-        if spec_kind is not None and spec_kind != kind:
-            raise ValueError(
-                f"component spec kind mismatch: expected {kind!r}, got {spec_kind!r}"
-            )
-        return kind, component.name
 
-    def _build_parts(
-        self,
-        reference: str,
-        spec: object | None,
-    ) -> tuple[str, str, object]:
-        if REFERENCE_SEPARATOR in reference:
-            kind, name = reference.split(REFERENCE_SEPARATOR, 1)
-            if spec is None:
-                return kind, name, {}
-            return kind, name, self._component_params(spec)
-
-        component = self._component_spec(spec, reference)
-        return reference, component.name, component.params
-
-    def _component_spec(
-        self,
-        value: object,
-        default_kind: str | None = None,
-    ) -> ComponentSpec[object]:
-        if isinstance(value, ComponentSpec):
-            component = value
-        elif _has_typed_component_ref(value):
-            component = ComponentSpec.from_value(jsonable_spec(value))
-        else:
-            component = ComponentSpec.from_value(value)
-
-        if default_kind is not None and component.kind is None:
-            return ComponentSpec(f"{default_kind}:{component.name}", component.params)
-        return component
-
-    def _component_params(self, value: object) -> object:
-        if isinstance(value, ComponentSpec):
-            return value.params
-        if _has_typed_component_ref(value):
-            return self._component_spec(value).params
-        if isinstance(value, Mapping):
-            return dict(value)
-        return value
-
-    def _builder_kwargs(
-        self,
-        factory: object,
-        supplied: Mapping[str, object],
-    ) -> dict[str, object]:
-        if "build" in supplied:
-            return {}
-        try:
-            parameters = signature(cast(Callable[..., object], factory)).parameters
-        except (TypeError, ValueError):
-            return {}
-        return {"build": Builder(self)} if "build" in parameters else {}
-
-    def _accepts_schema_arg(self, factory: object, injected: int) -> bool:
-        try:
-            parameters = signature(cast(Callable[..., object], factory)).parameters.values()
-        except (TypeError, ValueError):
-            return True
-        positional = [
-            parameter
-            for parameter in parameters
-            if parameter.kind
-            in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
-        ]
-        return len(positional) > injected
+def _params_type(kind: str, name: str, params: object | None) -> type[object] | None:
+    del kind, name
+    return params if isinstance(params, type) else None
 
 
-def _has_typed_component_ref(value: object) -> bool:
-    return (
-        not isinstance(value, type)
-        and is_dataclass(value)
-        and isinstance(getattr(type(value), "__rlab_ref__", None), str)
-    )
-
-
-def _is_dataset_callable(value: object) -> bool:
-    return (
-        value is not None
-        and not isinstance(value, str | Mapping)
-        and not callable(getattr(value, "to_dict", None))
-        and not callable(getattr(value, "model_dump", None))
-    )
-
-
-def _requirements_from_mapping(value: object) -> Requirements:
-    if not isinstance(value, Mapping):
-        return Requirements()
-    return Requirements(
-        model_outputs=tuple(str(item) for item in value.get("model_outputs", ())),
-        model_heads=tuple(str(item) for item in value.get("model_heads", ())),
-        batch_fields=tuple(str(item) for item in value.get("batch_fields", ())),
-        capabilities=tuple(str(item) for item in value.get("capabilities", ())),
-        artifacts=tuple(str(item) for item in value.get("artifacts", ())),
-    )
+def schema_dict(param_type: type[object], label: str) -> JsonObject:
+    schema = getattr(param_type, "model_json_schema", None)
+    if callable(schema):
+        value = schema()
+    elif is_dataclass(param_type):
+        value = {
+            "title": param_type.__name__,
+            "type": "object",
+            "properties": {
+                field.name: {"title": field.name, "type": "string"}
+                for field in fields(param_type)
+            },
+        }
+    else:
+        raise TypeError(f"{label} must define model_json_schema() or be a dataclass")
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} model_json_schema() must return a dict")
+    return cast(JsonObject, value)

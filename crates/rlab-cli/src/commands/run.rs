@@ -41,6 +41,7 @@ pub fn run(command: RunCommand, root: Option<&Path>, json: bool) -> RlabResult<u
 
     let strict = command.strict || config.production.strict;
     let (kind, name) = resolve_run_target(&config, &paths, strict, &command.target)?;
+    ensure_runnable_target(&kind, &name)?;
     let params = parse_params_public(&command.params)
         .and_then(|params| resolve_param_refs(&paths, params))?;
 
@@ -150,7 +151,7 @@ pub(crate) fn merge_params(
 }
 
 /// Resolve `@<kind>:<name>[/suffix]` param values to the latest completed run's
-/// output path, so pipeline stages reference each other without pasting run ids.
+/// output path, so workflow steps reference each other without pasting run ids.
 pub(crate) fn resolve_param_refs(paths: &ProjectPaths, params: Value) -> RlabResult<Value> {
     let Value::Object(map) = params else {
         return Ok(params);
@@ -369,7 +370,7 @@ fn parse_target_kind(value: &str) -> RlabResult<(RegistryKind, String)> {
             message: format!(
                 "'{value}' looks like a file path, but 'rlab run' expects a registry target.\n  \
                  Use the form: rlab run <kind>:<name>\n  \
-                 Examples: rlab run dataset:babylm.curation.smoke\n           rlab run experiment:my.experiment\n  \
+                 Examples: rlab run experiment:my.experiment\n           rlab run workflow:my.workflow\n  \
                  Run 'rlab discover' to list all registered targets."
             ),
         },
@@ -378,12 +379,26 @@ fn parse_target_kind(value: &str) -> RlabResult<(RegistryKind, String)> {
         },
         ParseTargetError::MissingName { value } => RlabError::Reference {
             message: format!(
-                "missing name in target '{value}' — expected <kind>:<name>, e.g. dataset:babylm.curation.smoke"
+                "missing name in target '{value}' — expected <kind>:<name>, e.g. experiment:my.experiment"
             ),
         },
     })?;
 
     Ok((RegistryKind::parse(&parsed.kind_str)?, parsed.name))
+}
+
+fn ensure_runnable_target(kind: &RegistryKind, name: &str) -> RlabResult<()> {
+    if kind.is_runnable() {
+        return Ok(());
+    }
+
+    let category = kind.category();
+    Err(RlabError::Validation {
+        message: format!(
+            "{}:{name} is a {category} entry, not a runnable target. Runnable kinds are experiment, study, workflow, benchmark, and evaluation.",
+            kind.as_str()
+        ),
+    })
 }
 
 fn resolve_run_target(
@@ -491,7 +506,10 @@ mod tests {
 
     use crate::host::execution::with_seed;
 
-    use super::{merge_params, parse_param_value, parse_params_public, unique_bare_target};
+    use super::{
+        ensure_runnable_target, merge_params, parse_param_value, parse_params_public,
+        unique_bare_target,
+    };
 
     #[test]
     fn explicit_params_override_matrix_values() {
@@ -536,7 +554,7 @@ mod tests {
     fn bare_target_resolves_when_unique() {
         let registry = registry_with([
             (RegistryKind::WORKFLOW, "training.compile_plan"),
-            (RegistryKind::DATASET, "babylm.curation.smoke"),
+            (RegistryKind::LOADER, "artifact"),
         ]);
 
         let (kind, name) = unique_bare_target(&registry, "training.compile_plan")
@@ -551,12 +569,19 @@ mod tests {
     fn bare_target_rejects_ambiguous_names() {
         let registry = registry_with([
             (RegistryKind::WORKFLOW, "smoke"),
-            (RegistryKind::DATASET, "smoke"),
+            (RegistryKind::EXPERIMENT, "smoke"),
         ]);
 
         let error = unique_bare_target(&registry, "smoke").unwrap_err();
 
         assert!(error.to_string().contains("ambiguous target"));
+    }
+
+    #[test]
+    fn support_targets_are_not_runnable() {
+        let error = ensure_runnable_target(&RegistryKind::LOADER, "artifact").unwrap_err();
+
+        assert!(error.to_string().contains("not a runnable target"));
     }
 
     fn registry_with<const N: usize>(records: [(RegistryKind, &str); N]) -> Registry {

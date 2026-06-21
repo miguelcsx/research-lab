@@ -4,7 +4,6 @@ from rlab._rlab import (
     FigureArtifact,
     FileArtifact,
     LogArtifact,
-    ResultSchema,
     TableArtifact,
 )
 
@@ -12,6 +11,5 @@ __all__ = [
     "FigureArtifact",
     "FileArtifact",
     "LogArtifact",
-    "ResultSchema",
     "TableArtifact",
 ]

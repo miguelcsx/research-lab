@@ -5,7 +5,6 @@ use std::path::PathBuf;
 #[serde(rename_all = "snake_case")]
 pub enum AdapterCapability {
     ExternalCommand,
-    ExternalEvaluation,
     RepositoryCheckout,
     ArtifactMapping,
     CustomParser,

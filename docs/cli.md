@@ -47,9 +47,8 @@ These commands may start `python -m rlab._runner` because they need to import pr
 rlab discover
 rlab run experiment:<name>
 rlab run workflow:<name>
-rlab benchmark <target-ref> <benchmark-name>
-rlab evaluate <suite-name> --model <model-ref>
-rlab data build dataset:<name>
+rlab run benchmark:<name>
+rlab run evaluation:<name>
 rlab study run <name>
 ```
 
@@ -73,12 +72,16 @@ rlab init adapter <name>
 ```bash
 rlab discover
 rlab discover experiment
+rlab discover support
+rlab discover --all
 rlab discover --refresh
 rlab discover --no-cache
 rlab discover --strict
 ```
 
-Discovery imports configured modules and returns declarative registry records.
+Discovery imports configured modules and returns runtime catalog records. Default
+discovery shows runnable and support entries; `--all` also shows internal/custom
+entries.
 
 ## Running experiments
 
@@ -133,8 +136,8 @@ rlab journal ideas add "Try source-balanced data mixing"
 ```bash
 rlab search "dedup"
 rlab graph lineage run:<run-id>
-rlab impact artifact:dataset/clean@1
-rlab invalidate artifact:dataset/clean@1 --reason "contaminated source"
+rlab impact artifact:model/small@candidate
+rlab invalidate artifact:model/small@candidate --reason "bad calibration"
 ```
 
 ## CI helpers

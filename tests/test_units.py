@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from rlab import Unit, UnitRegistry
-from rlab.units.model import UnitRegistry as ModelUnitRegistry
+from rlab.units import Unit, UnitRegistry
 
 
 def test_units_are_rust_backed() -> None:
@@ -11,7 +10,7 @@ def test_units_are_rust_backed() -> None:
     registry.add(Unit("seconds", "s", "time"))
 
     assert registry.units["s"].name == "seconds"
-    assert ModelUnitRegistry().units == {}
+    assert UnitRegistry().units == {}
 
     with pytest.raises(ValueError):
         registry.add(Unit("", "bad", "time"))

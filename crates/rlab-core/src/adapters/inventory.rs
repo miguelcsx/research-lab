@@ -65,7 +65,6 @@ pub fn adapter_inventory(registry: &Registry) -> RlabResult<AdapterInventory> {
 fn parse_capability(value: &str) -> Option<AdapterCapability> {
     match value {
         "external_command" => Some(AdapterCapability::ExternalCommand),
-        "external_evaluation" => Some(AdapterCapability::ExternalEvaluation),
         "repository_checkout" => Some(AdapterCapability::RepositoryCheckout),
         "artifact_mapping" => Some(AdapterCapability::ArtifactMapping),
         "custom_parser" => Some(AdapterCapability::CustomParser),

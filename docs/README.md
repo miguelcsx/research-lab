@@ -25,7 +25,6 @@ This means users get Python-native decorators and callable execution, while the 
 - [Workflows](workflows.md)
 - [Benchmarks](benchmarks.md)
 - [Evaluations](evaluations.md)
-- [Data pipelines](data.md)
 - [Runs and runtime context](runs.md)
 - [Artifacts and lineage](artifacts.md)
 - [Reproducibility](reproducibility.md)

@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from rlab import (
+from rlab.governance import (
     LabPolicy,
     LicenseManifest,
     check_compatibility,
-    estimate_budget,
-    estimate_required_repetitions,
     redact_secrets,
     scan_for_pii,
     scan_for_secrets,
 )
-from rlab.governance import LabPolicy as ModulePolicy
-from rlab.plan import estimate_budget as estimate_budget_from_module
+from rlab.plan import estimate_budget, estimate_required_repetitions
 
 
 def test_plan_helpers_are_rust_backed() -> None:
@@ -22,7 +19,7 @@ def test_plan_helpers_are_rust_backed() -> None:
     assert estimate.jobs == 3
     assert estimate.total_seconds == 7.5
     assert estimate.total_storage_gb == 3.75
-    assert estimate_budget_from_module(1, 2.0, 3.0).total_storage_gb == 3.0
+    assert estimate_budget(1, 2.0, 3.0).total_storage_gb == 3.0
     assert estimate_required_repetitions(0.5, 1.0, 0.05, 0.8) >= 1
 
     with pytest.raises(ValueError):
@@ -44,4 +41,4 @@ def test_governance_helpers_are_rust_backed() -> None:
 
     violations = LabPolicy().check_env(env)
     assert violations[0].subject == "API_TOKEN"
-    assert ModulePolicy(("TOKEN",)).check_env(env)[0].rule == "forbidden_env_patterns"
+    assert LabPolicy(("TOKEN",)).check_env(env)[0].rule == "forbidden_env_patterns"

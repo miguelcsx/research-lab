@@ -80,8 +80,9 @@ qualification mode, full mode, and CLI overrides are expanded before Python user
 code runs.
 
 ```python
-@lab.experiment("training.pretrain.clm", params_schema=PretrainConfig)
-def clm(ctx, config):
+@lab.experiment("training.pretrain.clm", params=PretrainConfig)
+def clm(ctx):
+    config = ctx.params(PretrainConfig)
     ...
 
 @lab.study(

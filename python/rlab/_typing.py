@@ -20,7 +20,7 @@ class SupportsMetricLogging(Protocol):
 
 
 class ParamsSchema(Protocol[ParamsT]):
-    """Minimal schema contract supported by component declarations."""
+    """Minimal schema contract supported by typed runtime params."""
 
     @classmethod
     def model_validate(cls, value: object) -> ParamsT: ...

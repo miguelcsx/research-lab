@@ -9,7 +9,6 @@ pub mod ci;
 pub mod clean;
 pub mod compare;
 pub mod config;
-pub mod data;
 pub mod diagnostic;
 pub mod error;
 pub mod errors;
@@ -38,7 +37,6 @@ pub mod table;
 pub mod template;
 pub mod testing;
 pub mod units;
-pub mod workflows;
 
 pub mod adapters;
 pub mod exec;
@@ -63,11 +61,6 @@ pub use config::{
     ResolvedDocument,
 };
 pub use config::{find_project_root, load_effective_config, EffectiveConfig, ProjectPaths};
-pub use data::{
-    data_boundary, data_drop, data_keep, data_update, list_data_documents, materialize_records,
-    resolve_data_document, validate_data_documents, AuditPolicy, ComponentUse, DataDecision,
-    DataDocument, DataDocumentDataset, DatasetSpec, MaterializeReport, PipelineSpec,
-};
 pub use diagnostic::{doctor_project, DiagnosticFinding, DiagnosticLevel};
 pub use error::{RlabError, RlabResult};
 pub use errors::{render_run_error, RunErrorReport};
@@ -104,7 +97,7 @@ pub use reports::{
     write_run_report,
 };
 pub use result::{
-    FileArtifact, LogArtifact, Metric, MetricDirection, ResultBundle, ResultSchema, TableArtifact,
+    FileArtifact, LogArtifact, Metric, MetricDirection, ResultBundle, TableArtifact,
 };
 pub use run::{
     all_run_records, query_run_records, RunDirectory, RunId, RunRecord, RunSession, RunStatus,
@@ -114,7 +107,6 @@ pub use strict::{ProductionPolicy, StrictMode};
 pub use table::{render_table, TableRender};
 pub use testing::{assert_metric_exists as assert_run_metric_exists, assert_valid_run_dir};
 pub use units::{Unit, UnitRegistry};
-pub use workflows::{plan_workflow, ExternalStep, Workflow, WorkflowPlan, WorkflowStep};
 
 pub use adapters::{
     adapter_inventory, validate_adapter_descriptor, AdapterCapability, AdapterDescriptor,
