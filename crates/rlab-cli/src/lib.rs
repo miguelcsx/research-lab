@@ -5,5 +5,6 @@ pub mod commands;
 pub mod host;
 pub mod logger;
 pub mod render;
+pub mod ui;
 
 pub use app::{run_from_env, run_from_iter};

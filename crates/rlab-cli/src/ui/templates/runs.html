@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+{% block subtitle %}<p class="page-desc">Every execution recorded in this workspace, newest first.</p>{% endblock %}
+{% block content %}
+<section class="stat-grid">
+  {% for item in view.summaries %}
+  <article class="stat{% if item.label == "Completed" %} ok{% endif %}{% if item.label == "Failed" %} bad{% endif %}">
+    <div class="stat-label">{{ item.label }}</div>
+    <div class="stat-value">{{ item.value }}</div>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="panel" data-refresh-url="/api/runs" data-list-scope>
+  <div class="panel-head">
+    <h2>Runs <span class="count">{{ view.runs.len() }}</span></h2>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="filter-input" type="search" placeholder="Filter by name, kind, status, time…" data-filter>
+    </label>
+  </div>
+  <div class="compare-bar" data-compare-bar hidden>
+    <span class="count" data-compare-count>0 selected</span>
+    <div class="compare-bar-actions">
+      <button type="button" class="button ghost sm" data-compare-clear>Clear</button>
+      <a class="button primary sm" data-compare-go href="/compare">Compare selected</a>
+    </div>
+  </div>
+  <div class="table-shell">
+    <table class="data-table" data-list data-page-size="25">
+      <thead><tr>
+        <th class="col-check"><input type="checkbox" data-compare-all aria-label="Select all"></th>
+        <th data-sort>Run</th>
+        <th data-sort>Kind</th>
+        <th data-sort>Started</th>
+        <th data-sort>Status</th>
+      </tr></thead>
+      <tbody>
+      {% for run in view.runs %}
+        <tr data-filter-row>
+          <td class="col-check"><input type="checkbox" data-compare-item value="{{ run.id }}" aria-label="Select run"></td>
+          <td class="col-name"><a href="/run/{{ run.id }}">{{ run.target }}</a><span class="cell-sub" title="{{ run.id }}">{{ run.id }}</span></td>
+          <td><span class="badge subtle">{{ run.kind }}</span></td>
+          <td class="cell-time">{{ run.created }}</td>
+          <td><span class="status status-{{ run.status }}">{{ run.status }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pager" data-pager></div>
+</section>
+{% endblock %}

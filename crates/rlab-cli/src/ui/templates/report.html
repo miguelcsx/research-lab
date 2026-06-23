@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block breadcrumb %}
+<a href="/reports">Reports</a><span class="sep">/</span><span class="crumb current">{{ view.name }}</span>
+{% endblock %}
+
+{% block header %}
+<header class="detail-header">
+  <div class="detail-title">
+    <p class="detail-eyebrow">report</p>
+    <h1>{{ view.name }}</h1>
+  </div>
+  <div class="detail-actions">
+    <a class="button" href="/run/{{ view.run_id }}">Open run</a>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+{% if view.metrics.len() > 0 %}
+<h2 class="section-heading">Metrics</h2>
+<div class="kv-grid">
+  {% for item in view.metrics %}
+  <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% for section in view.sections %}
+<section class="panel panel-pad">
+  <div class="section-title"><span class="badge subtle">{{ section.kind }}</span><h2>{{ section.name }}</h2></div>
+  {{ section.html|safe }}
+</section>
+{% endfor %}
+{% endblock %}

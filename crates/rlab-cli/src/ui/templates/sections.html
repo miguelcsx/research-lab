@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block subtitle %}<p class="page-desc">{% if active == "figures" %}Figures rendered across all report bundles.{% else %}Data tables rendered across all report bundles.{% endif %}</p>{% endblock %}
+{% block content %}
+<section class="panel" data-refresh-url="/api/sections?type={% if active == "figures" %}figure{% else %}table{% endif %}" data-list-scope>
+  <div class="panel-head">
+    <h2>{% if active == "figures" %}Figures{% else %}Tables{% endif %} <span class="count">{{ view.cards.len() }}</span></h2>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="filter-input" type="search" placeholder="Filter by name, report, run…" data-filter>
+    </label>
+  </div>
+  {% if view.cards.len() > 0 %}
+  <div class="section-grid" data-list data-page-size="12">
+    {% for card in view.cards %}
+    <article class="preview-card" data-page-item>
+      <div class="preview-head">
+        <div class="preview-titles">
+          <span class="badge subtle">{{ card.kind }}</span>
+          <h3>{{ card.name }}</h3>
+        </div>
+        <p class="preview-meta">
+          <a href="/run/{{ card.run_id }}">{{ card.target }}</a>
+          <span class="cell-time">{{ card.created }}</span>
+        </p>
+      </div>
+      <p class="preview-source"><a href="/report?run={{ card.run_id }}&name={{ card.report_name }}">{{ card.report_name }}</a></p>
+      <div class="preview-body">{{ card.html|safe }}</div>
+    </article>
+    {% endfor %}
+  </div>
+  <div class="pager" data-pager></div>
+  {% else %}
+  <div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="13" y="7" width="3" height="10"/></svg>
+    <h2>No {% if active == "figures" %}figures{% else %}tables{% endif %} yet</h2>
+    <p>Report bundles with {% if active == "figures" %}figure{% else %}table{% endif %} sections will appear here.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

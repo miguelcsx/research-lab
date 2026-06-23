@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block header %}{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+    <h2>{{ title }}</h2>
+    <p>{{ message }}</p>
+    <a class="button" href="/runs">Back to runs</a>
+  </div>
+</div>
+{% endblock %}

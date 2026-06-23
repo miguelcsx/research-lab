@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+
+{% block breadcrumb %}
+<a href="/artifacts">Artifacts</a><span class="sep">/</span><span class="crumb current">{{ view.reference }}</span>
+{% endblock %}
+
+{% block header %}
+<header class="detail-header">
+  <div class="detail-title">
+    <p class="detail-eyebrow">artifact</p>
+    <h1>{{ view.reference }}</h1>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<h2 class="section-heading">Manifest</h2>
+<div class="kv-grid">
+  {% for item in view.fields %}
+  <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+  {% endfor %}
+</div>
+{% endblock %}

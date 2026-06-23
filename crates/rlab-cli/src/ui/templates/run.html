@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+
+{% block breadcrumb %}
+<a href="/runs">Runs</a><span class="sep">/</span><span class="crumb current">{{ view.target }}</span>
+{% endblock %}
+
+{% block header %}
+<header class="detail-header">
+  <div class="detail-title">
+    <p class="detail-eyebrow">{{ view.target }}</p>
+    <h1>{{ view.id }}</h1>
+  </div>
+  <div class="detail-actions">
+    <a class="button primary" href="/compare?runs={{ view.id }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v16M19 4v16"/><rect x="8" y="7" width="3" height="10"/><rect x="13" y="7" width="3" height="6"/></svg>
+      Compare
+    </a>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="meta-strip">
+  <div class="meta-item"><span class="k">Status</span><span class="v"><span class="status status-{{ view.status }}">{{ view.status }}</span></span></div>
+  {% if view.created.len() > 0 %}<div class="meta-item"><span class="k">Started</span><span class="v">{{ view.created }}</span></div>{% endif %}
+  <div class="meta-item"><span class="k">Parameters</span><span class="v">{{ view.params.len() }}</span></div>
+  <div class="meta-item"><span class="k">Metrics</span><span class="v">{{ view.metrics.len() }}</span></div>
+  <div class="meta-item"><span class="k">Reports</span><span class="v">{{ view.reports.len() }}</span></div>
+  <div class="meta-item"><span class="k">Artifacts</span><span class="v">{{ view.artifacts.len() }}</span></div>
+</div>
+
+<details class="provenance"><summary>Run evidence path</summary><code>{{ view.path }}</code></details>
+
+{% if view.params.len() > 0 %}
+<h2 class="section-heading">Parameters</h2>
+<div class="kv-grid">
+  {% for item in view.params %}
+  <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if view.metrics.len() > 0 %}
+<h2 class="section-heading">Metrics</h2>
+<div class="kv-grid">
+  {% for item in view.metrics %}
+  <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if view.reports.len() > 0 %}
+<h2 class="section-heading">Reports</h2>
+{% for report in view.reports %}
+<section class="report-bundle">
+  <div class="bundle-head">
+    <span class="badge">report</span>
+    <h2><a href="/report?run={{ report.run_id }}&name={{ report.name }}">{{ report.name }}</a></h2>
+  </div>
+  {% if report.metrics.len() > 0 %}
+  <div class="content-section">
+    <div class="section-title"><h3>Metrics</h3></div>
+    <div class="kv-grid">
+      {% for item in report.metrics %}
+      <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% for section in report.sections %}
+  <section class="content-section">
+    <div class="section-title"><span class="badge subtle">{{ section.kind }}</span><h3>{{ section.name }}</h3></div>
+    {{ section.html|safe }}
+  </section>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endif %}
+
+{% if view.artifacts.len() > 0 %}
+<h2 class="section-heading">Artifacts</h2>
+<div class="panel">
+  <div class="table-shell">
+    <table class="data-table">
+      <thead><tr><th>Artifact</th><th>Reference</th></tr></thead>
+      <tbody>
+      {% for item in view.artifacts %}
+        <tr><td class="cell-key">{{ item.key }}</td><td><code>{{ item.value }}</code></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

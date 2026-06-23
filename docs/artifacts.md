@@ -56,3 +56,12 @@ rlab invalidate artifact:model/small@1 --reason "bad upstream input"
 ```
 
 Invalidation records an audit event and can mark downstream runs stale when the run directories are available.
+
+## Report and figure paths
+
+Run-output references can point directly into the latest completed run:
+
+```bash
+rlab view report @workflow:report.model_comparison/outputs/reports/model_comparison
+rlab open figure @workflow:report.model_comparison/outputs/reports/model_comparison/figures/model_comparison.png
+```

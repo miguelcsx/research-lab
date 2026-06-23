@@ -36,10 +36,13 @@ pub fn run(command: OpenCommand, root: Option<&Path>, as_json: bool) -> RlabResu
     let paths = ProjectPaths::from_config(&config)?;
     let target = match command.command {
         OpenSubcommand::Run(target) => (open_run_path(&paths, &target.reference)?, target.dry_run),
-        OpenSubcommand::Artifact(target) | OpenSubcommand::Figure(target) => (
+        OpenSubcommand::Artifact(target) => (
             ArtifactStore::new(&paths).resolve_path(&target.reference)?,
             target.dry_run,
         ),
+        OpenSubcommand::Figure(target) => {
+            (open_figure_path(&paths, &target.reference)?, target.dry_run)
+        }
         OpenSubcommand::Report(target) => {
             (open_report_path(&paths, &target.reference)?, target.dry_run)
         }
@@ -79,7 +82,17 @@ fn open_report_path(paths: &ProjectPaths, reference: &str) -> RlabResult<PathBuf
     if reference.starts_with("artifact:") {
         return ArtifactStore::new(paths).resolve_path(reference);
     }
+    if reference.starts_with('@') && reference.contains('/') {
+        return resolve_path_reference(paths, reference);
+    }
     open_run_path(paths, reference)
+}
+
+fn open_figure_path(paths: &ProjectPaths, reference: &str) -> RlabResult<PathBuf> {
+    if reference.starts_with("artifact:") {
+        return ArtifactStore::new(paths).resolve_path(reference);
+    }
+    resolve_path_reference(paths, reference)
 }
 
 fn run_id_from_reference(paths: &ProjectPaths, reference: &str) -> RlabResult<String> {

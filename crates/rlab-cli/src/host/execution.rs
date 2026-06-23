@@ -32,7 +32,7 @@ pub fn execute_run(request: ExecutionRequest<'_>) -> RlabResult<ExecutionOutcome
         with_run_params(&request.config.run.params, request.params),
         seed,
     );
-    logger::info(format!(
+    logger::debug(format!(
         "{} {} -> {}:{}",
         request.operation,
         request.name,
@@ -69,6 +69,8 @@ pub fn execute_run(request: ExecutionRequest<'_>) -> RlabResult<ExecutionOutcome
         "starting Python host with {} module(s)",
         host_request.modules.len()
     ));
+    let _activity =
+        logger::start_activity(format!("running {}:{}", request.operation, request.name));
     let events = run_python_host(
         &request.config.python.executable,
         &request.config.python.runner_module,
@@ -126,12 +128,12 @@ pub fn finalize_session(
         process_event(&session, event, &mut completed, &mut failed)?;
     }
     if let Some(error) = failed {
-        logger::warn(format!("run {} failed", session.directory.id.as_str()));
+        logger::debug(format!("run {} failed", session.directory.id.as_str()));
         let run = session.fail(&error.to_string())?;
         return Ok(ExecutionOutcome { run, failed: true });
     }
     let run = session.complete(completed.unwrap_or(default_result))?;
-    logger::info(format!("run {} completed", run.id.as_str()));
+    logger::debug(format!("run {} completed", run.id.as_str()));
     Ok(ExecutionOutcome { run, failed: false })
 }
 

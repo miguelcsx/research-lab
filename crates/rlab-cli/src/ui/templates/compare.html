@@ -1,0 +1,122 @@
+{% extends "layout.html" %}
+
+{% block breadcrumb %}
+<a href="/compare">Compare</a>
+{% if view.selected %}<span class="sep">/</span><span class="crumb current">{{ view.columns.len() }} runs</span>{% endif %}
+{% endblock %}
+
+{% block header %}
+<header class="page-header">
+  <div class="page-header-text">
+    <h1>{% if view.selected %}Comparing {{ view.columns.len() }} runs{% else %}Compare{% endif %}</h1>
+    <p class="page-desc">{% if view.selected %}Differences across metrics and parameters are highlighted.{% else %}Select two or more runs to line up their metrics and parameters side by side.{% endif %}</p>
+  </div>
+  <div class="page-header-actions">
+    {% if view.selected %}<a class="button" href="/compare">Pick different runs</a>{% endif %}
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+{% if view.selected %}
+<section class="panel panel-pad" style="overflow:auto">
+  <table class="data-table compare-table">
+    <thead><tr>
+      <th></th>
+      {% for column in view.columns %}
+      <th><a href="/run/{{ column.id }}">{{ column.target }}</a><span class="cell-sub">{{ column.created }}</span></th>
+      {% endfor %}
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="cell-key">Status</td>
+        {% for column in view.columns %}<td><span class="status status-{{ column.status }}">{{ column.status }}</span></td>{% endfor %}
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<h2 class="section-heading">Metrics</h2>
+<div class="panel">
+  {% if view.metric_rows.len() > 0 %}
+  <div class="table-shell">
+    <table class="data-table compare-table">
+      <thead><tr><th>Metric</th>{% for column in view.columns %}<th>{{ column.target }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in view.metric_rows %}
+        <tr{% if row.differs %} class="row-diff"{% endif %}>
+          <td class="cell-key">{{ row.label }}</td>
+          {% for value in row.values %}<td class="cell-num">{{ value }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel-pad muted">No metrics recorded for these runs.</div>
+  {% endif %}
+</div>
+
+<h2 class="section-heading">Parameters</h2>
+<div class="panel">
+  {% if view.param_rows.len() > 0 %}
+  <div class="table-shell">
+    <table class="data-table compare-table">
+      <thead><tr><th>Parameter</th>{% for column in view.columns %}<th>{{ column.target }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in view.param_rows %}
+        <tr{% if row.differs %} class="row-diff"{% endif %}>
+          <td class="cell-key">{{ row.label }}</td>
+          {% for value in row.values %}<td>{{ value }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel-pad muted">No parameters recorded for these runs.</div>
+  {% endif %}
+</div>
+
+{% else %}
+<section class="panel" data-list-scope>
+  <div class="panel-head">
+    <h2>Select runs <span class="count">{{ view.runs.len() }}</span></h2>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="filter-input" type="search" placeholder="Filter runs…" data-filter>
+    </label>
+  </div>
+  <div class="compare-bar" data-compare-bar hidden>
+    <span class="count" data-compare-count>0 selected</span>
+    <div class="compare-bar-actions">
+      <button type="button" class="button ghost sm" data-compare-clear>Clear</button>
+      <a class="button primary sm" data-compare-go href="/compare">Compare selected</a>
+    </div>
+  </div>
+  <div class="table-shell">
+    <table class="data-table" data-list data-page-size="25">
+      <thead><tr>
+        <th class="col-check"><input type="checkbox" data-compare-all aria-label="Select all"></th>
+        <th data-sort>Run</th>
+        <th data-sort>Kind</th>
+        <th data-sort>Started</th>
+        <th data-sort>Status</th>
+      </tr></thead>
+      <tbody>
+      {% for run in view.runs %}
+        <tr data-filter-row>
+          <td class="col-check"><input type="checkbox" data-compare-item value="{{ run.id }}" aria-label="Select run"></td>
+          <td class="col-name"><a href="/run/{{ run.id }}">{{ run.target }}</a><span class="cell-sub" title="{{ run.id }}">{{ run.id }}</span></td>
+          <td><span class="badge subtle">{{ run.kind }}</span></td>
+          <td class="cell-time">{{ run.created }}</td>
+          <td><span class="status status-{{ run.status }}">{{ run.status }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pager" data-pager></div>
+</section>
+{% endif %}
+{% endblock %}

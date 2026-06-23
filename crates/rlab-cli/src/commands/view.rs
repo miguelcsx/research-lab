@@ -226,6 +226,9 @@ fn report_path(paths: &ProjectPaths, reference: &str) -> RlabResult<PathBuf> {
     if reference.starts_with("artifact:") {
         return ArtifactStore::new(paths).resolve_path(reference);
     }
+    if reference.starts_with('@') && reference.contains('/') {
+        return resolve_path_reference(paths, reference);
+    }
     let id = run_id_from_reference(paths, reference)?;
     let details = inspect_run(paths, &id)?;
     for artifact in &details.artifacts {

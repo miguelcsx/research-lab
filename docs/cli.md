@@ -116,6 +116,8 @@ rlab artifact describe artifact:model/small@candidate
 ```bash
 rlab report run <run-id> --output reports/run.md
 rlab report compare .rlab/runs --output reports/comparison.md
+rlab view report @workflow:report.model_comparison/outputs/reports/model_comparison
+rlab open figure @workflow:report.model_comparison/outputs/reports/model_comparison/figures/model_comparison.png
 rlab handoff <run-id> --to team-b
 ```
 

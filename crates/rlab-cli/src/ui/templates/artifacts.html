@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block subtitle %}<p class="page-desc">Content-addressed outputs promoted from runs, newest first.</p>{% endblock %}
+{% block content %}
+<section class="stat-grid">
+  {% for item in view.summaries %}
+  <article class="stat">
+    <div class="stat-label">{{ item.label }}</div>
+    <div class="stat-value">{{ item.value }}</div>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="panel" data-refresh-url="/api/artifacts" data-list-scope>
+  <div class="panel-head">
+    <h2>Artifacts <span class="count">{{ view.artifacts.len() }}</span></h2>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="filter-input" type="search" placeholder="Filter by name, version, storage…" data-filter>
+    </label>
+  </div>
+  <div class="table-shell">
+    <table class="data-table" data-list data-page-size="25">
+      <thead><tr>
+        <th data-sort>Name</th>
+        <th data-sort>Version</th>
+        <th data-sort>Storage</th>
+        <th data-sort>Size</th>
+        <th data-sort>Created</th>
+        <th>Digest</th>
+      </tr></thead>
+      <tbody>
+      {% for artifact in view.artifacts %}
+        <tr data-filter-row>
+          <td class="col-name"><a href="/artifact?ref={{ artifact.reference }}">{{ artifact.label }}</a></td>
+          <td><span class="trunc" title="{{ artifact.version }}">{{ artifact.version }}</span></td>
+          <td><span class="badge subtle">{{ artifact.storage }}</span></td>
+          <td class="cell-num">{{ artifact.size }}</td>
+          <td class="cell-time">{{ artifact.created }}</td>
+          <td><code class="digest" title="{{ artifact.digest }}">{{ artifact.digest }}</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pager" data-pager></div>
+</section>
+{% endblock %}

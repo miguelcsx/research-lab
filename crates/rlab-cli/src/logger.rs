@@ -20,6 +20,19 @@ pub enum LogLevel {
 static LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Off as u8);
 static PROGRESS_ENABLED: AtomicBool = AtomicBool::new(false);
 static PROGRESS: LazyLock<Mutex<Option<ProgressBar>>> = LazyLock::new(|| Mutex::new(None));
+static ACTIVITY: LazyLock<Mutex<Option<ProgressBar>>> = LazyLock::new(|| Mutex::new(None));
+
+pub struct ActivityGuard {
+    active: bool,
+}
+
+impl Drop for ActivityGuard {
+    fn drop(&mut self) {
+        if self.active {
+            clear_activity();
+        }
+    }
+}
 
 pub fn init(json: bool, quiet: bool, explicit: Option<LogLevel>) {
     let level = if quiet {
@@ -50,6 +63,23 @@ pub fn info(message: impl AsRef<str>) {
 
 pub fn debug(message: impl AsRef<str>) {
     log(LogLevel::Debug, message);
+}
+
+pub fn start_activity(message: impl Into<String>) -> ActivityGuard {
+    if !PROGRESS_ENABLED.load(Ordering::Relaxed) {
+        return ActivityGuard { active: false };
+    }
+    let bar = ProgressBar::new_spinner();
+    bar.set_style(activity_style());
+    bar.set_prefix("rlab");
+    bar.set_message(message.into());
+    bar.enable_steady_tick(std::time::Duration::from_millis(90));
+    let mut guard = ACTIVITY.lock().expect("activity mutex poisoned");
+    if let Some(previous) = guard.take() {
+        previous.finish_and_clear();
+    }
+    *guard = Some(bar);
+    ActivityGuard { active: true }
 }
 
 pub fn event(host_event: &HostEvent) {
@@ -116,9 +146,10 @@ fn progress_event(progress: &ProgressEvent) {
     }
 
     let Some(total) = progress.total else {
-        log(
-            LogLevel::Info,
-            progress_message(
+        update_activity(progress_label(progress));
+        if progress.state != "running" {
+            clear_activity();
+            info(progress_message(
                 &progress.phase,
                 &progress.component,
                 &progress.state,
@@ -127,15 +158,17 @@ fn progress_event(progress: &ProgressEvent) {
                 &progress.unit,
                 &progress.message,
                 &progress.detail,
-            ),
-        );
+            ));
+        }
         return;
     };
 
+    clear_activity();
     let mut guard = PROGRESS.lock().expect("progress mutex poisoned");
     let bar = guard.get_or_insert_with(|| {
         let bar = ProgressBar::new(total);
         bar.set_style(progress_style());
+        bar.set_prefix("rlab progress");
         bar
     });
     bar.set_length(total);
@@ -161,9 +194,29 @@ fn progress_event(progress: &ProgressEvent) {
 }
 
 fn progress_style() -> ProgressStyle {
-    ProgressStyle::with_template("rlab progress {bar:32.cyan/blue} {pos}/{len} {msg}")
+    ProgressStyle::with_template("{prefix:.cyan.bold} {bar:32.cyan/blue} {pos}/{len} {msg}")
         .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("=> ")
+}
+
+fn activity_style() -> ProgressStyle {
+    ProgressStyle::with_template("{spinner:.cyan} {prefix:.cyan.bold} {msg} {elapsed_precise}")
+        .unwrap_or_else(|_| ProgressStyle::default_spinner())
+        .tick_chars("-\\|/")
+}
+
+fn update_activity(message: String) {
+    let guard = ACTIVITY.lock().expect("activity mutex poisoned");
+    if let Some(bar) = guard.as_ref() {
+        bar.set_message(message);
+    }
+}
+
+fn clear_activity() {
+    let mut guard = ACTIVITY.lock().expect("activity mutex poisoned");
+    if let Some(bar) = guard.take() {
+        bar.finish_and_clear();
+    }
 }
 
 fn progress_label(progress: &ProgressEvent) -> String {
