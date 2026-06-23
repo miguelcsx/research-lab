@@ -47,8 +47,8 @@ pub mod study;
 
 pub use artifact::{
     describe_artifact_reference, gc_artifacts, parse_artifact_name, parse_artifact_reference,
-    prune_runs, resolve_param_refs, resolve_path_reference, ArtifactManifest, ArtifactReference,
-    ArtifactStore, PromoteRequest,
+    prune_runs, prune_runs_keep_per_experiment, resolve_param_refs, resolve_path_reference,
+    sweep_unreachable_objects, ArtifactManifest, ArtifactReference, ArtifactStore, PromoteRequest,
 };
 pub use baselines::{add_baseline, compare_baseline, list_baselines, BaselineComparison};
 pub use benchmarks::{BenchmarkContext, BenchmarkResult, BenchmarkSpec};
@@ -99,7 +99,8 @@ pub use reports::{
 };
 pub use result::{FileArtifact, LogArtifact, Metric, MetricDirection, ResultBundle, TableArtifact};
 pub use run::{
-    all_run_records, query_run_records, RunDirectory, RunId, RunRecord, RunSession, RunStatus,
+    all_run_records, optimize_storage, query_run_records, RunDirectory, RunId, RunRecord,
+    RunSession, RunStatus, StorageOptimizeSummary,
 };
 pub use search::{build_search_index, search_project, SearchDocument, SearchHit};
 pub use strict::{ProductionPolicy, StrictMode};

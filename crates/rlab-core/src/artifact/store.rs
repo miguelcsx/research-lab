@@ -293,6 +293,29 @@ impl ArtifactStore {
         Ok(target)
     }
 
+    /// Replace the files of a content-addressed directory (identified by its tree
+    /// digest) with hard links to their store blobs, so the on-disk copy and the
+    /// store share a single physical copy. Intended for write-once outputs such as
+    /// checkpoints; idempotent and a no-op for files already linked. The links
+    /// point at durable `objects/` blobs, so they survive `materialized/` cleanup.
+    pub fn relink_dir_to_blobs(&self, dir: &Path, tree_digest: &str) -> RlabResult<u64> {
+        let tree = self.read_tree_manifest(&self.tree_path(tree_digest))?;
+        let mut relinked = 0;
+        for entry in tree.entries {
+            let blob = self.blob_path(&entry.sha256)?;
+            let target = ensure_child_path(dir, &PathBuf::from(&entry.path))?;
+            if !blob.is_file() || !target.is_file() || same_inode(&blob, &target) {
+                continue;
+            }
+            let tmp = target.with_extension("rlab-relink-tmp");
+            let _ = fs::remove_file(&tmp);
+            fs::hard_link(&blob, &tmp).map_err(|error| RlabError::io(&tmp, error))?;
+            fs::rename(&tmp, &target).map_err(|error| RlabError::io(&target, error))?;
+            relinked += 1;
+        }
+        Ok(relinked)
+    }
+
     fn read_tree_manifest(&self, path: &Path) -> RlabResult<TreeManifest> {
         let content = fs::read_to_string(path).map_err(|error| RlabError::io(path, error))?;
         serde_json::from_str(&content).map_err(RlabError::serialization)
@@ -512,7 +535,38 @@ fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Linux copy-on-write reflink via the `FICLONE` ioctl. Works on btrfs, XFS, and
+/// other reflink-capable filesystems; returns an error on ext4 so the caller falls
+/// back to a plain copy.
+#[cfg(target_os = "linux")]
+fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::raw::{c_int, c_ulong};
+    use std::os::unix::io::AsRawFd;
+
+    // _IOW(0x94, 9, int) — same value across Linux architectures.
+    const FICLONE: c_ulong = 0x4004_9409;
+
+    extern "C" {
+        fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
+    }
+
+    let src = fs::File::open(source)?;
+    let dst = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(destination)?;
+    let result = unsafe { ioctl(dst.as_raw_fd(), FICLONE, src.as_raw_fd()) };
+    if result == 0 {
+        Ok(())
+    } else {
+        let error = std::io::Error::last_os_error();
+        let _ = fs::remove_file(destination);
+        Err(error)
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn clone_file(_source: &Path, _destination: &Path) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
@@ -522,6 +576,22 @@ fn clone_file(_source: &Path, _destination: &Path) -> std::io::Result<()> {
 
 fn is_blank(value: &str) -> bool {
     value.trim().is_empty()
+}
+
+/// Whether two paths already resolve to the same inode (i.e. are hard links of
+/// each other), so relinking can be skipped.
+#[cfg(unix)]
+fn same_inode(left: &Path, right: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (left.metadata(), right.metadata()) {
+        (Ok(left), Ok(right)) => left.dev() == right.dev() && left.ino() == right.ino(),
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn same_inode(_left: &Path, _right: &Path) -> bool {
+    false
 }
 
 fn artifact_error(message: impl Into<String>) -> RlabError {

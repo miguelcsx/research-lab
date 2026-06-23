@@ -59,6 +59,7 @@ pub enum Command {
     Exec(commands::exec::ExecCommand),
     Modules(commands::modules::ModulesCommand),
     Stats(commands::stats::StatsCommand),
+    Storage(commands::storage::StorageCommand),
     Study(commands::study::StudyCommand),
     Adapters(commands::adapters::AdaptersCommand),
 }
@@ -127,6 +128,7 @@ where
         Command::Exec(command) => commands::exec::run(command, cli.root.as_deref(), cli.json),
         Command::Modules(command) => commands::modules::run(command, cli.root.as_deref(), cli.json),
         Command::Stats(command) => commands::stats::run(command, cli.root.as_deref(), cli.json),
+        Command::Storage(command) => commands::storage::run(command, cli.root.as_deref(), cli.json),
         Command::Study(command) => commands::study::run(command, cli.root.as_deref(), cli.json),
         Command::Adapters(command) => {
             commands::adapters::run(command, cli.root.as_deref(), cli.json)

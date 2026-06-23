@@ -5,6 +5,7 @@ mod lifecycle;
 mod lock;
 mod query;
 mod state;
+mod storage;
 mod store;
 
 pub use directory::RunDirectory;
@@ -17,4 +18,8 @@ pub use query::{
     RunSummary,
 };
 pub use state::RunStatus;
+pub use storage::{
+    apply_output_retention, optimize_storage, RetentionReport, StorageOptimizeSummary,
+    RUN_DIR_OUTPUTS,
+};
 pub use store::{read_metrics, write_metric_summary, ARTIFACTS_FILE, RUN_DIR_ARTIFACTS};

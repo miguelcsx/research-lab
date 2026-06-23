@@ -67,7 +67,7 @@
         {% for row in view.param_rows %}
         <tr{% if row.differs %} class="row-diff"{% endif %}>
           <td class="cell-key">{{ row.label }}</td>
-          {% for value in row.values %}<td>{{ value }}</td>{% endfor %}
+          {% for value in row.values %}<td class="cell-multi">{{ value }}</td>{% endfor %}
         </tr>
         {% endfor %}
       </tbody>

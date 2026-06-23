@@ -83,7 +83,8 @@ html,body{height:100%}
 body{
   margin:0;font-family:var(--font);color:var(--text);background:var(--bg);
   font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
-  display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);min-height:100vh;
+  display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);
+  height:100vh;overflow:hidden;
 }
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
@@ -99,7 +100,7 @@ p{margin:0}
 /* ---------- Sidebar ---------- */
 .sidebar{
   background:var(--side-bg);color:var(--side-text);
-  position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
+  height:100vh;display:flex;flex-direction:column;
   padding:16px 12px;gap:4px;border-right:1px solid rgba(255,255,255,.04);
 }
 .sidebar-brand{display:flex;align-items:center;gap:11px;padding:8px 10px 14px}
@@ -132,7 +133,7 @@ p{margin:0}
 .status-dot.is-stale{background:#e0a93a;box-shadow:0 0 0 3px rgba(224,169,58,.18)}
 
 /* ---------- Shell / topbar ---------- */
-.app-main{min-width:0;display:flex;flex-direction:column}
+.app-main{min-width:0;display:flex;flex-direction:column;height:100vh;overflow-y:auto}
 .topbar{
   position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
   gap:12px;padding:0 28px;height:52px;background:color-mix(in srgb,var(--bg) 82%,transparent);
@@ -274,10 +275,15 @@ pre.codeblock{background:var(--code-bg);padding:12px 14px;border-radius:var(--r-
 .meta-item .v.mono{font-family:var(--mono);font-weight:500;font-size:12.5px}
 
 /* ---------- Spec / key-value ---------- */
-.kv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.kv-card{background:var(--surface);padding:11px 14px;min-width:0}
-.kv-card span{display:block;color:var(--text-3);font-size:11.5px;font-weight:500;margin-bottom:3px}
+.kv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;align-items:start}
+.kv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px;min-width:0}
+.kv-card span{display:block;color:var(--text-3);font-size:11.5px;font-weight:500;margin-bottom:3px;overflow-wrap:anywhere}
 .kv-card strong{display:block;font-size:13.5px;font-weight:600;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.kv-card.block{grid-column:1/-1;background:var(--surface-2)}
+.kv-block{overflow:auto;max-width:100%}
+.kv-block .json-table{font-size:12.5px}
+.kv-block .json-table>tbody>tr>th{padding-right:18px}
+.kv-block .json-table>tbody>tr>td{word-break:break-word}
 
 /* ---------- Reports / sections detail ---------- */
 .report-bundle{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);margin-bottom:18px;overflow:hidden}
@@ -333,6 +339,7 @@ figcaption{margin-top:7px;color:var(--text-3);font-size:12px;text-align:center}
 .compare-bar-actions{display:flex;gap:8px}
 .compare-table th,.compare-table td{white-space:nowrap}
 .compare-table .cell-key{white-space:normal}
+.compare-table td.cell-multi{white-space:pre-line;min-width:180px;vertical-align:top}
 .compare-table thead th a{color:var(--text)}
 .row-diff{background:var(--diff)}
 .row-diff:hover{background:var(--diff)}
@@ -353,8 +360,9 @@ details summary{cursor:pointer;color:var(--text-2);font-size:13px}
 
 /* ---------- Responsive ---------- */
 @media(max-width:920px){
-  body{grid-template-columns:1fr}
-  .sidebar{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;gap:6px;padding:10px 12px;overflow:auto;border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}
+  body{grid-template-columns:1fr;height:auto;overflow:visible}
+  .app-main{height:auto;overflow:visible}
+  .sidebar{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;align-items:center;gap:6px;padding:10px 12px;overflow:auto;border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}
   .sidebar-brand{padding:0 8px 0 4px}
   .brand-text small{display:none}
   .nav-label,.sidebar-foot{display:none}

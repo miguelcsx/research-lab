@@ -22,6 +22,17 @@ pub struct KeyValueItem {
     pub value: String,
 }
 
+/// A labelled value for the detail key/value grids. Scalars carry plain text in
+/// `value`; nested objects/arrays carry pre-rendered HTML in `value` with
+/// `block = true` so the template renders them as a nested table instead of a
+/// raw JSON string.
+#[derive(Debug, Clone, Serialize)]
+pub struct SpecItem {
+    pub key: String,
+    pub value: String,
+    pub block: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RunRow {
     pub id: String,
@@ -46,7 +57,7 @@ pub struct ArtifactRow {
 #[derive(Debug, Clone, Serialize)]
 pub struct ArtifactDetail {
     pub reference: String,
-    pub fields: Vec<KeyValueItem>,
+    pub fields: Vec<SpecItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,7 +74,7 @@ pub struct ReportSummary {
 pub struct ReportBundle {
     pub run_id: String,
     pub name: String,
-    pub metrics: Vec<KeyValueItem>,
+    pub metrics: Vec<SpecItem>,
     pub sections: Vec<ReportSection>,
 }
 
@@ -98,8 +109,8 @@ pub struct RunDetailView {
     pub status: String,
     pub created: String,
     pub path: String,
-    pub params: Vec<KeyValueItem>,
-    pub metrics: Vec<KeyValueItem>,
+    pub params: Vec<SpecItem>,
+    pub metrics: Vec<SpecItem>,
     pub reports: Vec<ReportBundle>,
     pub artifacts: Vec<KeyValueItem>,
 }
@@ -231,8 +242,8 @@ pub fn run_detail_view(paths: &ProjectPaths, id: &str) -> RlabResult<RunDetailVi
         status: details.run.status.as_str().to_string(),
         created: run_timestamp(details.run.id.as_str()).unwrap_or_default(),
         path: details.run.path.display().to_string(),
-        params: object_items(&params),
-        metrics: object_items(&details.metrics),
+        params: spec_items(&params),
+        metrics: spec_items(&details.metrics),
         reports,
         artifacts,
     })
@@ -269,7 +280,7 @@ pub fn artifact_detail_view(paths: &ProjectPaths, reference: &str) -> RlabResult
     let value = serde_json::to_value(&manifest).map_err(RlabError::serialization)?;
     Ok(ArtifactDetail {
         reference: reference.to_string(),
-        fields: object_items(&value),
+        fields: spec_items(&value),
     })
 }
 
@@ -365,10 +376,28 @@ pub fn compare_view(paths: &ProjectPaths, run_ids: &[String]) -> RlabResult<Comp
 }
 
 fn items_map(value: &Value) -> std::collections::BTreeMap<String, String> {
-    object_items(value)
-        .into_iter()
-        .map(|item| (item.key, item.value))
+    let Some(object) = value.as_object() else {
+        return std::collections::BTreeMap::new();
+    };
+    object
+        .iter()
+        .map(|(key, value)| (key.clone(), readable_value(value)))
         .collect()
+}
+
+/// Render a value as compact, readable text for a single comparison cell:
+/// objects become `key: value` lines, scalar arrays a comma list. Avoids raw
+/// JSON while still fitting in a table cell.
+fn readable_value(value: &Value) -> String {
+    match value {
+        Value::Object(map) if !map.is_empty() => map
+            .iter()
+            .map(|(key, val)| format!("{key}: {}", scalar_value(val)))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Value::Array(_) => scalar_value(value),
+        _ => format_value(value),
+    }
 }
 
 fn compare_rows(maps: &[std::collections::BTreeMap<String, String>]) -> Vec<CompareRow> {
@@ -420,7 +449,7 @@ fn report_summary(
 }
 
 fn report_bundle(run_id: &str, report: ReportSource) -> RlabResult<ReportBundle> {
-    let metrics = object_items(report.manifest.get("metrics").unwrap_or(&Value::Null));
+    let metrics = spec_items(report.manifest.get("metrics").unwrap_or(&Value::Null));
     let mut sections = Vec::new();
     if let Some(values) = report.manifest.get("sections").and_then(Value::as_array) {
         for section in values {
@@ -955,17 +984,45 @@ fn markdown_table_cells(line: &str) -> Vec<String> {
         .collect()
 }
 
-fn object_items(value: &Value) -> Vec<KeyValueItem> {
+/// Build labelled values for a detail grid. Nested objects/arrays-of-objects are
+/// pre-rendered as readable nested tables (`block = true`); everything else is
+/// shown as plain text so values never appear as raw JSON.
+fn spec_items(value: &Value) -> Vec<SpecItem> {
     let Some(object) = value.as_object().filter(|object| !object.is_empty()) else {
         return Vec::new();
     };
     object
         .iter()
-        .map(|(key, value)| KeyValueItem {
-            key: key.clone(),
-            value: format_value(value),
+        .map(|(key, value)| {
+            let block = match value {
+                Value::Object(map) => !map.is_empty(),
+                Value::Array(items) => items.iter().any(|item| item.is_object() || item.is_array()),
+                _ => false,
+            };
+            SpecItem {
+                key: key.clone(),
+                value: if block {
+                    render_json_value(value)
+                } else {
+                    scalar_value(value)
+                },
+                block,
+            }
         })
         .collect()
+}
+
+/// Render a non-nested value as readable plain text (arrays of scalars become a
+/// comma-separated list rather than `[...]`).
+fn scalar_value(value: &Value) -> String {
+    match value {
+        Value::Array(items) => items
+            .iter()
+            .map(format_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        _ => format_value(value),
+    }
 }
 
 fn section_badges(sections: &[Value]) -> Vec<String> {

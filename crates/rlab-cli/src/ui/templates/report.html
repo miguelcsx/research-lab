@@ -21,7 +21,7 @@
 <h2 class="section-heading">Metrics</h2>
 <div class="kv-grid">
   {% for item in view.metrics %}
-  <div class="kv-card"><span>{{ item.key }}</span><strong>{{ item.value }}</strong></div>
+  <div class="kv-card{% if item.block %} block{% endif %}"><span>{{ item.key }}</span>{% if item.block %}<div class="kv-block">{{ item.value|safe }}</div>{% else %}<strong>{{ item.value }}</strong>{% endif %}</div>
   {% endfor %}
 </div>
 {% endif %}

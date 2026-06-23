@@ -33,6 +33,7 @@ pub mod run;
 pub mod runs;
 pub mod search;
 pub mod stats;
+pub mod storage;
 pub mod study;
 pub mod table;
 pub mod ui;

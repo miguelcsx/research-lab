@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::error::RlabResult;
 
-use super::super::model::EffectiveConfig;
+use super::super::model::{EffectiveConfig, ResumeStateRetention};
 use super::super::validate::validate_lab_schema_version;
 use super::apply::{
     apply_optional_bool, apply_optional_path, apply_optional_string, apply_optional_vec,
@@ -26,6 +26,31 @@ struct LabToml {
     run: Option<LabRun>,
     production: Option<LabProduction>,
     reproducibility: Option<LabReproducibility>,
+    storage: Option<LabStorage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabStorage {
+    outputs: Option<LabOutputs>,
+    runs: Option<LabStorageRuns>,
+    materialized: Option<LabMaterialized>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabOutputs {
+    keep_resume_state: Option<ResumeStateRetention>,
+    resume_only_globs: Option<Vec<String>>,
+    resume_pointer: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabStorageRuns {
+    keep_per_experiment: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabMaterialized {
+    max_gb: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,7 +131,37 @@ pub fn apply_lab_toml(root: &Path, config: &mut EffectiveConfig) -> RlabResult<(
         apply_reproducibility(config, reproducibility);
     }
 
+    if let Some(storage) = parsed.storage {
+        apply_storage(config, storage);
+    }
+
     Ok(())
+}
+
+fn apply_storage(config: &mut EffectiveConfig, storage: LabStorage) {
+    if let Some(outputs) = storage.outputs {
+        if let Some(keep_resume_state) = outputs.keep_resume_state {
+            config.storage.outputs.keep_resume_state = keep_resume_state;
+        }
+        apply_optional_vec(
+            &mut config.storage.outputs.resume_only_globs,
+            outputs.resume_only_globs,
+        );
+        apply_optional_string(
+            &mut config.storage.outputs.resume_pointer,
+            outputs.resume_pointer,
+        );
+    }
+    if let Some(runs) = storage.runs {
+        if let Some(keep) = runs.keep_per_experiment {
+            config.storage.runs.keep_per_experiment = keep;
+        }
+    }
+    if let Some(materialized) = storage.materialized {
+        if let Some(max_gb) = materialized.max_gb {
+            config.storage.materialized.max_gb = max_gb;
+        }
+    }
 }
 
 fn apply_project(config: &mut EffectiveConfig, project: Option<LabProject>) {

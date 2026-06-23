@@ -14,8 +14,9 @@ pub use documents::{
 };
 pub use load::load_effective_config;
 pub use model::{
-    EffectiveConfig, PathConfig, ProductionConfig, ProjectConfig, PythonConfig,
-    ReproducibilityConfig,
+    EffectiveConfig, MaterializedRetention, OutputRetention, PathConfig, ProductionConfig,
+    ProjectConfig, PythonConfig, ReproducibilityConfig, ResumeStateRetention, RunRetention,
+    StorageConfig,
 };
 pub use overrides::ConfigOverride;
 pub use paths::ProjectPaths;
